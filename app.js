@@ -269,6 +269,8 @@ document.addEventListener('DOMContentLoaded', function() {
     loadBarcodeMappingFromStorage();
     loadSettings();
     loadItemWeights();
+
+    initializeApp();
     
     // Funksjon for å vise hovedmenyen
     function showMainMenu() {
@@ -313,6 +315,7 @@ document.addEventListener('DOMContentLoaded', function() {
         } else if (module === 'returns') {
             updateReturnUI();
         }
+        localStorage.setItem('currentModule', currentModule);
     }
     
     // Funksjon for å koble til Bluetooth-skanner
@@ -561,6 +564,7 @@ document.addEventListener('DOMContentLoaded', function() {
         
         // Aktiver angre-knapp
         undoBtn.disabled = false;
+        saveListsToStorage();
     }
     
     // Håndter skanning av returvare
@@ -682,6 +686,7 @@ document.addEventListener('DOMContentLoaded', function() {
         // Oppdater UI
         updateUI(type);
         showToast('Siste skanning er angret!', 'warning');
+        saveListsToStorage();
     }
     
     // Fjern en vare fra returlisten
@@ -863,6 +868,7 @@ document.addEventListener('DOMContentLoaded', function() {
         }
         
         showToast(`Importert liste med ${type === 'pick' ? pickListItems.length : receiveListItems.length} varer!`, 'success');
+        saveListsToStorage();
     }
     
     // Importere fra JSON-fil
@@ -929,6 +935,7 @@ document.addEventListener('DOMContentLoaded', function() {
             console.error('Feil ved import av JSON:', error);
             showToast('Feil ved import av JSON-fil.', 'error');
         }
+        saveListsToStorage();
     }
 
     // Funksjon for å eksportere lister
@@ -1184,6 +1191,12 @@ document.addEventListener('DOMContentLoaded', function() {
             console.error('Feil ved import av PDF:', error);
             showToast(`PDF import feilet: ${error.message}. Kontroller at PDF-en er i riktig format og ikke er skadet.`, 'error');
         }
+        try {
+            // Denne linjen skal legges til helt på slutten, rett før funksjonen avsluttes
+            saveListsToStorage();
+        } catch (error) {
+            console.error('Feil ved lagring etter PDF-import:', error);
+        }
     }
     
     // Behandle strekkode JSON
@@ -1203,6 +1216,27 @@ document.addEventListener('DOMContentLoaded', function() {
         weightModalItemIdEl.textContent = itemId;
         itemWeightEl.value = itemWeights[itemId] || settings.defaultItemWeight;
         weightModalEl.style.display = 'block';
+    }
+
+    function initializeApp() {
+        // Last inn strekkodeoversikt, innstillinger og vekter
+        loadBarcodeMappingFromStorage();
+        loadSettings();
+        loadItemWeights();
+        
+        // Last inn lagrede lister
+        const listsLoaded = loadListsFromStorage();
+        
+        // Sett opp autosave-funksjonalitet
+        setupAutosave();
+        
+        // Hvis vi har en lagret modul, vis den
+        if (currentModule) {
+            showModule(currentModule);
+        } else {
+            // Ellers vis hovedmenyen
+            showMainMenu();
+        }
     }
     
     // Oppdatert updateUI-funksjon med fokus på korrekt vektberegning
