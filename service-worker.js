@@ -1,11 +1,12 @@
 // Navn på cache
-const CACHE_NAME = 'lager-pwa-v1';
+const CACHE_NAME = 'lager-pwa-v2';
 
 // Filer som skal caches
 const urlsToCache = [
-  '/',
-  '/index.html',
-  '/manifest.json',
+  './',
+  './index.html',
+  './app.js',
+  './manifest.json',
   'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.7.107/pdf.min.js',
   'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.7.107/pdf.worker.min.js',
   'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css',
@@ -53,6 +54,15 @@ self.addEventListener('fetch', event => {
               });
 
             return response;
+          })
+          .catch(() => {
+            // Fallback hvis nettverk er utilgjengelig
+            // For API-forespørsler kan vi returnere en standard offline-respons
+            if (event.request.url.includes('/api/')) {
+              return new Response(JSON.stringify({ error: 'Du er offline' }), {
+                headers: {'Content-Type': 'application/json'}
+              });
+            }
           });
       })
     );
@@ -78,14 +88,38 @@ self.addEventListener('activate', event => {
 
 // Håndter synkronisering når nettverkstilkoblingen gjenopprettes
 self.addEventListener('sync', event => {
-  if (event.tag === 'sync-picklist') {
-    event.waitUntil(syncPickList());
+  if (event.tag === 'sync-data') {
+    event.waitUntil(syncData());
   }
 });
 
 // Funksjon for å synkronisere data med server
 // Dette er en stub som må implementeres hvis du ønsker server-synkronisering
-async function syncPickList() {
-  // Dette ville vanligvis hente data fra IndexedDB og sende til server
-  console.log('Synkroniserer data med server...');
+async function syncData() {
+  try {
+    // Hent lagrede data som skal synkroniseres
+    const dataToSync = await getStoredDataForSync();
+    
+    if (dataToSync && dataToSync.length > 0) {
+      // Implementer logikk for å sende data til server
+      console.log('Synkroniserer data med server...', dataToSync);
+      
+      // Etter vellykket synkronisering, merk data som synkronisert
+      await markDataAsSynced(dataToSync);
+    }
+  } catch (error) {
+    console.error('Synkronisering feilet:', error);
+  }
+}
+
+// Hent data som skal synkroniseres (implementer din egen logikk her)
+async function getStoredDataForSync() {
+  // Dette er bare et eksempel - implementer din egen logikk for å hente data som skal synkroniseres
+  return [];
+}
+
+// Merk data som synkronisert (implementer din egen logikk her)
+async function markDataAsSynced(data) {
+  // Dette er bare et eksempel - implementer din egen logikk for å markere data som synkronisert
+  console.log('Data markert som synkronisert:', data);
 }
