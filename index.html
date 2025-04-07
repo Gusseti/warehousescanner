@@ -1,0 +1,827 @@
+<!DOCTYPE html>
+<html lang="no">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#2196f3">
+    <title>Lagerstyring</title>
+    <link rel="manifest" href="manifest.json">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
+    <style>
+        :root {
+            --primary: #2196f3;
+            --primary-dark: #0c7cd5;
+            --danger: #f44336;
+            --success: #4caf50;
+            --warning: #ff9800;
+            --gray-light: #f5f5f5;
+            --gray: #9e9e9e;
+            --text: #333;
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        
+        body {
+            background-color: #f5f5f5;
+            color: var(--text);
+        }
+        
+        header {
+            background-color: var(--primary);
+            color: white;
+            padding: 1rem;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+        
+        header h1 {
+            font-size: 1.5rem;
+            text-align: center;
+        }
+        
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 1rem;
+        }
+        
+        .card {
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 1rem;
+            padding: 1rem;
+        }
+        
+        .card-title {
+            font-size: 1.2rem;
+            margin-bottom: 1rem;
+            color: var(--primary-dark);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .btn {
+            padding: 0.5rem 1rem;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: background-color 0.3s;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-width: 100px;
+        }
+        
+        .btn-primary {
+            background-color: var(--primary);
+            color: white;
+        }
+        
+        .btn-primary:hover {
+            background-color: var(--primary-dark);
+        }
+        
+        .btn-danger {
+            background-color: var(--danger);
+            color: white;
+        }
+        
+        .btn-success {
+            background-color: var(--success);
+            color: white;
+        }
+        
+        .btn-warning {
+            background-color: var(--warning);
+            color: white;
+        }
+        
+        .btn i {
+            margin-right: 0.5rem;
+        }
+        
+        .action-row {
+            display: flex;
+            gap: 0.5rem;
+            margin: 1rem 0;
+            flex-wrap: wrap;
+        }
+        
+        .status-bar {
+            display: flex;
+            background: var(--gray-light);
+            border-radius: 4px;
+            overflow: hidden;
+            height: 24px;
+            margin: 1rem 0;
+        }
+        
+        .status-picked {
+            background: var(--success);
+            height: 100%;
+            transition: width 0.3s;
+        }
+        
+        .status-remaining {
+            background: var(--gray);
+            height: 100%;
+            transition: width 0.3s;
+        }
+        
+        .status-text {
+            font-size: 0.9rem;
+            text-align: center;
+            margin-top: 0.5rem;
+        }
+        
+        .list-container {
+            max-height: 400px;
+            overflow-y: auto;
+            border: 1px solid #eee;
+            border-radius: 4px;
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        
+        th {
+            background-color: var(--primary);
+            color: white;
+            padding: 0.5rem;
+            text-align: left;
+            position: sticky;
+            top: 0;
+        }
+        
+        td {
+            padding: 0.5rem;
+            border-bottom: 1px solid #eee;
+        }
+        
+        tr.picked {
+            background-color: rgba(76, 175, 80, 0.1);
+        }
+        
+        .badge {
+            display: inline-block;
+            padding: 0.25rem 0.5rem;
+            border-radius: 4px;
+            font-size: 0.8rem;
+            font-weight: bold;
+        }
+        
+        .badge-success {
+            background-color: var(--success);
+            color: white;
+        }
+        
+        .controls {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 1rem;
+        }
+        
+        .scanner-status {
+            display: flex;
+            align-items: center;
+            font-size: 0.9rem;
+        }
+        
+        .scanner-indicator {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            margin-right: 0.5rem;
+            background-color: var(--danger);
+        }
+        
+        .scanner-indicator.connected {
+            background-color: var(--success);
+        }
+        
+        .toast {
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background-color: rgba(0, 0, 0, 0.8);
+            color: white;
+            padding: 1rem;
+            border-radius: 4px;
+            z-index: 1000;
+            display: none;
+        }
+        
+        .toast.error {
+            background-color: var(--danger);
+        }
+        
+        .toast.success {
+            background-color: var(--success);
+        }
+        
+        .toast.warning {
+            background-color: var(--warning);
+        }
+        
+        #fileInfo {
+            font-style: italic;
+            color: var(--gray);
+            margin-top: 0.5rem;
+        }
+        
+        #barcodeFileInfo {
+            font-style: italic;
+            color: var(--gray);
+            margin-top: 0.5rem;
+        }
+        
+        @media (max-width: 768px) {
+            .action-row {
+                flex-direction: column;
+            }
+            
+            .btn {
+                width: 100%;
+            }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>Lagerstyring</h1>
+    </header>
+    
+    <div class="container">
+        <div class="card">
+            <div class="card-title">
+                Plukkliste
+                <div class="scanner-status">
+                    <div id="scannerIndicator" class="scanner-indicator"></div>
+                    <span id="scannerStatus">Skanner: Ikke tilkoblet</span>
+                </div>
+            </div>
+            
+            <div class="controls">
+                <div>
+                    <input type="file" id="importFile" accept=".csv,.txt,.json,.pdf" style="display: none;">
+                    <button id="importBtn" class="btn btn-primary">
+                        <i class="fas fa-file-import"></i> Importer plukkliste
+                    </button>
+                    <div id="fileInfo">Ingen fil lastet inn</div>
+                </div>
+                
+                <div>
+                    <input type="file" id="importBarcodeFile" accept=".json" style="display: none;">
+                    <button id="importBarcodeBtn" class="btn btn-warning">
+                        <i class="fas fa-barcode"></i> Importer strekkoder
+                    </button>
+                    <div id="barcodeFileInfo">Ingen strekkoder lastet inn</div>
+                </div>
+                
+                <button id="connectScanner" class="btn btn-primary">
+                    <i class="fas fa-bluetooth"></i> Koble til skanner
+                </button>
+            </div>
+            
+            <div class="status-bar">
+                <div id="statusPicked" class="status-picked" style="width: 0%"></div>
+                <div id="statusRemaining" class="status-remaining" style="width: 100%"></div>
+            </div>
+            <div id="statusText" class="status-text">0 av 0 varer plukket (0%)</div>
+            
+            <div class="list-container">
+                <table id="pickList">
+                    <thead>
+                        <tr>
+                            <th>Varenr.</th>
+                            <th>Beskrivelse</th>
+                            <th>Antall</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <!-- Data fylles inn via JavaScript -->
+                    </tbody>
+                </table>
+            </div>
+            
+            <div class="action-row">
+                <button id="undoBtn" class="btn btn-warning" disabled>
+                    <i class="fas fa-undo"></i> Angre siste skann
+                </button>
+                <button id="exportBtn" class="btn btn-success" disabled>
+                    <i class="fas fa-file-export"></i> Eksporter resultat
+                </button>
+                <button id="clearBtn" class="btn btn-danger" disabled>
+                    <i class="fas fa-trash"></i> Tøm plukkliste
+                </button>
+            </div>
+        </div>
+        
+        <div class="card">
+            <div class="card-title">Manuell skanning</div>
+            <div class="manual-scan">
+                <input type="text" id="manualScan" placeholder="Skann eller skriv inn varenummer" style="width: 100%; padding: 0.5rem; margin-bottom: 0.5rem; border: 1px solid #ddd; border-radius: 4px;">
+                <button id="manualScanBtn" class="btn btn-primary" style="width: 100%">
+                    <i class="fas fa-barcode"></i> Registrer vare
+                </button>
+            </div>
+        </div>
+    </div>
+    
+    <div id="toast" class="toast"></div>
+    
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.7.107/pdf.min.js"></script>
+    <script>
+        // Datamodell
+        let pickListItems = [];
+        let pickedItems = [];
+        let lastPickedItem = null;
+        let bluetoothDevice = null;
+        let isConnected = false;
+        let barcodeMapping = {}; // Mapping mellom strekkoder og varenumre
+        
+        // DOM elementer
+        const importFileEl = document.getElementById('importFile');
+        const importBtnEl = document.getElementById('importBtn');
+        const fileInfoEl = document.getElementById('fileInfo');
+        const importBarcodeFileEl = document.getElementById('importBarcodeFile');
+        const importBarcodeBtnEl = document.getElementById('importBarcodeBtn');
+        const barcodeFileInfoEl = document.getElementById('barcodeFileInfo');
+        const connectScannerEl = document.getElementById('connectScanner');
+        const scannerIndicatorEl = document.getElementById('scannerIndicator');
+        const scannerStatusEl = document.getElementById('scannerStatus');
+        const pickListEl = document.getElementById('pickList');
+        const statusPickedEl = document.getElementById('statusPicked');
+        const statusRemainingEl = document.getElementById('statusRemaining');
+        const statusTextEl = document.getElementById('statusText');
+        const undoBtnEl = document.getElementById('undoBtn');
+        const exportBtnEl = document.getElementById('exportBtn');
+        const clearBtnEl = document.getElementById('clearBtn');
+        const manualScanEl = document.getElementById('manualScan');
+        const manualScanBtnEl = document.getElementById('manualScanBtn');
+        const toastEl = document.getElementById('toast');
+        
+        // Event listeners
+        importBtnEl.addEventListener('click', () => importFileEl.click());
+        importFileEl.addEventListener('change', handleFileImport);
+        importBarcodeBtnEl.addEventListener('click', () => importBarcodeFileEl.click());
+        importBarcodeFileEl.addEventListener('change', handleBarcodeFileImport);
+        connectScannerEl.addEventListener('click', connectToScanner);
+        undoBtnEl.addEventListener('click', undoLastScan);
+        exportBtnEl.addEventListener('click', exportPickList);
+        clearBtnEl.addEventListener('click', clearPickList);
+        manualScanBtnEl.addEventListener('click', () => handleScan(manualScanEl.value));
+        manualScanEl.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                handleScan(manualScanEl.value);
+            }
+        });
+        
+        // Last inn strekkodekoblinger hvis de finnes i lokallagring
+        loadBarcodeMappingFromStorage();
+        
+        // Funksjon for å koble til Bluetooth-skanner
+        async function connectToScanner() {
+            if (!navigator.bluetooth) {
+                showToast('Bluetooth støttes ikke i denne nettleseren. Vennligst bruk Chrome eller Edge.', 'error');
+                return;
+            }
+            
+            try {
+                bluetoothDevice = await navigator.bluetooth.requestDevice({
+                    // Filtrer etter enheter som støtter serieport-profil eller HID
+                    // Du må tilpasse dette til din spesifikke skanner
+                    acceptAllDevices: true, 
+                    optionalServices: ['battery_service', '0000ffe0-0000-1000-8000-00805f9b34fb']
+                });
+                
+                bluetoothDevice.addEventListener('gattserverdisconnected', onDisconnected);
+                
+                showToast('Kobler til skanner...', 'warning');
+                
+                const server = await bluetoothDevice.gatt.connect();
+                isConnected = true;
+                
+                // Dette er et eksempel - du må tilpasse tjeneste- og karakteristikk-UUIDs til din skanner
+                // Dette er basert på en vanlig Bluetooth Low Energy serieport-protokoll
+                try {
+                    const service = await server.getPrimaryService('0000ffe0-0000-1000-8000-00805f9b34fb');
+                    const characteristic = await service.getCharacteristic('0000ffe1-0000-1000-8000-00805f9b34fb');
+                    
+                    // Slå på notifikasjoner for å motta data
+                    await characteristic.startNotifications();
+                    characteristic.addEventListener('characteristicvaluechanged', handleScannerData);
+                    
+                    updateScannerStatus(true);
+                    showToast('Skanner tilkoblet!', 'success');
+                } catch (error) {
+                    console.error('Kunne ikke koble til skanner-tjeneste:', error);
+                    showToast('Kunne ikke koble til skanner-tjeneste. Sjekk at skanneren er på og støtter Bluetooth LE.', 'error');
+                    isConnected = false;
+                    updateScannerStatus(false);
+                }
+                
+            } catch (error) {
+                console.error('Bluetooth-tilkobling feilet:', error);
+                showToast('Bluetooth-tilkobling avbrutt eller feilet.', 'error');
+                updateScannerStatus(false);
+            }
+        }
+        
+        // Håndter frakobling
+        function onDisconnected() {
+            isConnected = false;
+            updateScannerStatus(false);
+            showToast('Skanner frakoblet!', 'warning');
+        }
+        
+        // Oppdater skanner-statusindikator
+        function updateScannerStatus(connected) {
+            if (connected) {
+                scannerIndicatorEl.classList.add('connected');
+                scannerStatusEl.textContent = `Skanner: Tilkoblet (${bluetoothDevice.name || 'Ukjent enhet'})`;
+                connectScannerEl.textContent = 'Koble fra skanner';
+            } else {
+                scannerIndicatorEl.classList.remove('connected');
+                scannerStatusEl.textContent = 'Skanner: Ikke tilkoblet';
+                connectScannerEl.innerHTML = '<i class="fas fa-bluetooth"></i> Koble til skanner';
+            }
+        }
+        
+        // Håndter data fra skanneren
+        function handleScannerData(event) {
+            const value = event.target.value;
+            const textDecoder = new TextDecoder('utf-8');
+            const barcode = textDecoder.decode(value).trim();
+            
+            if (barcode) {
+                handleScan(barcode);
+            }
+        }
+        
+        // Håndter skanning av vare (både fra Bluetooth og manuell innlegging)
+        function handleScan(barcode) {
+            if (!barcode) return;
+            
+            // Tøm input etter skanning
+            manualScanEl.value = '';
+            
+            // Sjekk om strekkoden finnes i barcode mapping
+            let itemId = barcode;
+            if (barcodeMapping[barcode]) {
+                itemId = barcodeMapping[barcode];
+                console.log(`Strekkode ${barcode} mappet til varenummer ${itemId}`);
+            }
+            
+            // Finn varen i plukklisten
+            const item = pickListItems.find(item => item.id === itemId);
+            
+            if (!item) {
+                showToast(`Feil: Vare "${itemId}" finnes ikke i plukklisten!`, 'error');
+                return;
+            }
+            
+            // Sjekk om varen allerede er plukket
+            if (item.picked) {
+                showToast(`Vare "${itemId}" er allerede plukket!`, 'warning');
+                return;
+            }
+            
+            // Merk varen som plukket
+            item.picked = true;
+            item.pickedAt = new Date();
+            pickedItems.push(itemId);
+            lastPickedItem = itemId;
+            
+            // Oppdater UI
+            updateUI();
+            showToast(`Vare "${itemId}" registrert!`, 'success');
+            
+            // Aktiver angre-knapp
+            undoBtnEl.disabled = false;
+        }
+        
+        // Angre siste skanning
+        function undoLastScan() {
+            if (!lastPickedItem) return;
+            
+            const item = pickListItems.find(item => item.id === lastPickedItem);
+            if (item) {
+                item.picked = false;
+                item.pickedAt = null;
+            }
+            
+            // Fjern fra listen over plukkedde varer
+            const index = pickedItems.indexOf(lastPickedItem);
+            if (index !== -1) {
+                pickedItems.splice(index, 1);
+            }
+            
+            // Finn den siste plukkedde varen
+            lastPickedItem = pickedItems.length > 0 ? pickedItems[pickedItems.length - 1] : null;
+            
+            // Deaktiver angre-knapp hvis ingen flere varer kan angres
+            if (!lastPickedItem) {
+                undoBtnEl.disabled = true;
+            }
+            
+            // Oppdater UI
+            updateUI();
+            showToast('Siste skanning er angret!', 'warning');
+        }
+        
+        // Importere plukkliste fra fil
+        function handleFileImport(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            
+            // Vis laster-melding
+            showToast('Importerer plukkliste...', 'info');
+            
+            // Håndter ulike filtyper
+            if (file.type === 'application/pdf') {
+                importFromPDF(file);
+            } else {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    try {
+                        const content = e.target.result;
+                        
+                        // Sjekk filtypen basert på filendelse eller innhold
+                        if (file.name.endsWith('.json')) {
+                            importFromJSON(content, file.name);
+                        } else {
+                            importFromCSV(content, file.name);
+                        }
+                        
+                    } catch (error) {
+                        console.error('Feil ved import av fil:', error);
+                        showToast('Feil ved import av fil. Sjekk filformatet.', 'error');
+                    }
+                };
+                
+                reader.readAsText(file);
+            }
+        }
+        
+        // Importere fra CSV/TXT fil
+        function importFromCSV(content, fileName) {
+            // Sjekk om innholdet ligner på formatet fra PDF-en
+            const isPDFFormat = content.includes('Varenr.') && content.includes('Beskrivelse') && content.includes('Bestilt');
+            
+            // Velg riktig delimiter basert på innholdet
+            const delimiter = content.includes(';') ? ';' : ',';
+            const lines = content.split('\n');
+            
+            // Nullstill listen
+            pickListItems = [];
+            pickedItems = [];
+            lastPickedItem = null;
+            
+            if (isPDFFormat) {
+                // Dette er formatet som matcher PDF-en
+                for (let i = 0; i < lines.length; i++) {
+                    const line = lines[i].trim();
+                    if (!line) continue;
+                    
+                    // Prøv å finne linjer som starter med varenummer-format (f.eks. "000-BH3242" eller "263-L01680")
+                    const match = line.match(/^(\d{3}-[A-Z0-9]+)\s+(\d+)\s+/);
+                    if (match) {
+                        const id = match[1].trim();
+                        
+                        // Finn beskrivelsen ved å lete etter tekst mellom tall og parenteser
+                        const descMatch = line.match(/\d+\s+________\s+________\s+(.*?)\s+\(\d+\)/);
+                        let description = "Ukjent beskrivelse";
+                        
+                        if (descMatch && descMatch[1]) {
+                            description = descMatch[1].trim();
+                        }
+                        
+                        // Finn antall
+                        const quantityMatch = match[2];
+                        const quantity = parseInt(quantityMatch, 10) || 1;
+                        
+                        pickListItems.push({
+                            id: id,
+                            description: description,
+                            quantity: quantity,
+                            picked: false,
+                            pickedAt: null
+                        });
+                    }
+                }
+            } else {
+                // Standard CSV-format
+                // Sjekk om filen har en header-rad
+                let hasHeader = false;
+                if (lines.length > 0) {
+                    const firstLine = lines[0].toLowerCase();
+                    hasHeader = firstLine.includes('vare') || 
+                                firstLine.includes('id') || 
+                                firstLine.includes('nummer') || 
+                                firstLine.includes('beskrivelse');
+                }
+                
+                // Start indeks for data (hopp over header om den finnes)
+                const startIndex = hasHeader ? 1 : 0;
+                
+                for (let i = startIndex; i < lines.length; i++) {
+                    const line = lines[i].trim();
+                    if (!line) continue;
+                    
+                    const parts = line.split(delimiter);
+                    if (parts.length >= 2) {
+                        const id = parts[0].trim();
+                        const description = parts[1].trim();
+                        const quantity = parts.length > 2 ? parseInt(parts[2].trim(), 10) || 1 : 1;
+                        
+                        pickListItems.push({
+                            id: id,
+                            description: description,
+                            quantity: quantity,
+                            picked: false,
+                            pickedAt: null
+                        });
+                    }
+                }
+            }
+            
+            // Oppdater UI
+            fileInfoEl.textContent = `Lastet inn: ${fileName} (${pickListItems.length} varer)`;
+            updateUI();
+            
+            // Aktiver/deaktiver knapper
+            exportBtnEl.disabled = pickListItems.length === 0;
+            clearBtnEl.disabled = pickListItems.length === 0;
+            undoBtnEl.disabled = true;
+            
+            showToast(`Importert ${pickListItems.length} varer!`, 'success');
+        }
+        
+        // Importere fra JSON-fil
+        function importFromJSON(content, fileName) {
+            try {
+                const data = JSON.parse(content);
+                
+                // Sjekk om dette er en plukkliste eller strekkodeoversikt
+                if (Array.isArray(data)) {
+                    // Dette er en plukkliste
+                    pickListItems = data.map(item => ({
+                        id: item.id || item.varenr,
+                        description: item.description || item.beskrivelse,
+                        quantity: item.quantity || item.antall || 1,
+                        picked: false,
+                        pickedAt: null
+                    }));
+                    
+                    pickedItems = [];
+                    lastPickedItem = null;
+                    
+                    // Oppdater UI
+                    fileInfoEl.textContent = `Lastet inn: ${fileName} (${pickListItems.length} varer)`;
+                    updateUI();
+                    
+                    // Aktiver/deaktiver knapper
+                    exportBtnEl.disabled = pickListItems.length === 0;
+                    clearBtnEl.disabled = pickListItems.length === 0;
+                    undoBtnEl.disabled = true;
+                    
+                    showToast(`Importert ${pickListItems.length} varer!`, 'success');
+                } else {
+                    // Dette er trolig en strekkodeoversikt
+                    handleBarcodeJSON(data, fileName);
+                }
+            } catch (error) {
+                console.error('Feil ved import av JSON:', error);
+                showToast('Feil ved import av JSON-fil.', 'error');
+            }
+        }
+        
+        // Importere fra PDF-fil
+        async function importFromPDF(file) {
+            try {
+                // Konverterer filen til en arraybuffer
+                const arrayBuffer = await file.arrayBuffer();
+                
+                // Laster PDF.js worker hvis den ikke er lastet
+                if (!window.pdfjsLib) {
+                    showToast('Laster PDF.js bibliotek...', 'warning');
+                    return;
+                }
+                
+                // Setter worker path
+                window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.7.107/pdf.worker.min.js';
+                
+                // Laster PDF-dokumentet
+                const pdf = await window.pdfjsLib.getDocument(arrayBuffer).promise;
+                const numPages = pdf.numPages;
+                
+                // Nullstill listene
+                pickListItems = [];
+                pickedItems = [];
+                lastPickedItem = null;
+                
+                // Ekstraherer tekst fra hver side
+                let allText = '';
+                for (let i = 1; i <= numPages; i++) {
+                    const page = await pdf.getPage(i);
+                    const textContent = await page.getTextContent();
+                    const textItems = textContent.items.map(item => item.str);
+                    allText += textItems.join(' ') + '\n';
+                }
+                
+                // Finner alle relevante varenumre og deres beskrivelser
+                // Søker etter mønsteret for Kvik varenumre (f.eks. 000-BH3242, 263-L01680)
+                const varenrPattern = /(\d{3}-[A-Z0-9]+)\s+(\d+)\s+(?:[_]+\s+){0,2}(.*?)(?:\(|\s+\()/g;
+                
+                let match;
+                let matches = [];
+                const regex = new RegExp(varenrPattern);
+                
+                // Finn alle treff
+                while ((match = regex.exec(allText)) !== null) {
+                    matches.push(match);
+                }
+                
+                // Hvis vi ikke fant noen treff med det komplekse regexet, prøv et enklere
+                if (matches.length === 0) {
+                    // Enklere regex som bare leter etter varenumre og antall
+                    const simpleRegex = /(\d{3}-[A-Z0-9]+)\s+(\d+)/g;
+                    while ((match = simpleRegex.exec(allText)) !== null) {
+                        matches.push(match);
+                    }
+                }
+                
+                // Gå gjennom alle treff og legg til i listen
+                for (const match of matches) {
+                    const id = match[1].trim();
+                    let quantity = parseInt(match[2], 10) || 1;
+                    
+                    // Prøv å finne beskrivelsen i nærheten
+                    let description = "";
+                    if (match.length > 3 && match[3]) {
+                        description = match[3].replace(/_{2,}/g, '').trim();
+                    }
+                    
+                    // Hvis beskrivelsen fortsatt er tom, se etter den i nærheten av varenummeret
+                    if (!description) {
+                        // Finn teksten rundt treffet (100 tegn før og etter)
+                        const startIndex = Math.max(0, match.index - 100);
+                        const endIndex = Math.min(allText.length, match.index + 100);
+                        const context = allText.substring(startIndex, endIndex);
+                        
+                        // Se etter beskrivelsen i denne konteksten
+                        const descMatch = context.match(/\((\d+)\)\s+(.*?)(?:\(|$)/);
+                        if (descMatch && descMatch[2]) {
+                            description = descMatch[2].trim();
+                        } else {
+                            description = "Ukjent vare";
+                        }
+                    }
+                    
+                    // Legg til i listen hvis vi ikke allerede har denne varen
+                    if (!pickListItems.some(item => item.id === id)) {
+                        pickListItems.push({
+                            id: id,
+                            description: description,
+                            quantity: quantity,
+                            picked: false,
+                            pickedAt: null
+                        });
+                    }
+                }
+                
+                // Oppdater UI
+                fileInfoEl.textContent = `Lastet inn: ${file.name} (${pickListItems.length} varer)`;
+                updateUI();
+                
+                // Aktiver/deaktiver knapper
+                exportBtnEl.disabled = pickListItems.length === 0;
+                clearBtnEl.disabled = pickListItems.length === 0;
+                undoBtnEl.disabled = true;
+                
+                if (pickListItems.length > 0) {
+                    showToast(`Importert ${pickListItems.length} varer fra PDF!`, 'success');
+                } else {
+                    showToast('Ingen varer funnet i PDF-en. Sjekk at formatet er korrekt.', 'warning');
+                }
+                
+            } catch (error) {
+                console.error('Feil ved import av PDF:', error);
+                showToast('Feil ved import av PDF. Kontroller at PDF-en er i riktig format.', 'error');
+            }
+        }
