@@ -315,13 +315,37 @@ async function startCameraScanning(cameraId = null) {
     }
     
     try {
-        // Hent containerelementene
-        const container = videoElement.closest('.camera-wrapper');
-        const scannerContainer = container.closest('.camera-scanner-container');
+        // Sjekk om videoElement eksisterer
+        if (!videoElement) {
+            console.error("Video-element ikke funnet");
+            throw new Error("Video-element mangler");
+        }
         
-        // Vis containere
-        if (scannerContainer) scannerContainer.style.display = 'block';
-        if (container) container.style.display = 'block';
+        // Hent containerelementene på en tryggere måte
+        let container = null;
+        let scannerContainer = null;
+        
+        // Finn parent containere basert på modul
+        if (appState.currentModule === 'picking') {
+            container = document.querySelector('#cameraScannerPickContainer .simple-camera-wrapper');
+            scannerContainer = document.getElementById('cameraScannerPickContainer');
+        } else if (appState.currentModule === 'receiving') {
+            container = document.querySelector('#cameraScannerReceiveContainer .simple-camera-wrapper');
+            scannerContainer = document.getElementById('cameraScannerReceiveContainer');
+        } else if (appState.currentModule === 'returns') {
+            container = document.querySelector('#cameraScannerReturnContainer .simple-camera-wrapper');
+            scannerContainer = document.getElementById('cameraScannerReturnContainer');
+        }
+        
+        // Feilhåndtering hvis containere ikke finnes
+        if (!container || !scannerContainer) {
+            console.error("Kamera-containere ikke funnet");
+            // Fortsett likevel, men logg feilen
+        } else {
+            // Vis containere
+            scannerContainer.style.display = 'block';
+            container.style.display = 'block';
+        }
         
         // Fjern eventuelle tidligere videokilder
         if (videoElement.srcObject) {
@@ -334,20 +358,17 @@ async function startCameraScanning(cameraId = null) {
             }
         }
         
-        // Sett stil på videoelementet FØR vi starter kamera
-        videoElement.style.cssText = `
-            display: block !important;
-            opacity: 1 !important;
-            visibility: visible !important;
-            position: absolute !important;
-            top: 0 !important;
-            left: 0 !important;
-            width: 100% !important;
-            height: 100% !important;
-            z-index: 10 !important;
-            background-color: #000 !important;
-            object-fit: cover !important;
-        `;
+        // Sett stil på videoelementet direkte
+        videoElement.style.display = 'block';
+        videoElement.style.opacity = '1';
+        videoElement.style.visibility = 'visible';
+        videoElement.style.position = 'absolute';
+        videoElement.style.top = '0';
+        videoElement.style.left = '0';
+        videoElement.style.width = '100%';
+        videoElement.style.height = '100%';
+        videoElement.style.zIndex = '1';
+        videoElement.style.backgroundColor = '#000';
         
         // Forsikre at attributter er satt
         videoElement.setAttribute('autoplay', '');
@@ -361,24 +382,30 @@ async function startCameraScanning(cameraId = null) {
             audio: false
         });
         
+        // Logg kamerainformasjon
+        logCameraInfo(stream);
+        
         // Koble til strøm
         videoElement.srcObject = stream;
         cameraStream = stream;
         
-        // Start avspilling manuelt 
+        // Start avspilling manuelt og feilhåndtering
         try {
             await videoElement.play();
             console.log("Video avspilling startet manuelt");
         } catch (e) {
             console.warn("Kunne ikke starte video manuelt:", e);
+            // Fortsett likevel
         }
         
         // Vent litt for å være sikker på at video har startet
         await new Promise(resolve => setTimeout(resolve, 500));
         
-        // Initialiser Quagga bare om video er synlig
+        // Initialiser Quagga
         console.log("Initialiserer Quagga...");
-        if (!Quagga) {
+        
+        // Sikre at Quagga er lastet
+        if (typeof Quagga === 'undefined') {
             await loadQuaggaScript();
         }
         

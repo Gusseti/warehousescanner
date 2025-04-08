@@ -57,9 +57,9 @@ export function initPicking() {
     
     // Initialiser kameraskanneren for plukk
     initCameraScanner(
-        videoPickScannerEl, 
-        canvasPickScannerEl, 
-        scannerPickOverlayEl, 
+        document.getElementById('videoPickScanner'), 
+        document.getElementById('canvasPickScanner'), 
+        document.getElementById('scannerPickOverlay'), 
         handlePickScan,
         updateScannerStatus
     );
