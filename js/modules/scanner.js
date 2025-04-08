@@ -364,13 +364,21 @@ async function startCameraScanning(cameraId = null) {
         }
         
         // VIKTIG: Sett stil FØR vi tilordner srcObject
-        videoElement.style.display = 'block';
-        videoElement.style.opacity = '1';
-        videoElement.style.visibility = 'visible';
+        videoElement.style.display = 'block !important';
+        videoElement.style.opacity = '1 !important';
+        videoElement.style.visibility = 'visible !important';
         videoElement.style.zIndex = '1';
         videoElement.style.width = '100%';
         videoElement.style.height = '100%';
         videoElement.style.objectFit = 'cover';
+        videoElement.style.backgroundColor = '#000';
+
+        setTimeout(() => {
+            videoElement.style.display = 'none';
+            setTimeout(() => {
+                videoElement.style.display = 'block';
+            }, 10);
+        }, 100);
         
         // Fjern alle tidligere hendelseshåndterere
         videoElement.onloadedmetadata = null;
