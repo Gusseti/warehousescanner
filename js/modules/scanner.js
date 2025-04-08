@@ -373,12 +373,32 @@ async function startCameraScanning(cameraId = null) {
         videoElement.style.objectFit = 'cover';
         videoElement.style.backgroundColor = '#000';
 
+        // Force video visibility with dirty tricks
         setTimeout(() => {
-            videoElement.style.display = 'none';
-            setTimeout(() => {
-                videoElement.style.display = 'block';
-            }, 10);
-        }, 100);
+          if (videoElement) {
+            // Manipulate DOM directly
+            videoElement.style.cssText = `
+              display: block !important;
+              opacity: 1 !important;
+              visibility: visible !important;
+              position: absolute !important;
+              top: 0 !important;
+              left: 0 !important;
+              width: 100% !important;
+              height: 100% !important;
+              z-index: 10 !important;
+              object-fit: cover !important;
+            `;
+            
+            // Try playing again
+            videoElement.play().catch(e => console.error("Play failed:", e));
+            
+            // Debug video stream
+            console.log("Video element forced to be visible");
+            console.log("Video dimensions:", videoElement.videoWidth, "x", videoElement.videoHeight);
+            console.log("Video ready state:", videoElement.readyState);
+          }
+        }, 1000);
         
         // Fjern alle tidligere hendelseshåndterere
         videoElement.onloadedmetadata = null;
