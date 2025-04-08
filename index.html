@@ -7,426 +7,7 @@
     <title>Lagerstyring</title>
     <link rel="manifest" href="manifest.json">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
-    <style>
-        :root {
-            --primary: #2196f3;
-            --primary-dark: #0c7cd5;
-            --primary-light: #64b5f6;
-            --danger: #f44336;
-            --success: #4caf50;
-            --warning: #ff9800;
-            --gray-light: #f5f5f5;
-            --gray: #9e9e9e;
-            --text: #333;
-            --dark: #202020;
-        }
-
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-        }
-
-        body {
-            background-color: #f5f5f5;
-            color: var(--text);
-            height: 100vh;
-            display: flex;
-            flex-direction: column;
-        }
-
-        header {
-            background-color: var(--primary);
-            color: white;
-            padding: 1rem;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-            position: sticky;
-            top: 0;
-            z-index: 100;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-
-        header h1 {
-            font-size: 1.5rem;
-        }
-
-        .back-button {
-            background: none;
-            border: none;
-            color: white;
-            font-size: 1.2rem;
-            cursor: pointer;
-            display: none;
-        }
-
-        .main-container {
-            flex: 1;
-            display: flex;
-            flex-direction: column;
-            max-width: 1000px;
-            margin: 0 auto;
-            padding: 1rem;
-            width: 100%;
-        }
-
-        /* Main Menu Styles */
-        .main-menu {
-            display: flex;
-            flex-direction: column;
-            flex: 1;
-            justify-content: center;
-            align-items: center;
-            gap: 1.5rem;
-        }
-
-        .menu-grid {
-            display: grid;
-            grid-template-columns: repeat(2, 1fr);
-            gap: 1rem;
-            width: 100%;
-            max-width: 600px;
-        }
-
-        .menu-item {
-            background-color: var(--dark);
-            color: white;
-            border-radius: 8px;
-            padding: 2rem 1rem;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            cursor: pointer;
-            text-align: center;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-            transition: transform 0.2s, box-shadow 0.2s;
-        }
-
-        .menu-item:hover {
-            transform: translateY(-5px);
-            box-shadow: 0 6px 10px rgba(0,0,0,0.15);
-        }
-
-        .menu-item i {
-            font-size: 2.5rem;
-            margin-bottom: 1rem;
-        }
-
-        .menu-item span {
-            font-weight: bold;
-            font-size: 1.1rem;
-        }
-
-        /* Module containers */
-        .module-container {
-            display: none;
-            flex-direction: column;
-            flex: 1;
-        }
-
-        /* Card Styles */
-        .card {
-            background: white;
-            border-radius: 8px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-            margin-bottom: 1rem;
-            padding: 1rem;
-        }
-
-        .card-title {
-            font-size: 1.2rem;
-            margin-bottom: 1rem;
-            color: var(--primary-dark);
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-
-        /* Button Styles */
-        .btn {
-            padding: 0.5rem 1rem;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-            font-weight: bold;
-            transition: background-color 0.3s;
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            min-width: 100px;
-        }
-
-        .btn-primary {
-            background-color: var(--primary);
-            color: white;
-        }
-
-        .btn-primary:hover {
-            background-color: var(--primary-dark);
-        }
-
-        .btn-danger {
-            background-color: var(--danger);
-            color: white;
-        }
-
-        .btn-success {
-            background-color: var(--success);
-            color: white;
-        }
-
-        .btn-warning {
-            background-color: var(--warning);
-            color: white;
-        }
-
-        .btn i {
-            margin-right: 0.5rem;
-        }
-
-        .btn-group {
-            display: flex;
-            gap: 0.5rem;
-            margin: 1rem 0;
-            flex-wrap: wrap;
-        }
-
-        /* Scanner Status */
-        .scanner-status {
-            display: flex;
-            align-items: center;
-            font-size: 0.9rem;
-        }
-
-        .scanner-indicator {
-            width: 12px;
-            height: 12px;
-            border-radius: 50%;
-            margin-right: 0.5rem;
-            background-color: var(--danger);
-        }
-
-        .scanner-indicator.connected {
-            background-color: var(--success);
-        }
-
-        /* Status Bar */
-        .status-bar {
-            display: flex;
-            background: var(--gray-light);
-            border-radius: 4px;
-            overflow: hidden;
-            height: 24px;
-            margin: 1rem 0;
-        }
-
-        .status-picked {
-            background: var(--success);
-            height: 100%;
-            transition: width 0.3s;
-        }
-
-        .status-remaining {
-            background: var(--gray);
-            height: 100%;
-            transition: width 0.3s;
-        }
-
-        .status-text {
-            font-size: 0.9rem;
-            text-align: center;
-            margin-top: 0.5rem;
-        }
-
-        /* List Container */
-        .list-container {
-            max-height: 400px;
-            overflow-y: auto;
-            border: 1px solid #eee;
-            border-radius: 4px;
-        }
-
-        table {
-            width: 100%;
-            border-collapse: collapse;
-        }
-
-        th {
-            background-color: var(--primary);
-            color: white;
-            padding: 0.5rem;
-            text-align: left;
-            position: sticky;
-            top: 0;
-        }
-
-        td {
-            padding: 0.5rem;
-            border-bottom: 1px solid #eee;
-        }
-
-        tr.picked, tr.received, tr.returned {
-            background-color: rgba(76, 175, 80, 0.1);
-        }
-
-        .badge {
-            display: inline-block;
-            padding: 0.25rem 0.5rem;
-            border-radius: 4px;
-            font-size: 0.8rem;
-            font-weight: bold;
-        }
-
-        .badge-success {
-            background-color: var(--success);
-            color: white;
-        }
-
-        /* Form Controls */
-        .form-group {
-            margin-bottom: 1rem;
-        }
-
-        .form-control {
-            width: 100%;
-            padding: 0.5rem;
-            border: 1px solid #ddd;
-            border-radius: 4px;
-            font-size: 1rem;
-        }
-
-        /* Toast Notification */
-        .toast {
-            position: fixed;
-            bottom: 20px;
-            left: 50%;
-            transform: translateX(-50%);
-            background-color: rgba(0, 0, 0, 0.8);
-            color: white;
-            padding: 1rem;
-            border-radius: 4px;
-            z-index: 1000;
-            display: none;
-        }
-
-        .toast.error {
-            background-color: var(--danger);
-        }
-
-        .toast.success {
-            background-color: var(--success);
-        }
-
-        .toast.warning {
-            background-color: var(--warning);
-        }
-
-        /* Modal */
-        .modal {
-            display: none;
-            position: fixed;
-            z-index: 1050;
-            left: 0;
-            top: 0;
-            width: 100%;
-            height: 100%;
-            overflow: auto;
-            background-color: rgba(0,0,0,0.4);
-        }
-
-        .modal-content {
-            background-color: #fefefe;
-            margin: 15% auto;
-            padding: 20px;
-            border: 1px solid #888;
-            border-radius: 8px;
-            width: 80%;
-            max-width: 500px;
-        }
-
-        .modal-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 1rem;
-        }
-
-        .modal-title {
-            font-size: 1.2rem;
-            font-weight: bold;
-        }
-
-        .close {
-            color: #aaa;
-            font-size: 28px;
-            font-weight: bold;
-            cursor: pointer;
-        }
-
-        .close:hover,
-        .close:focus {
-            color: black;
-            text-decoration: none;
-        }
-
-        .modal-body {
-            margin-bottom: 1rem;
-        }
-
-        .modal-footer {
-            display: flex;
-            justify-content: flex-end;
-            gap: 0.5rem;
-        }
-
-        /* Responsive */
-        @media (max-width: 768px) {
-            .btn-group {
-                flex-direction: column;
-            }
-            
-            .btn {
-                width: 100%;
-            }
-            
-            .menu-grid {
-                grid-template-columns: 1fr;
-            }
-        }
-
-        /* Weight Calculator */
-        .weight-calculator {
-            margin-top: 1rem;
-            padding: 1rem;
-            background-color: #f0f8ff;
-            border-radius: 8px;
-            border: 1px solid var(--primary-light);
-        }
-
-        .weight-title {
-            font-weight: bold;
-            margin-bottom: 0.5rem;
-            color: var(--primary-dark);
-        }
-
-        .weight-info {
-            display: flex;
-            justify-content: space-between;
-            font-size: 1.1rem;
-        }
-
-        .weight-box {
-            padding: 0.5rem;
-            background-color: white;
-            border-radius: 4px;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-            min-width: 120px;
-            text-align: center;
-        }
-    </style>
+    <link rel="stylesheet" href="css/styles.css">
 </head>
 <body>
     <header>
@@ -476,7 +57,10 @@
                         <i class="fas fa-file-import"></i> Importer plukkliste
                     </button>
                     <button id="connectScannerPick" class="btn btn-primary">
-                        <i class="fas fa-bluetooth"></i> Koble til skanner
+                        <i class="fas fa-bluetooth"></i> Bluetooth
+                    </button>
+                    <button id="cameraScannerPick" class="btn btn-primary">
+                        <i class="fas fa-camera"></i> Kamera
                     </button>
                 </div>
                 
@@ -487,6 +71,20 @@
                     <div id="pickStatusRemaining" class="status-remaining" style="width: 100%"></div>
                 </div>
                 <div id="pickStatusText" class="status-text">0 av 0 varer plukket (0%)</div>
+                
+                <!-- Kameraskanner for plukk -->
+                <div id="cameraScannerPickContainer" class="camera-scanner-container" style="display: none;">
+                    <div class="camera-wrapper">
+                        <video id="videoPickScanner" class="scanner-video"></video>
+                        <canvas id="canvasPickScanner" class="scanner-canvas"></canvas>
+                        <div id="scannerPickOverlay" class="scanner-overlay">
+                            <div class="scan-area"></div>
+                        </div>
+                    </div>
+                    <button id="closePickScanner" class="btn btn-danger scanner-close-btn">
+                        <i class="fas fa-times"></i> Lukk skanner
+                    </button>
+                </div>
                 
                 <div class="list-container">
                     <table id="pickList">
@@ -547,7 +145,10 @@
                         <i class="fas fa-file-import"></i> Importer mottaksliste
                     </button>
                     <button id="connectScannerReceive" class="btn btn-primary">
-                        <i class="fas fa-bluetooth"></i> Koble til skanner
+                        <i class="fas fa-bluetooth"></i> Bluetooth
+                    </button>
+                    <button id="cameraScannerReceive" class="btn btn-primary">
+                        <i class="fas fa-camera"></i> Kamera
                     </button>
                 </div>
                 
@@ -558,6 +159,20 @@
                     <div id="receiveStatusRemaining" class="status-remaining" style="width: 100%"></div>
                 </div>
                 <div id="receiveStatusText" class="status-text">0 av 0 varer mottatt (0%)</div>
+                
+                <!-- Kameraskanner for mottak -->
+                <div id="cameraScannerReceiveContainer" class="camera-scanner-container" style="display: none;">
+                    <div class="camera-wrapper">
+                        <video id="videoReceiveScanner" class="scanner-video"></video>
+                        <canvas id="canvasReceiveScanner" class="scanner-canvas"></canvas>
+                        <div id="scannerReceiveOverlay" class="scanner-overlay">
+                            <div class="scan-area"></div>
+                        </div>
+                    </div>
+                    <button id="closeReceiveScanner" class="btn btn-danger scanner-close-btn">
+                        <i class="fas fa-times"></i> Lukk skanner
+                    </button>
+                </div>
                 
                 <div class="list-container">
                     <table id="receiveList">
@@ -614,10 +229,27 @@
                 
                 <div class="btn-group">
                     <button id="connectScannerReturn" class="btn btn-primary">
-                        <i class="fas fa-bluetooth"></i> Koble til skanner
+                        <i class="fas fa-bluetooth"></i> Bluetooth
+                    </button>
+                    <button id="cameraScannerReturn" class="btn btn-primary">
+                        <i class="fas fa-camera"></i> Kamera
                     </button>
                     <button id="clearReturnList" class="btn btn-danger" disabled>
                         <i class="fas fa-trash"></i> Tøm returliste
+                    </button>
+                </div>
+                
+                <!-- Kameraskanner for retur -->
+                <div id="cameraScannerReturnContainer" class="camera-scanner-container" style="display: none;">
+                    <div class="camera-wrapper">
+                        <video id="videoReturnScanner" class="scanner-video"></video>
+                        <canvas id="canvasReturnScanner" class="scanner-canvas"></canvas>
+                        <div id="scannerReturnOverlay" class="scanner-overlay">
+                            <div class="scan-area"></div>
+                        </div>
+                    </div>
+                    <button id="closeReturnScanner" class="btn btn-danger scanner-close-btn">
+                        <i class="fas fa-times"></i> Lukk skanner
                     </button>
                 </div>
                 
@@ -733,6 +365,6 @@
     
     <!-- Scripts -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.7.107/pdf.min.js"></script>
-    <script src="app.js"></script>
+    <script type="module" src="js/app.js"></script>
 </body>
 </html>
