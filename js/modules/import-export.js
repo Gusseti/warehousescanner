@@ -540,9 +540,6 @@ function parseComplexProductLines(lines) {
     return products;
 }
 
-// Utvidet eksportfunksjon med støtte for flere formater
-import { showToast } from './utils.js';
-import { formatDate } from './utils.js';
 
 /**
  * Eksporterer liste til forskjellige formater
