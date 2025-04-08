@@ -8,6 +8,8 @@ let isScanning = false;
 let currentCameraIndex = 0;
 let availableCameras = [];
 
+import { appState } from '../app.js';
+
 // DOM-elementer
 let videoElement = null;
 let canvasElement = null;
@@ -306,7 +308,7 @@ function initCameraScanner(videoEl, canvasEl, overlayEl, callback, statusCallbac
  * @returns {Promise} Løftebasert resultat av oppstartforsøket
  */
 async function startCameraScanning(cameraId = null) {
-    console.log("Starter kameraskanning med forenklet tilnærming...");
+    console.log("Starter kameraskanning med minimalt oppsett...");
     
     // Stopp eventuelle aktive skannere
     if (isScanning) {
@@ -315,127 +317,107 @@ async function startCameraScanning(cameraId = null) {
     }
     
     try {
-        // Sjekk om videoElement eksisterer
-        if (!videoElement) {
-            console.error("Video-element ikke funnet");
-            throw new Error("Video-element mangler");
+        // Finn aktuell scanner-container basert på gjeldende modul
+        let modulePrefix = '';
+        if (appState && appState.currentModule) {
+            if (appState.currentModule === 'picking') modulePrefix = 'Pick';
+            else if (appState.currentModule === 'receiving') modulePrefix = 'Receive';
+            else if (appState.currentModule === 'returns') modulePrefix = 'Return';
         }
         
-        // Hent containerelementene på en tryggere måte
-        let container = null;
-        let scannerContainer = null;
+        // Finn elementer direkte uten å bruke closest()
+        const containerId = `cameraScanner${modulePrefix}Container`;
+        const videoId = `video${modulePrefix}Scanner`;
+        const canvasId = `canvas${modulePrefix}Scanner`;
         
-        // Finn parent containere basert på modul
-        if (appState.currentModule === 'picking') {
-            container = document.querySelector('#cameraScannerPickContainer .simple-camera-wrapper');
-            scannerContainer = document.getElementById('cameraScannerPickContainer');
-        } else if (appState.currentModule === 'receiving') {
-            container = document.querySelector('#cameraScannerReceiveContainer .simple-camera-wrapper');
-            scannerContainer = document.getElementById('cameraScannerReceiveContainer');
-        } else if (appState.currentModule === 'returns') {
-            container = document.querySelector('#cameraScannerReturnContainer .simple-camera-wrapper');
-            scannerContainer = document.getElementById('cameraScannerReturnContainer');
+        const container = document.getElementById(containerId);
+        videoElement = document.getElementById(videoId);
+        canvasElement = document.getElementById(canvasId);
+        
+        // Vis feilmelding og avbryt hvis elementer mangler
+        if (!container || !videoElement || !canvasElement) {
+            console.error("Kritiske elementer mangler:", { container, videoElement, canvasElement });
+            throw new Error("Kamera-elementer ikke funnet");
         }
         
-        // Feilhåndtering hvis containere ikke finnes
-        if (!container || !scannerContainer) {
-            console.error("Kamera-containere ikke funnet");
-            // Fortsett likevel, men logg feilen
-        } else {
-            // Vis containere
-            scannerContainer.style.display = 'block';
-            container.style.display = 'block';
-        }
+        // Vis container
+        container.style.display = 'block';
         
-        // Fjern eventuelle tidligere videokilder
+        // Stopp eventuelle eksisterende videostrømmer
         if (videoElement.srcObject) {
             try {
-                const oldStream = videoElement.srcObject;
-                oldStream.getTracks().forEach(track => track.stop());
-                videoElement.srcObject = null;
-            } catch (e) {
-                console.error("Feil ved stopping av tidligere video:", e);
-            }
+                videoElement.srcObject.getTracks().forEach(track => track.stop());
+            } catch (e) {}
+            videoElement.srcObject = null;
         }
         
-        // Sett stil på videoelementet direkte
-        videoElement.style.display = 'block';
-        videoElement.style.opacity = '1';
-        videoElement.style.visibility = 'visible';
-        videoElement.style.position = 'absolute';
-        videoElement.style.top = '0';
-        videoElement.style.left = '0';
-        videoElement.style.width = '100%';
-        videoElement.style.height = '100%';
-        videoElement.style.zIndex = '1';
-        videoElement.style.backgroundColor = '#000';
+        // Sett direkte stiler på video-elementet
+        videoElement.style.cssText = `
+            display: block !important;
+            opacity: 1 !important;
+            visibility: visible !important;
+            position: absolute !important; 
+            top: 0 !important;
+            left: 0 !important;
+            width: 100% !important;
+            height: 100% !important;
+            z-index: 1 !important;
+            background-color: #000 !important;
+            object-fit: cover !important;
+        `;
         
-        // Forsikre at attributter er satt
+        // Sett nødvendige attributter
         videoElement.setAttribute('autoplay', '');
         videoElement.setAttribute('playsinline', '');
         videoElement.muted = true;
         
-        // Start kamera med enkel tilnærming
+        // Start kameraet
         console.log("Ber om kameratilgang...");
-        const stream = await navigator.mediaDevices.getUserMedia({
-            video: true,
-            audio: false
-        });
-        
-        // Logg kamerainformasjon
-        logCameraInfo(stream);
-        
-        // Koble til strøm
-        videoElement.srcObject = stream;
+        const stream = await navigator.mediaDevices.getUserMedia({ video: true });
         cameraStream = stream;
         
-        // Start avspilling manuelt og feilhåndtering
+        // Tilkoble video til strøm
+        videoElement.srcObject = stream;
+        
+        // Forsøk å starte avspillingen manuelt
         try {
             await videoElement.play();
-            console.log("Video avspilling startet manuelt");
+            console.log("Video avspilling startet");
         } catch (e) {
             console.warn("Kunne ikke starte video manuelt:", e);
-            // Fortsett likevel
         }
         
-        // Vent litt for å være sikker på at video har startet
-        await new Promise(resolve => setTimeout(resolve, 500));
+        // Sett opp canvas
+        canvasElement.width = 640;
+        canvasElement.height = 480;
+        canvasElement.style.position = 'absolute';
+        canvasElement.style.top = '0';
+        canvasElement.style.left = '0';
+        canvasElement.style.width = '100%';
+        canvasElement.style.height = '100%';
+        canvasElement.style.zIndex = '2';
         
-        // Initialiser Quagga
-        console.log("Initialiserer Quagga...");
-        
-        // Sikre at Quagga er lastet
+        // Last Quagga hvis nødvendig
         if (typeof Quagga === 'undefined') {
+            console.log("Laster Quagga...");
             await loadQuaggaScript();
         }
         
+        // Initialiser Quagga
+        console.log("Initialiserer Quagga...");
         Quagga.init({
             inputStream: {
                 name: "Live",
                 type: "LiveStream",
                 target: videoElement,
-                constraints: {
-                    width: 640,
-                    height: 480
-                }
+                constraints: { width: 640, height: 480 }
             },
-            locator: {
-                patchSize: "medium",
-                halfSample: true
-            },
-            numOfWorkers: 2,
             decoder: {
-                readers: [
-                    "code_128_reader",
-                    "ean_reader",
-                    "ean_8_reader",
-                    "code_39_reader"
-                ]
-            },
-            locate: true
+                readers: ["ean_reader", "ean_8_reader", "code_128_reader", "code_39_reader"]
+            }
         }, function(err) {
             if (err) {
-                console.error("Quagga init error:", err);
+                console.error("Quagga initialisering feilet:", err);
                 return;
             }
             
@@ -443,26 +425,23 @@ async function startCameraScanning(cameraId = null) {
             Quagga.start();
             isScanning = true;
             
-            // Legg til event listeners
+            // Sett opp event handlers
             Quagga.onDetected(handleCameraScanResult);
-            Quagga.onProcessed(handleProcessedResult);
             
-            // Informer om statusendring
+            // Oppdater status
             if (scannerStatusCallback) {
                 scannerStatusCallback(true, { type: 'camera' });
             }
             
-            console.log("Kameraskanning aktiv");
+            console.log("Kameraskanning er aktiv");
         });
         
         return { success: true };
     } catch (error) {
         console.error("Kamera start feilet:", error);
-        
         if (scannerStatusCallback) {
             scannerStatusCallback(false);
         }
-        
         throw error;
     }
 }
