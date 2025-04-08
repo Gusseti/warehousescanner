@@ -167,46 +167,44 @@ async function checkCameraPermission() {
     }
 }
 
-/**
- * Rengjør og tilbakestiller kamera-ressurser
- */
+// Rengjør og tilbakestiller kamera-ressurser
 function cleanupCamera() {
-    // Stopp eventuelle aktive kamerastrømmer
-    if (cameraStream) {
-        try {
-            cameraStream.getTracks().forEach(track => {
-                if (track.readyState === 'live') {
-                    track.stop();
-                }
-            });
-        } catch (e) {
-            console.error("Feil ved stopp av kamerastrøm:", e);
+  // Stopp eventuelle aktive kamerastrømmer
+  if (cameraStream) {
+    try {
+      cameraStream.getTracks().forEach(track => {
+        if (track.readyState === 'live') {
+          track.stop();
         }
-        cameraStream = null;
+      });
+    } catch (e) {
+      console.error("Feil ved stopp av kamerastrøm:", e);
     }
-    
-    // Tilbakestill video-elementet
-    if (videoElement) {
-        try {
-            videoElement.srcObject = null;
-            videoElement.onloadedmetadata = null;
-            videoElement.onloadeddata = null;
-            videoElement.oncanplay = null;
-        } catch (e) {
-            console.error("Feil ved tilbakestilling av video-element:", e);
-        }
+    cameraStream = null;
+  }
+ 
+  // Tilbakestill video-elementet
+  if (videoElement) {
+    try {
+      videoElement.srcObject = null;
+      videoElement.onloadedmetadata = null;
+      videoElement.onloadeddata = null;
+      videoElement.oncanplay = null;
+    } catch (e) {
+      console.error("Feil ved tilbakestilling av video-element:", e);
     }
-    
-    // Stopp Quagga hvis det kjører
-    if (typeof Quagga !== 'undefined' && isScanning) {
-        try {
-            Quagga.stop();
-        } catch (e) {
-            console.error("Feil ved stopp av Quagga:", e);
-        }
+  }
+ 
+  // Stopp Quagga hvis det kjører
+  if (typeof Quagga !== 'undefined' && isScanning) {
+    try {
+      Quagga.stop();
+    } catch (e) {
+      console.error("Feil ved stopp av Quagga:", e);
     }
-    
-    isScanning = false;
+  }
+ 
+  isScanning = false;
 }
 
 /**
