@@ -92,6 +92,5 @@ function initializeApp() {
 
 // Eksporter funksjoner for bruk i andre moduler
 export {
-    appState,
     initializeApp
 };
