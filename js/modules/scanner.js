@@ -653,38 +653,110 @@ function handleCameraScanResult(result) {
     if (result && result.codeResult && result.codeResult.code) {
         const barcode = result.codeResult.code;
         
-        console.log("Strekkode funnet:", barcode);
-        
-        // Spill lyd for å indikere at strekkode er funnet
-        playBeepSound();
-        
-        // Marker strekkoden på canvas
-        if (canvasElement && result.box) {
-            const ctx = canvasElement.getContext('2d');
-            drawSuccessBox(ctx, result.box);
-        }
-        
-        // Send resultatet til callback
-        if (onScanCallback) {
-            onScanCallback(barcode);
-        }
-        
-        // Stopp skanning midlertidig for å unngå gjentatte skanninger av samme kode
-        // Starter igjen etter 2 sekunder
-        if (typeof Quagga !== 'undefined') {
-            Quagga.stop();
-        }
-        isScanning = false;
-        
-        setTimeout(() => {
-            if (cameraStream && cameraStream.active) {
-                if (typeof Quagga !== 'undefined') {
-                    Quagga.start();
-                }
-                isScanning = true;
+        // Valider at dette er en strekkode og ikke bare et tall
+        if (validateBarcode(barcode)) {
+            console.log("Strekkode funnet:", barcode);
+            
+            // Spill lyd for å indikere at strekkode er funnet
+            playBeepSound();
+            
+            // Marker strekkoden på canvas
+            if (canvasElement && result.box) {
+                const ctx = canvasElement.getContext('2d');
+                drawSuccessBox(ctx, result.box);
             }
-        }, 2000);
+            
+            // Send resultatet til callback
+            if (onScanCallback) {
+                onScanCallback(barcode);
+            }
+            
+            // Stopp skanning midlertidig for å unngå gjentatte skanninger av samme kode
+            // Starter igjen etter 2 sekunder
+            if (typeof Quagga !== 'undefined') {
+                Quagga.stop();
+            }
+            isScanning = false;
+            
+            setTimeout(() => {
+                if (cameraStream && cameraStream.active) {
+                    if (typeof Quagga !== 'undefined') {
+                        Quagga.start();
+                    }
+                    isScanning = true;
+                }
+            }, 2000);
+        } else {
+            console.log("Ugyldig strekkode ignorert:", barcode);
+        }
     }
+}
+
+/**
+ * Validerer at en strekkode er gyldig og ikke bare et tilfeldig tall
+ * @param {string} barcode - Strekkode som skal valideres
+ * @returns {boolean} Om strekkoden er gyldig
+ */
+function validateBarcode(barcode) {
+    // Fjern eventuelle blanke tegn
+    barcode = barcode.trim();
+    
+    // Sjekk lengden - de fleste strekkoder er minst 8 tegn
+    if (barcode.length < 8) {
+        return false;
+    }
+    
+    // Sjekk om strekkoden inneholder bare tall
+    // EAN-13, UPC og de fleste vanlige strekkodeformater er numeriske
+    const isNumeric = /^\d+$/.test(barcode);
+    
+    // For numeriske strekkoder, sjekk vanlige formater
+    if (isNumeric) {
+        // Kjente strekkodeformater
+        if (barcode.length === 8) return true;  // EAN-8
+        if (barcode.length === 12) return true; // UPC-A
+        if (barcode.length === 13) return true; // EAN-13
+        if (barcode.length === 14) return true; // GTIN-14
+        
+        // Hvis det er et annet antall siffer, sjekk sjekksiffer for EAN-13
+        // Dette er en enkel validering som ikke garanterer at det er en strekkode,
+        // men gjør det mindre sannsynlig at tilfeldige tall blir tolket som strekkoder
+        if (barcode.length === 13) {
+            try {
+                // EAN-13 sjekksum validering
+                let sum = 0;
+                for (let i = 0; i < 12; i++) {
+                    sum += parseInt(barcode[i]) * (i % 2 === 0 ? 1 : 3);
+                }
+                const checkDigit = (10 - (sum % 10)) % 10;
+                return parseInt(barcode[12]) === checkDigit;
+            } catch (e) {
+                console.error("Feil ved validering av strekkode:", e);
+                return false;
+            }
+        }
+    }
+    
+    // For alfanumeriske strekkoder (Code 39, Code 128, etc.)
+    // Sjekk etter mønstre som er typiske for disse formatene
+    if (/^[A-Z0-9\-\.$/+%]+$/.test(barcode)) {
+        return true;
+    }
+    
+    // Sjekk om strekkoden matcher formatet til dine egne strekkoder
+    // For eksempel: hvis dine interne strekkoder starter med et bestemt prefix
+    if (appState && appState.barcodeMapping && barcode in appState.barcodeMapping) {
+        return true;
+    }
+    
+    // Sjekk om strekkoden matcher formatet for noen kjente varer
+    // For eksempel: hvis varenumrene har et bestemt format
+    if (/^\d{3}-[A-Z0-9]+-?[A-Z0-9]*$/.test(barcode)) {
+        return true;
+    }
+    
+    // Hvis strekkoden ikke passerer noen av disse testene, anta at det er en feil skanning
+    return false;
 }
 
 /**
