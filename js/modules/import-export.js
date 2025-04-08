@@ -540,102 +540,264 @@ function parseComplexProductLines(lines) {
     return products;
 }
 
+// Utvidet eksportfunksjon med støtte for flere formater
+import { showToast } from './utils.js';
+import { formatDate } from './utils.js';
+
 /**
- * Eksporterer liste
+ * Eksporterer liste til forskjellige formater
  * @param {Array} items - Liste med varer
  * @param {string} type - Type liste (plukk, mottak, retur)
+ * @param {string} format - Eksportformat (json, csv, txt, html)
  */
-export function exportList(items, type) {
+export function exportList(items, type, format = 'json') {
     if (!items || items.length === 0) {
         showToast('Ingen varer å eksportere!', 'warning');
         return;
     }
-    
-    let fileName = 'eksport.json';
+
+    // Sett opp filnavn
+    let fileName = 'eksport';
     switch (type) {
         case 'plukk':
-            fileName = 'plukkliste_eksport.json';
+            fileName = 'plukkliste_eksport';
             break;
         case 'mottak':
-            fileName = 'mottaksliste_eksport.json';
+            fileName = 'mottaksliste_eksport';
             break;
         case 'retur':
-            fileName = 'returliste_eksport.json';
+            fileName = 'returliste_eksport';
             break;
     }
-    
-    // Opprett eksportdata med all nødvendig informasjon
-    const exportData = {
-        exportDate: new Date().toISOString(),
-        exportType: type,
-        items: items.map(item => {
-            const exportItem = { ...item };
-            
-            // Konverter Date-objekter til ISO-strenger
-            if (type === 'plukk' && exportItem.pickedAt) {
-                exportItem.pickedAt = exportItem.pickedAt instanceof Date ? 
-                    exportItem.pickedAt.toISOString() : exportItem.pickedAt;
-            } else if (type === 'mottak' && exportItem.receivedAt) {
-                exportItem.receivedAt = exportItem.receivedAt instanceof Date ? 
-                    exportItem.receivedAt.toISOString() : exportItem.receivedAt;
-            } else if (type === 'retur' && exportItem.returnedAt) {
-                exportItem.returnedAt = exportItem.returnedAt instanceof Date ? 
-                    exportItem.returnedAt.toISOString() : exportItem.returnedAt;
-            }
-            
-            return exportItem;
-        }),
-        summary: {
-            totalItems: items.length,
-            completedItems: type === 'plukk' ? 
-                items.filter(item => item.picked).length : 
-                type === 'mottak' ? 
-                    items.filter(item => item.received).length : 
-                    items.length,
-            totalWeight: calculateTotalWeight(items, type)
-        }
-    };
-    
-    // Opprett JSON-streng
-    const jsonString = JSON.stringify(exportData, null, 2);
-    
+
+    // Beregn sammendrag
+    const summary = calculateSummary(items, type);
+
+    // Generer eksportinnhold basert på format
+    let content = '';
+    let mimeType = 'application/json';
+
+    switch (format.toLowerCase()) {
+        case 'csv':
+            content = generateCSV(items, type);
+            fileName += '.csv';
+            mimeType = 'text/csv';
+            break;
+        case 'txt':
+            content = generateTXT(items, type, summary);
+            fileName += '.txt';
+            mimeType = 'text/plain';
+            break;
+        case 'html':
+            content = generateHTML(items, type, summary);
+            fileName += '.html';
+            mimeType = 'text/html';
+            break;
+        case 'json':
+        default:
+            content = JSON.stringify({
+                exportDate: new Date().toISOString(),
+                exportType: type,
+                summary: summary,
+                items: items
+            }, null, 2);
+            fileName += '.json';
+            break;
+    }
+
     // Opprett blob og nedlastingslink
-    const blob = new Blob([jsonString], { type: 'application/json' });
+    const blob = new Blob([content], { type: mimeType });
     const url = URL.createObjectURL(blob);
-    
+
     const downloadLink = document.createElement('a');
     downloadLink.href = url;
     downloadLink.download = fileName;
-    
+
     // Utløs nedlasting
     document.body.appendChild(downloadLink);
     downloadLink.click();
-    
+
     // Rydd opp
     setTimeout(() => {
         document.body.removeChild(downloadLink);
         URL.revokeObjectURL(url);
     }, 100);
-    
+
     showToast(`Liste eksportert som ${fileName}!`, 'success');
 }
 
 /**
- * Beregner totalvekt for en liste med varer
+ * Beregner sammendrag for liste
  * @param {Array} items - Liste med varer
- * @param {string} type - Type liste (plukk, mottak, retur)
- * @returns {number} Total vekt
+ * @param {string} type - Type liste
+ * @returns {Object} Sammendrag av listen
  */
-function calculateTotalWeight(items, type) {
-    if (!items || items.length === 0) return 0;
+function calculateSummary(items, type) {
+    let totalItems = items.length;
+    let totalWeight = 0;
+    let completedItems = 0;
+
+    items.forEach(item => {
+        const quantity = item.quantity || 1;
+        const weight = item.weight || 0;
+        totalWeight += quantity * weight;
+
+        // Sjekk fullførte varer basert på type
+        if (type === 'plukk' && item.picked) {
+            completedItems++;
+        } else if (type === 'mottak' && item.received) {
+            completedItems++;
+        } else if (type === 'retur') {
+            completedItems++;
+        }
+    });
+
+    return {
+        totalItems,
+        completedItems,
+        totalWeight: parseFloat(totalWeight.toFixed(2))
+    };
+}
+
+/**
+ * Genererer CSV-eksport
+ * @param {Array} items - Liste med varer
+ * @param {string} type - Type liste
+ * @returns {string} CSV-innhold
+ */
+function generateCSV(items, type) {
+    // Definer kolonner basert på type
+    const headers = ['Varenummer', 'Beskrivelse', 'Antall', 'Vekt'];
     
-    return items.reduce((total, item) => {
-        const count = type === 'plukk' ? 
-            (item.pickedCount || 0) : 
-            type === 'mottak' ? 
-                (item.receivedCount || 0) : 
-                (item.quantity || 0);
-                
-        return total + (count * (item.weight || 0));
-    }, 0);
+    // Legg til type-spesifikke kolonner
+    if (type === 'plukk') headers.push('Plukket');
+    if (type === 'mottak') headers.push('Mottatt');
+
+    // Start CSV med headers
+    let csv = headers.join(';') + '\n';
+
+    // Legg til data for hver vare
+    items.forEach(item => {
+        const row = [
+            item.id, 
+            item.description, 
+            item.quantity || 1, 
+            (item.weight || 0).toFixed(2)
+        ];
+
+        // Legg til type-spesifikke verdier
+        if (type === 'plukk') row.push(item.picked ? 'Ja' : 'Nei');
+        if (type === 'mottak') row.push(item.received ? 'Ja' : 'Nei');
+
+        csv += row.join(';') + '\n';
+    });
+
+    return csv;
+}
+
+/**
+ * Genererer TXT-eksport
+ * @param {Array} items - Liste med varer
+ * @param {string} type - Type liste
+ * @param {Object} summary - Sammendrag av listen
+ * @returns {string} Tekst-innhold
+ */
+function generateTXT(items, type, summary) {
+    let txt = `LAGERSTYRING - ${type.toUpperCase()}LISTE\n`;
+    txt += `Eksportdato: ${new Date().toLocaleString('nb-NO')}\n\n`;
+
+    txt += `SAMMENDRAG\n`;
+    txt += `-------------------\n`;
+    txt += `Total antall varer: ${summary.totalItems}\n`;
+    txt += `Fullførte varer: ${summary.completedItems}\n`;
+    txt += `Total vekt: ${summary.totalWeight} kg\n\n`;
+
+    txt += `VAREDETALJER\n`;
+    txt += `-------------------\n`;
+
+    items.forEach((item, index) => {
+        txt += `Vare ${index + 1}:\n`;
+        txt += `  Varenummer: ${item.id}\n`;
+        txt += `  Beskrivelse: ${item.description}\n`;
+        txt += `  Antall: ${item.quantity || 1}\n`;
+        txt += `  Vekt (pr. enhet): ${(item.weight || 0).toFixed(2)} kg\n`;
+
+        if (type === 'plukk') {
+            txt += `  Plukket: ${item.picked ? 'Ja' : 'Nei'}\n`;
+        }
+        if (type === 'mottak') {
+            txt += `  Mottatt: ${item.received ? 'Ja' : 'Nei'}\n`;
+        }
+        txt += '\n';
+    });
+
+    return txt;
+}
+
+/**
+ * Genererer HTML-eksport
+ * @param {Array} items - Liste med varer
+ * @param {string} type - Type liste
+ * @param {Object} summary - Sammendrag av listen
+ * @returns {string} HTML-innhold
+ */
+function generateHTML(items, type, summary) {
+    return `
+    <!DOCTYPE html>
+    <html lang="no">
+    <head>
+        <meta charset="UTF-8">
+        <title>Lagerstyring - ${type.toUpperCase()}LISTE</title>
+        <style>
+            body { font-family: Arial, sans-serif; max-width: 800px; margin: 0 auto; line-height: 1.6; }
+            h1, h2 { color: #333; }
+            table { width: 100%; border-collapse: collapse; margin: 20px 0; }
+            th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+            th { background-color: #f2f2f2; }
+            .summary { background-color: #f9f9f9; padding: 15px; border-radius: 5px; }
+        </style>
+    </head>
+    <body>
+        <h1>Lagerstyring - ${type.toUpperCase()}LISTE</h1>
+        <p>Eksportdato: ${new Date().toLocaleString('nb-NO')}</p>
+
+        <div class="summary">
+            <h2>Sammendrag</h2>
+            <p>Total antall varer: ${summary.totalItems}</p>
+            <p>Fullførte varer: ${summary.completedItems}</p>
+            <p>Total vekt: ${summary.totalWeight} kg</p>
+        </div>
+
+        <h2>Varedetaljer</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>Varenummer</th>
+                    <th>Beskrivelse</th>
+                    <th>Antall</th>
+                    <th>Vekt (pr. enhet)</th>
+                    ${type === 'plukk' ? '<th>Plukket</th>' : ''}
+                    ${type === 'mottak' ? '<th>Mottatt</th>' : ''}
+                </tr>
+            </thead>
+            <tbody>
+                ${items.map(item => `
+                    <tr>
+                        <td>${item.id}</td>
+                        <td>${item.description}</td>
+                        <td>${item.quantity || 1}</td>
+                        <td>${(item.weight || 0).toFixed(2)} kg</td>
+                        ${type === 'plukk' ? `<td>${item.picked ? 'Ja' : 'Nei'}</td>` : ''}
+                        ${type === 'mottak' ? `<td>${item.received ? 'Ja' : 'Nei'}</td>` : ''}
+                    </tr>
+                `).join('')}
+            </tbody>
+        </table>
+    </body>
+    </html>`;
+}
+
+// Eksporter en hjelpefunksjon for å støtte flere formater ved eksport
+export function exportWithFormat(items, type, format) {
+    exportList(items, type, format);
 }
