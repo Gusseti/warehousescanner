@@ -1,11 +1,12 @@
 // app.js - Hovedkodefil for Lagerstyringsappen
 import { initUi, showMainMenu, showModule } from './modules/ui.js';
-import { loadSettings, saveSettings, loadItemWeights, loadBarcodeMappingFromStorage } from './modules/storage.js';
+import { loadSettings, saveSettings, loadItemWeights, loadBarcodeMappingFromStorage, loadListsFromStorage } from './modules/storage.js';
 import { initPicking } from './modules/picking.js';
 import { initReceiving } from './modules/receiving.js';
 import { initReturns } from './modules/returns.js';
 import { initSettings } from './modules/settings.js';
 import { showToast } from './modules/utils.js';
+import { initWeights } from './modules/weights.js';
 
 // Applikasjonens state
 export let appState = {
@@ -65,6 +66,7 @@ function initializeApp() {
         loadBarcodeMappingFromStorage();
         loadSettings();
         loadItemWeights();
+        loadListsFromStorage();
         
         // Initialiser UI-håndtering
         initUi();
@@ -74,6 +76,11 @@ function initializeApp() {
         initReceiving();
         initReturns();
         initSettings();
+        initWeights();
+        
+        // Logg alle strekkoder som er lastet
+        console.log('Lastet strekkodeoversikt med', Object.keys(appState.barcodeMapping).length, 'strekkoder:');
+        console.log(appState.barcodeMapping);
         
         // Hent lagret modul og vis den, eller vis hovedmeny
         const storedModule = localStorage.getItem('currentModule');

@@ -269,9 +269,11 @@ async function startCameraScanning(cameraId = null) {
             // Legg til eller fjern speilingsklasse basert på kameratype
             const videoTrack = stream.getVideoTracks()[0];
             if (videoTrack && videoTrack.getSettings().facingMode === "user") {
+                videoElement.classList.add('user-camera'); // Front-facing
                 videoElement.classList.remove('environment');
             } else {
-                videoElement.classList.add('environment');
+                videoElement.classList.add('environment'); // Back-facing
+                videoElement.classList.remove('user-camera');
             }
             
             if (scannerOverlay) {
@@ -279,17 +281,33 @@ async function startCameraScanning(cameraId = null) {
             }
         }
         
-        // Vent på at video er lastet
-        await new Promise(resolve => {
+        // Vent på at video er lastet og start avspilling
+        await new Promise((resolve, reject) => {
             videoElement.onloadedmetadata = () => {
-                videoElement.play().catch(err => {
-                    console.error("Feil ved avspilling av video:", err);
-                });
-                resolve();
+                videoElement.play()
+                    .then(resolve)
+                    .catch(err => {
+                        console.error("Feil ved avspilling av video:", err);
+                        reject(err);
+                    });
             };
+            
+            // Sett timeout for tilfeller der onloadedmetadata ikke utløses
+            setTimeout(() => {
+                if (videoElement.readyState >= 2) { // HAVE_CURRENT_DATA eller høyere
+                    videoElement.play()
+                        .then(resolve)
+                        .catch(err => {
+                            console.error("Feil ved avspilling av video (timeout):", err);
+                            reject(err);
+                        });
+                } else {
+                    reject(new Error("Tidsavbrudd ved lasting av video"));
+                }
+            }, 3000);
         });
         
-        // Sett opp canvas med willReadFrequently attributt
+        // Sett opp canvas
         if (canvasElement) {
             const ctx = canvasElement.getContext('2d', { willReadFrequently: true });
             canvasElement.width = videoElement.videoWidth || 640;
@@ -363,12 +381,18 @@ async function startCameraScanning(cameraId = null) {
                 }
             });
         } else {
-            throw new Error('Strekkodebibliotek ikke lastet. Prøv å laste siden på nytt.');
+            // Last inn Quagga dynamisk hvis det ikke er tilgjengelig
+            await loadQuaggaScript();
+            // Forsøk å starte på nytt etter å ha lastet script
+            return startCameraScanning(cameraId);
         }
         
         return { success: true };
     } catch (error) {
         console.error('Kamera-tilkobling feilet:', error);
+        if (scannerStatusCallback) {
+            scannerStatusCallback(false);
+        }
         throw error;
     }
 }
@@ -381,13 +405,21 @@ function stopCameraScanning() {
     
     // Stopp Quagga
     if (typeof Quagga !== 'undefined') {
-        Quagga.stop();
+        try {
+            Quagga.stop();
+        } catch (e) {
+            console.error('Feil ved stopp av Quagga:', e);
+        }
     }
     
     // Stopp kamerastrøm
     if (cameraStream) {
-        cameraStream.getTracks().forEach(track => track.stop());
-        cameraStream = null;
+        try {
+            cameraStream.getTracks().forEach(track => track.stop());
+            cameraStream = null;
+        } catch (e) {
+            console.error('Feil ved stopp av kamerastrøm:', e);
+        }
     }
     
     // Skjul video og overlay

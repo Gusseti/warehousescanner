@@ -22,6 +22,7 @@ let videoReturnScannerEl;
 let canvasReturnScannerEl;
 let scannerReturnOverlayEl;
 let closeReturnScannerEl;
+let switchCameraReturnEl;
 
 /**
  * Initialiserer retur-modulen
@@ -42,6 +43,7 @@ export function initReturns() {
     canvasReturnScannerEl = document.getElementById('canvasReturnScanner');
     scannerReturnOverlayEl = document.getElementById('scannerReturnOverlay');
     closeReturnScannerEl = document.getElementById('closeReturnScanner');
+    switchCameraReturnEl = document.getElementById('switchCameraReturn');
     
     // Initialiser kameraskanneren for retur
     initCameraScanner(
@@ -199,11 +201,21 @@ async function startReturnCameraScanning() {
  * @param {string} barcode - Skannet strekkode
  * @param {number} quantity - Antall varer å returnere
  */
-function handleReturnScan(barcode, quantity = 1) {
+export function handleReturnScan(barcode, quantity = 1) {
     if (!barcode) return;
     
+    // Sjekk om vi faktisk er i retur-modulen
+    if (appState.currentModule !== 'returns') {
+        console.log('Ignorerer strekkodeskanning i retur-modulen fordi en annen modul er aktiv:', appState.currentModule);
+        return;
+    }
+    
+    console.log('Håndterer strekkode i retur-modulen:', barcode);
+    
     // Tøm input etter skanning
-    returnManualScanEl.value = '';
+    if (returnManualScanEl) {
+        returnManualScanEl.value = '';
+    }
     
     // Sjekk om strekkoden finnes i barcode mapping
     let itemId = barcode;

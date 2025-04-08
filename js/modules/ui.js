@@ -3,6 +3,7 @@ import { appState } from '../app.js';
 import { updatePickingUI } from './picking.js';
 import { updateReceivingUI } from './receiving.js';
 import { updateReturnsUI } from './returns.js';
+import { stopCameraScanning } from './scanner.js';
 
 // DOM-elementer - Hovedmeny
 let mainMenuEl;
@@ -46,6 +47,9 @@ export function initUi() {
  * Viser hovedmenyen
  */
 export function showMainMenu() {
+    // Stopp aktiv kameraskanning før modulbytte
+    stopCameraScanning();
+    
     appState.currentModule = null;
     backButtonEl.style.display = 'none';
     
@@ -59,6 +63,8 @@ export function showMainMenu() {
     
     // Fjern fra localStorage
     localStorage.removeItem('currentModule');
+    
+    console.log('Byttet til hovedmeny');
 }
 
 /**
@@ -66,7 +72,18 @@ export function showMainMenu() {
  * @param {string} module - Modulnavn (picking, receiving, returns, settings)
  */
 export function showModule(module) {
+    // Stopp aktiv kameraskanning før modulbytte
+    stopCameraScanning();
+    
+    // Skjul kameraskannere for alle moduler
+    document.querySelectorAll('.camera-scanner-container').forEach(container => {
+        container.style.display = 'none';
+    });
+    
     appState.currentModule = module;
+    
+    // Logg modulendring for debugging
+    console.log('Byttet til modul:', module);
     
     // Skjul hovedmenyen
     mainMenuEl.style.display = 'none';
@@ -80,6 +97,8 @@ export function showModule(module) {
     const moduleEl = document.getElementById(module + 'Module');
     if (moduleEl) {
         moduleEl.style.display = 'flex';
+    } else {
+        console.error('Finner ikke modul:', module + 'Module');
     }
     
     // Vis tilbakeknappen

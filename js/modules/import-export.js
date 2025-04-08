@@ -1,7 +1,7 @@
 // import-export.js - Håndtering av import og eksport
 import { appState } from '../app.js';
 import { showToast } from './utils.js';
-import { saveListsToStorage } from './storage.js';
+import { saveListsToStorage, saveBarcodeMapping } from './storage.js';
 
 /**
  * Importerer data fra CSV/TXT fil
@@ -196,10 +196,13 @@ export function importFromJSON(content, fileName, type) {
  */
 function handleBarcodeJSON(data, fileName) {
     if (typeof data === 'object' && !Array.isArray(data)) {
+        console.log('Importerer strekkodeoversikt:', data);
+        
+        // Kombinerer med eksisterende mapping
         appState.barcodeMapping = { ...appState.barcodeMapping, ...data };
         
         // Lagre til localStorage
-        localStorage.setItem('barcodeMapping', JSON.stringify(appState.barcodeMapping));
+        saveBarcodeMapping();
         
         // Oppdater UI
         const barcodeFileInfoEl = document.getElementById('barcodeFileInfo');

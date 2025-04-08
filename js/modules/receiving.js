@@ -28,6 +28,7 @@ let videoReceiveScannerEl;
 let canvasReceiveScannerEl;
 let scannerReceiveOverlayEl;
 let closeReceiveScannerEl;
+let switchCameraReceiveEl;
 
 /**
  * Initialiserer mottak-modulen
@@ -54,6 +55,7 @@ export function initReceiving() {
     canvasReceiveScannerEl = document.getElementById('canvasReceiveScanner');
     scannerReceiveOverlayEl = document.getElementById('scannerReceiveOverlay');
     closeReceiveScannerEl = document.getElementById('closeReceiveScanner');
+    switchCameraReceiveEl = document.getElementById('switchCameraReceive');
     
     // Initialiser kameraskanneren for mottak
     initCameraScanner(
@@ -308,11 +310,21 @@ async function startReceiveCameraScanning() {
  * Håndterer skanning for mottak
  * @param {string} barcode - Skannet strekkode
  */
-function handleReceiveScan(barcode) {
+export function handleReceiveScan(barcode) {
     if (!barcode) return;
     
+    // Sjekk om vi faktisk er i mottak-modulen
+    if (appState.currentModule !== 'receiving') {
+        console.log('Ignorerer strekkodeskanning i mottak-modulen fordi en annen modul er aktiv:', appState.currentModule);
+        return;
+    }
+    
+    console.log('Håndterer strekkode i mottak-modulen:', barcode);
+    
     // Tøm input etter skanning
-    receiveManualScanEl.value = '';
+    if (receiveManualScanEl) {
+        receiveManualScanEl.value = '';
+    }
     
     // Sjekk om strekkoden finnes i barcode mapping
     let itemId = barcode;
