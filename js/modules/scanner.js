@@ -256,6 +256,15 @@ async function startCameraScanning(cameraId = null) {
         if (videoElement) {
             videoElement.srcObject = stream;
             videoElement.style.display = 'block';
+            videoElement.style.opacity = '1';
+            videoElement.style.visibility = 'visible';
+            videoElement.style.zIndex = '1'; // Sørg for at den er under canvas men fortsatt synlig
+
+            // Sørg for at canvas ikke dekker videoen fullstendig
+            if (canvasElement) {
+                canvasElement.style.backgroundColor = 'transparent';
+                canvasElement.style.zIndex = '2';
+            }
             
             // Legg til eller fjern speilingsklasse basert på kameratype
             const videoTrack = stream.getVideoTracks()[0];
