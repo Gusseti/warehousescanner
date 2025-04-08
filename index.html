@@ -8,6 +8,7 @@
     <link rel="manifest" href="manifest.json">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
     <link rel="stylesheet" href="css/styles.css">
+    <link rel="stylesheet" href="css/camera-styles.css">
 </head>
 <body>
     <header>
@@ -174,15 +175,23 @@
                 <!-- Kameraskanner for mottak -->
                 <div id="cameraScannerReceiveContainer" class="camera-scanner-container" style="display: none;">
                     <div class="camera-wrapper">
-                        <video id="videoReceiveScanner" class="scanner-video"></video>
+                        <video id="videoReceiveScanner" class="scanner-video" playsinline autoplay></video>
                         <canvas id="canvasReceiveScanner" class="scanner-canvas"></canvas>
                         <div id="scannerReceiveOverlay" class="scanner-overlay">
-                            <div class="scan-area"></div>
+                            <div class="scan-area">
+                                <span></span>
+                                <div class="scan-line"></div>
+                            </div>
                         </div>
                     </div>
-                    <button id="closeReceiveScanner" class="btn btn-danger scanner-close-btn">
-                        <i class="fas fa-times"></i> Lukk skanner
-                    </button>
+                    <div class="scanner-controls">
+                        <button id="switchCameraReceive" class="btn btn-primary scanner-switch-btn">
+                            <i class="fas fa-sync"></i> Bytt kamera
+                        </button>
+                        <button id="closeReceiveScanner" class="btn btn-danger scanner-close-btn">
+                            <i class="fas fa-times"></i> Lukk skanner
+                        </button>
+                    </div>
                 </div>
                 
                 <div class="list-container">
@@ -253,15 +262,23 @@
                 <!-- Kameraskanner for retur -->
                 <div id="cameraScannerReturnContainer" class="camera-scanner-container" style="display: none;">
                     <div class="camera-wrapper">
-                        <video id="videoReturnScanner" class="scanner-video"></video>
+                        <video id="videoReturnScanner" class="scanner-video" playsinline autoplay></video>
                         <canvas id="canvasReturnScanner" class="scanner-canvas"></canvas>
                         <div id="scannerReturnOverlay" class="scanner-overlay">
-                            <div class="scan-area"></div>
+                            <div class="scan-area">
+                                <span></span>
+                                <div class="scan-line"></div>
+                            </div>
                         </div>
                     </div>
-                    <button id="closeReturnScanner" class="btn btn-danger scanner-close-btn">
-                        <i class="fas fa-times"></i> Lukk skanner
-                    </button>
+                    <div class="scanner-controls">
+                        <button id="switchCameraReturn" class="btn btn-primary scanner-switch-btn">
+                            <i class="fas fa-sync"></i> Bytt kamera
+                        </button>
+                        <button id="closeReturnScanner" class="btn btn-danger scanner-close-btn">
+                            <i class="fas fa-times"></i> Lukk skanner
+                        </button>
+                    </div>
                 </div>
                 
                 <div class="list-container">
@@ -348,6 +365,10 @@
                         <i class="fas fa-trash-alt"></i> Tøm alle data
                     </button>
                 </div>
+                
+                <div id="featuresSupportInfo" class="form-group">
+                    <!-- Innhold fylles via JavaScript -->
+                </div>
             </div>
         </div>
     </div>
@@ -376,9 +397,7 @@
     
     <!-- Scripts -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.7.107/pdf.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.7.107/pdf.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/quagga/0.12.1/quagga.min.js"></script>
-    <script type="module" src="js/app.js"></script>
     <script type="module" src="js/app.js"></script>
 </body>
 </html>

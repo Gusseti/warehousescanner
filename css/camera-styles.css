@@ -1,0 +1,150 @@
+/* camera-styles.css - Spesielle stiler for kamerafunksjonalitet */
+
+/* Kamera-container stiler */
+.camera-wrapper {
+    position: relative;
+    width: 100%;
+    height: 400px;
+    overflow: hidden;
+    border-radius: 8px;
+    background-color: #000;
+    margin-bottom: 1rem;
+}
+
+/* Video-element stiler */
+.scanner-video {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    z-index: 1;
+    display: block;
+    /* Fjern alle transform-stiler her - de settes i JS */
+}
+
+/* Spesielle klasser for kameratype */
+.scanner-video.user-camera {
+    transform: scaleX(-1); /* Speil selfie-kamera */
+}
+
+.scanner-video.environment {
+    transform: none; /* Ingen speiling for bakre kamera */
+}
+
+/* Canvas-element over video for tegning */
+.scanner-canvas {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 2;
+    background-color: transparent;
+}
+
+/* Overlay for skanneområde */
+.scanner-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 3;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    pointer-events: none; /* La interaksjoner gå igjennom overlaget */
+}
+
+/* Skanneområde-indikator */
+.scan-area {
+    width: 250px;
+    height: 150px;
+    border: 3px solid var(--success);
+    border-radius: 8px;
+    box-shadow: 0 0 0 2000px rgba(0, 0, 0, 0.5);
+    animation: pulse 2s infinite;
+    position: relative;
+}
+
+/* Hjørnemarkører for skanneområdet */
+.scan-area::before,
+.scan-area::after,
+.scan-area > span::before,
+.scan-area > span::after {
+    content: '';
+    position: absolute;
+    width: 20px;
+    height: 20px;
+    border-color: var(--success);
+    border-style: solid;
+}
+
+.scan-area::before {
+    top: -3px;
+    left: -3px;
+    border-width: 3px 0 0 3px;
+}
+
+.scan-area::after {
+    top: -3px;
+    right: -3px;
+    border-width: 3px 3px 0 0;
+}
+
+.scan-area > span::before {
+    bottom: -3px;
+    left: -3px;
+    border-width: 0 0 3px 3px;
+}
+
+.scan-area > span::after {
+    bottom: -3px;
+    right: -3px;
+    border-width: 0 3px 3px 0;
+}
+
+/* Skanningslinje-effekt */
+.scan-line {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 2px;
+    background-color: var(--success);
+    box-shadow: 0 0 8px var(--success);
+    animation: scan 2s linear infinite;
+}
+
+/* Animasjoner */
+@keyframes scan {
+    0% { top: 0; }
+    50% { top: calc(100% - 2px); }
+    100% { top: 0; }
+}
+
+@keyframes pulse {
+    0% {
+        box-shadow: 0 0 0 2000px rgba(0, 0, 0, 0.5), 0 0 0 0 rgba(76, 175, 80, 0.7);
+    }
+    70% {
+        box-shadow: 0 0 0 2000px rgba(0, 0, 0, 0.5), 0 0 0 15px rgba(76, 175, 80, 0);
+    }
+    100% {
+        box-shadow: 0 0 0 2000px rgba(0, 0, 0, 0.5), 0 0 0 0 rgba(76, 175, 80, 0);
+    }
+}
+
+/* Knappegruppe for kamerakontrollen */
+.scanner-controls {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    margin-bottom: 0.5rem;
+}
+
+.scanner-close-btn {
+    width: 100%;
+}
