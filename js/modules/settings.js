@@ -1,7 +1,7 @@
 // settings.js - Funksjonalitet for innstillinger-modulen
 import { appState } from '../app.js';
 import { showToast } from './utils.js';
-import { saveSettings, saveItemWeights, saveBarcodeMapping, clearAllStoredData } from './storage.js';
+import { saveSettings, saveItemWeights, saveBarcodeMapping, clearAllStoredData, resetToDefaultBarcodes } from './storage.js';
 import { updateAllWeights } from './weights.js';
 import { isFeatureSupported } from './utils.js';
 
@@ -12,6 +12,7 @@ let importBarcodeFileEl;
 let importBarcodeBtnEl;
 let barcodeFileInfoEl;
 let clearBarcodeDataEl;
+let resetBarcodeDataEl; // Ny knapp for å tilbakestille til innebygde strekkoder
 let clearAllDataEl;
 let featuresSupportInfoEl;
 
@@ -26,6 +27,7 @@ export function initSettings() {
     importBarcodeBtnEl = document.getElementById('importBarcodeBtn');
     barcodeFileInfoEl = document.getElementById('barcodeFileInfo');
     clearBarcodeDataEl = document.getElementById('clearBarcodeData');
+    resetBarcodeDataEl = document.getElementById('resetBarcodeData'); // Ny referanse
     clearAllDataEl = document.getElementById('clearAllData');
     featuresSupportInfoEl = document.getElementById('featuresSupportInfo');
     
@@ -60,16 +62,22 @@ function setupSettingsEventListeners() {
     importBarcodeFileEl.addEventListener('change', handleBarcodeFileImport);
     
     clearBarcodeDataEl.addEventListener('click', function() {
-        if (confirm('Er du sikker på at du vil slette all strekkodedata?')) {
-            appState.barcodeMapping = {};
-            saveBarcodeMapping();
-            barcodeFileInfoEl.textContent = 'Ingen strekkoder lastet inn';
-            showToast('Strekkodedata er slettet', 'warning');
+        if (confirm('Er du sikker på at du vil slette all strekkodedata? De innebygde strekkodene vil beholdes.')) {
+            resetToDefaultBarcodes();
+            showToast('Brukerdefinerte strekkoder er slettet', 'warning');
         }
     });
     
+    // Event listener for ny knapp, dersom den finnes
+    if (resetBarcodeDataEl) {
+        resetBarcodeDataEl.addEventListener('click', function() {
+            resetToDefaultBarcodes();
+            showToast('Strekkoder tilbakestilt til kun innebygde strekkoder', 'success');
+        });
+    }
+    
     clearAllDataEl.addEventListener('click', function() {
-        if (confirm('Er du sikker på at du vil slette alle data? Dette kan ikke angres.')) {
+        if (confirm('Er du sikker på at du vil slette alle data? Dette kan ikke angres. Innebygde strekkoder vil beholdes.')) {
             if (clearAllStoredData()) {
                 showToast('Alle data er slettet. Laster siden på nytt...', 'warning');
                 setTimeout(() => {
@@ -98,10 +106,22 @@ function updateSettingsUI() {
     
     // Vis strekkodeinfo
     if (barcodeFileInfoEl) {
-        const count = Object.keys(appState.barcodeMapping).length;
-        barcodeFileInfoEl.textContent = count > 0 ? 
-            `Lastet inn: ${count} strekkoder` : 
-            'Ingen strekkoder lastet inn';
+        const totalCount = Object.keys(appState.barcodeMapping).length;
+        
+        // Beregn antall brukerdefinerte strekkoder (de som ikke er innebygde)
+        const defaultBarcodes = {
+            "5707439042537": "844-T12124",
+            "5707438019783": "000-DU80-080"
+        };
+        
+        const defaultCount = Object.keys(defaultBarcodes).length;
+        const userCount = totalCount - defaultCount;
+        
+        if (userCount > 0) {
+            barcodeFileInfoEl.textContent = `Lastet inn: ${totalCount} strekkoder (${defaultCount} innebygde + ${userCount} brukerdefinerte)`;
+        } else {
+            barcodeFileInfoEl.textContent = `Lastet inn: ${defaultCount} innebygde strekkoder`;
+        }
     }
     
     // Vis funksjonsstøtte-info
@@ -147,8 +167,7 @@ function handleBarcodeFileImport(event) {
                     saveBarcodeMapping();
                     
                     // Oppdater UI
-                    const count = Object.keys(appState.barcodeMapping).length;
-                    barcodeFileInfoEl.textContent = `Lastet inn: ${file.name} (${count} strekkoder)`;
+                    updateSettingsUI();
                     
                     showToast(`Importert ${Object.keys(data).length} strekkoder!`, 'success');
                 } else {

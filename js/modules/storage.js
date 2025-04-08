@@ -2,6 +2,12 @@
 import { appState } from '../app.js';
 import { showToast } from './utils.js';
 
+// Innebygde strekkoder (lagt til fra barcodes.json)
+const defaultBarcodes = {
+    "5707439042537": "844-T12124",
+    "5707438019783": "000-DU80-080"
+};
+
 /**
  * Lagrer strekkodeoversikt til localStorage
  */
@@ -15,24 +21,55 @@ export function saveBarcodeMapping() {
 }
 
 /**
- * Laster inn strekkodeoversikt fra localStorage
+ * Laster inn strekkodeoversikt fra localStorage og legger til innebygde strekkoder
  */
 export function loadBarcodeMappingFromStorage() {
     try {
         const mapping = localStorage.getItem('barcodeMapping');
         if (mapping) {
+            // Last inn eksisterende strekkoder fra localStorage
             appState.barcodeMapping = JSON.parse(mapping);
-            
-            // Oppdater UI hvis elementet finnes
-            const barcodeFileInfoEl = document.getElementById('barcodeFileInfo');
-            if (barcodeFileInfoEl) {
-                const count = Object.keys(appState.barcodeMapping).length;
-                barcodeFileInfoEl.textContent = `Lastet inn: ${count} strekkoder`;
+        } else {
+            // Hvis ingen strekkoder er lagret, bruk bare de innebygde
+            appState.barcodeMapping = { ...defaultBarcodes };
+            // Lagre innebygde strekkoder til localStorage
+            saveBarcodeMapping();
+        }
+        
+        // Sikre at alle innebygde strekkoder er inkludert (i tilfelle noen er slettet)
+        let updated = false;
+        for (const [barcode, itemId] of Object.entries(defaultBarcodes)) {
+            if (!appState.barcodeMapping[barcode]) {
+                appState.barcodeMapping[barcode] = itemId;
+                updated = true;
+                console.log(`La til innebygd strekkode: ${barcode} -> ${itemId}`);
             }
         }
+        
+        // Lagre oppdateringene hvis noen innebygde strekkoder måtte legges til
+        if (updated) {
+            saveBarcodeMapping();
+        }
+        
+        // Oppdater UI hvis elementet finnes
+        const barcodeFileInfoEl = document.getElementById('barcodeFileInfo');
+        if (barcodeFileInfoEl) {
+            const count = Object.keys(appState.barcodeMapping).length;
+            const defaultCount = Object.keys(defaultBarcodes).length;
+            const userCount = count - defaultCount;
+            
+            if (userCount > 0) {
+                barcodeFileInfoEl.textContent = `Lastet inn: ${count} strekkoder (${defaultCount} innebygde + ${userCount} brukerdefinerte)`;
+            } else {
+                barcodeFileInfoEl.textContent = `Lastet inn: ${count} innebygde strekkoder`;
+            }
+        }
+        
+        console.log(`Totalt ${Object.keys(appState.barcodeMapping).length} strekkoder lastet`);
     } catch (error) {
         console.error('Feil ved lasting av strekkodeoversikt:', error);
-        appState.barcodeMapping = {};
+        // Tilbakestill til innebygde strekkoder ved feil
+        appState.barcodeMapping = { ...defaultBarcodes };
     }
 }
 
@@ -159,14 +196,44 @@ export function loadListsFromStorage() {
 }
 
 /**
- * Sletter alle lagrede data
+ * Sletter alle lagrede data bortsett fra innebygde strekkoder
  */
 export function clearAllStoredData() {
     try {
+        // Lagre innebygde strekkoder midlertidig
+        const savedBarcodes = { ...defaultBarcodes };
+        
+        // Tøm all localStorage
         localStorage.clear();
+        
+        // Gjenopprett innebygde strekkoder
+        appState.barcodeMapping = savedBarcodes;
+        saveBarcodeMapping();
+        
         return true;
     } catch (error) {
         console.error('Feil ved sletting av alle data:', error);
+        return false;
+    }
+}
+
+/**
+ * Tilbakestiller strekkodedata til kun innebygde strekkoder
+ */
+export function resetToDefaultBarcodes() {
+    try {
+        appState.barcodeMapping = { ...defaultBarcodes };
+        saveBarcodeMapping();
+        
+        // Oppdater UI
+        const barcodeFileInfoEl = document.getElementById('barcodeFileInfo');
+        if (barcodeFileInfoEl) {
+            barcodeFileInfoEl.textContent = `Lastet inn: ${Object.keys(defaultBarcodes).length} innebygde strekkoder`;
+        }
+        
+        return true;
+    } catch (error) {
+        console.error('Feil ved tilbakestilling av strekkoder:', error);
         return false;
     }
 }
