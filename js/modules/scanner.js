@@ -311,7 +311,7 @@ async function startCameraScanning(cameraId = null) {
     // Hvis allerede aktiv, stopp først
     if (isScanning) {
         stopCameraScanning();
-        await new Promise(resolve => setTimeout(resolve, 300));
+        await new Promise(resolve => setTimeout(resolve, 500));
     }
     
     console.log("Starter kameraskanning...");
@@ -352,12 +352,23 @@ async function startCameraScanning(cameraId = null) {
         // Logg informasjon om kamerastrømmen
         logCameraInfo(stream);
         
-        // Forbered video-element
+        // Forbered video-element og vis det før vi forsøker å spille av
         if (videoElement) {
             // Fjern alle tidligere event listeners
             videoElement.onloadedmetadata = null;
             videoElement.onloadeddata = null;
             videoElement.onerror = null;
+            
+            // Først - stopp eventuelle eksisterende video-kilder
+            if (videoElement.srcObject) {
+                try {
+                    let oldStream = videoElement.srcObject;
+                    oldStream.getTracks().forEach(track => track.stop());
+                } catch (e) {
+                    console.log("Feil ved stopping av gammel video:", e);
+                }
+                videoElement.srcObject = null;
+            }
             
             // Sett stil for maksimal synlighet
             videoElement.style.display = 'block';
@@ -367,37 +378,32 @@ async function startCameraScanning(cameraId = null) {
             videoElement.style.width = '100%';
             videoElement.style.height = '100%';
             videoElement.style.objectFit = 'cover';
+            videoElement.style.backgroundColor = '#000'; // Sørg for svart bakgrunn
             
-            // Tilbakestill transform-stil
-            videoElement.style.transform = 'none';
+            // Fjern alle klasser først og legg til de riktige
+            videoElement.className = 'scanner-video';
             
-            // Fjern alle klasser først
-            videoElement.className = '';
-            
-            // Legg til eller fjern speilingsklasse basert på kameratype
-            const videoTrack = stream.getVideoTracks()[0];
-            if (videoTrack) {
-                const settings = videoTrack.getSettings();
-                console.log("Kamerainnstillinger:", settings);
-                
-                if (settings.facingMode === "user") {
-                    console.log("Selfie-kamera oppdaget");
-                    videoElement.classList.add('user-camera');
-                    videoElement.style.transform = 'scaleX(-1)'; // Speilvend selfie-kamera
-                } else {
-                    console.log("Bakre kamera oppdaget");
-                    videoElement.classList.add('environment');
-                    videoElement.style.transform = 'none'; // Ingen speilvending for bakre kamera
-                }
+            // Sørg for at video-container er synlig
+            const container = videoElement.closest('.camera-wrapper');
+            if (container) {
+                container.style.display = 'block';
             }
             
             // Koble til video-strømmen
             videoElement.srcObject = stream;
             
-            // Vis video-containeren
-            const container = videoElement.closest('.camera-wrapper');
-            if (container) {
-                container.style.display = 'block';
+            // VIKTIG: Sett muted=true for å tillate autoplay
+            videoElement.muted = true;
+            videoElement.setAttribute('playsinline', '');
+            videoElement.setAttribute('autoplay', '');
+            
+            // Spill av videoen umiddelbart
+            try {
+                await videoElement.play();
+                console.log("Video avspilling startet manuelt");
+            } catch (e) {
+                console.warn("Kunne ikke starte video avspilling manuelt:", e);
+                // Vi fortsetter likevel, siden video kan starte selv om play() feiler
             }
             
             // Vis scanner-overlay
@@ -405,68 +411,26 @@ async function startCameraScanning(cameraId = null) {
                 scannerOverlay.style.display = 'flex';
             }
             
-            // Sett opp event listeners for video-element
-            await new Promise((resolve, reject) => {
-                console.log("Venter på at video lastes...");
-                
-                // Sett opp feilhåndtering
-                videoElement.onerror = (err) => {
-                    console.error("Feil ved videoavspilling:", err);
-                    reject(new Error("Videoavspillingsfeil"));
-                };
-                
-                // Vent på at metadata er lastet
-                videoElement.onloadedmetadata = () => {
-                    console.log("Video metadata lastet, prøver å spille av...");
-                    
-                    // Prøv å spille av video
-                    const playPromise = videoElement.play();
-                    
-                    if (playPromise !== undefined) {
-                        playPromise
-                            .then(() => {
-                                console.log("Videoavspilling startet vellykket!");
-                                resolve();
-                            })
-                            .catch(err => {
-                                console.error("Kunne ikke spille av video:", err);
-                                reject(new Error("Videoavspillingsfeil"));
-                            });
-                    } else {
-                        console.log("Videoavspilling startet (legacy)");
-                        resolve();
-                    }
-                };
-                
-                // Sett en timeout i tilfelle video aldri lastes
-                const timeout = setTimeout(() => {
-                    console.warn("Tidsavbrudd ved lasting av video");
-                    if (videoElement.readyState >= 2) { // HAVE_CURRENT_DATA eller høyere
-                        console.log("Video er tilstrekkelig lastet, fortsetter...");
-                        
-                        // Forsøk å spille av
-                        videoElement.play()
-                            .then(() => resolve())
-                            .catch(err => {
-                                console.error("Kunne ikke spille av video etter timeout:", err);
-                                reject(err);
-                            });
-                    } else {
-                        reject(new Error("Tidsavbrudd ved lasting av video"));
-                    }
-                }, 5000);
-            });
-            
-            console.log("Video er nå klar!");
-            
             // Sett opp canvas med willReadFrequently attributt
             if (canvasElement) {
                 console.log("Setter opp canvas...");
                 const ctx = canvasElement.getContext('2d', { willReadFrequently: true });
                 
-                canvasElement.width = videoElement.videoWidth || 640;
-                canvasElement.height = videoElement.videoHeight || 480;
+                // Vent til vi har video dimensions
+                let videoWidth = videoElement.videoWidth || 640;
+                let videoHeight = videoElement.videoHeight || 480;
                 
+                // Hvis vi ikke har dimensjoner ennå, vent litt
+                if (videoWidth === 0 || videoHeight === 0) {
+                    await new Promise(resolve => setTimeout(resolve, 1000));
+                    videoWidth = videoElement.videoWidth || 640;
+                    videoHeight = videoElement.videoHeight || 480;
+                }
+                
+                canvasElement.width = videoWidth;
+                canvasElement.height = videoHeight;
+                
+                canvasElement.style.display = 'block';
                 canvasElement.style.position = 'absolute';
                 canvasElement.style.top = '0';
                 canvasElement.style.left = '0';
@@ -476,92 +440,80 @@ async function startCameraScanning(cameraId = null) {
                 canvasElement.style.backgroundColor = 'transparent';
             }
             
-            // Last inn og initialiser Quagga
+            // Prøv å starte Quagga direkte (uten å vente på video er lastet)
             console.log("Laster Quagga...");
-            const loadQuaggaPromise = typeof Quagga !== 'undefined' ? 
-                Promise.resolve() : 
-                loadQuaggaScript();
-                
-            await loadQuaggaPromise;
+            await loadQuaggaScript();
             
             if (typeof Quagga === 'undefined') {
                 throw new Error("Quagga kunne ikke lastes");
             }
             
-            // Initialiser Quagga
-            await new Promise((resolve, reject) => {
-                console.log("Initialiserer Quagga...");
+            // Initialiser Quagga direkte
+            console.log("Initialiserer Quagga...");
+            Quagga.init({
+                inputStream: {
+                    name: "Live",
+                    type: "LiveStream",
+                    target: videoElement,
+                    constraints: {
+                        facingMode: "environment",
+                        width: { min: 640 },
+                        height: { min: 480 }
+                    },
+                    area: {
+                        top: "20%",    
+                        right: "20%",
+                        left: "20%",
+                        bottom: "20%"
+                    },
+                    willReadFrequently: true
+                },
+                locator: {
+                    patchSize: "medium",
+                    halfSample: true
+                },
+                numOfWorkers: 2,
+                frequency: 10,
+                decoder: {
+                    readers: [
+                        "code_128_reader",
+                        "ean_reader",
+                        "ean_8_reader",
+                        "code_39_reader",
+                        "code_93_reader",
+                        "upc_reader",
+                        "upc_e_reader",
+                        "codabar_reader",
+                        "i2of5_reader"
+                    ],
+                    multiple: false
+                },
+                locate: true
+            }, function(err) {
+                if (err) {
+                    console.error('Quagga initialisering feilet:', err);
+                    return;
+                }
                 
-                Quagga.init({
-                    inputStream: {
-                        name: "Live",
-                        type: "LiveStream",
-                        target: videoElement,
-                        constraints: {
-                            facingMode: "environment",
-                            width: { min: 640 },
-                            height: { min: 480 },
-                            aspectRatio: { min: 1, max: 2 }
-                        },
-                        area: { // Definerer bare et område av videoen for å analysere (midten)
-                            top: "20%",    
-                            right: "20%",
-                            left: "20%",
-                            bottom: "20%"
-                        },
-                        willReadFrequently: true
-                    },
-                    locator: {
-                        patchSize: "medium",
-                        halfSample: true
-                    },
-                    numOfWorkers: 2,
-                    frequency: 10,
-                    decoder: {
-                        readers: [
-                            "code_128_reader",
-                            "ean_reader",
-                            "ean_8_reader",
-                            "code_39_reader",
-                            "code_93_reader",
-                            "upc_reader",
-                            "upc_e_reader",
-                            "codabar_reader",
-                            "i2of5_reader"
-                        ],
-                        multiple: false
-                    },
-                    locate: true
-                }, function(err) {
-                    if (err) {
-                        console.error('Quagga initialisering feilet:', err);
-                        reject(err);
-                        return;
-                    }
-                    
-                    console.log("Quagga initialisert vellykket!");
-                    
-                    // Quagga er nå initialisert og klar til å starte
-                    resolve();
-                });
+                console.log("Quagga initialisert vellykket!");
+                
+                // Start Quagga
+                Quagga.start();
+                isScanning = true;
+                
+                // Legg til event listener for resultater
+                Quagga.onDetected(handleCameraScanResult);
+                
+                // Tegn deteksjonsresultater på canvas
+                Quagga.onProcessed(handleProcessedResult);
+                
+                // Informer om statusendring
+                if (scannerStatusCallback) {
+                    scannerStatusCallback(true, { type: 'camera' });
+                }
+                
+                console.log("Kameraskanning er nå aktiv!");
             });
-            
-            // Start Quagga og legg til event listeners
-            Quagga.start();
-            isScanning = true;
-            
-            // Legg til event listener for resultater
-            Quagga.onDetected(handleCameraScanResult);
-            
-            // Tegn deteksjonsresultater på canvas
-            Quagga.onProcessed(handleProcessedResult);
-            
-            // Informer om statusendring
-            if (scannerStatusCallback) {
-                scannerStatusCallback(true, { type: 'camera' });
-            }
-            
-            console.log("Kameraskanning er nå aktiv!");
             
             return { success: true };
         } else {
