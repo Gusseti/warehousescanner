@@ -78,12 +78,20 @@
                         <video id="videoPickScanner" class="scanner-video"></video>
                         <canvas id="canvasPickScanner" class="scanner-canvas"></canvas>
                         <div id="scannerPickOverlay" class="scanner-overlay">
-                            <div class="scan-area"></div>
+                            <div class="scan-area">
+                                <span></span>
+                                <div class="scan-line"></div>
+                            </div>
                         </div>
                     </div>
-                    <button id="closePickScanner" class="btn btn-danger scanner-close-btn">
-                        <i class="fas fa-times"></i> Lukk skanner
-                    </button>
+                    <div class="scanner-controls">
+                        <button id="switchCameraPick" class="btn btn-primary scanner-switch-btn">
+                            <i class="fas fa-sync"></i> Bytt kamera
+                        </button>
+                        <button id="closePickScanner" class="btn btn-danger scanner-close-btn">
+                            <i class="fas fa-times"></i> Lukk skanner
+                        </button>
+                    </div>
                 </div>
                 
                 <div class="list-container">
@@ -365,6 +373,9 @@
     
     <!-- Scripts -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.7.107/pdf.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.7.107/pdf.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/quagga/0.12.1/quagga.min.js"></script>
+    <script type="module" src="js/app.js"></script>
     <script type="module" src="js/app.js"></script>
 </body>
 </html>
