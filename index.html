@@ -75,8 +75,11 @@
                 <!-- Kameraskanner for plukk -->
                 <div id="cameraScannerPickContainer" class="camera-scanner-container" style="display: none;">
                     <div class="camera-wrapper">
-                        <video id="videoPickScanner" class="scanner-video"></video>
+                        <!-- Video burde komme først i DOM for å være i bunnen -->
+                        <video id="videoPickScanner" class="scanner-video" playsinline autoplay></video>
+                        <!-- Canvas bør være over -->
                         <canvas id="canvasPickScanner" class="scanner-canvas"></canvas>
+                        <!-- Overlay på toppen -->
                         <div id="scannerPickOverlay" class="scanner-overlay">
                             <div class="scan-area">
                                 <span></span>
