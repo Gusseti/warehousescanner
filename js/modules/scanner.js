@@ -306,246 +306,135 @@ function initCameraScanner(videoEl, canvasEl, overlayEl, callback, statusCallbac
  * @returns {Promise} Løftebasert resultat av oppstartforsøket
  */
 async function startCameraScanning(cameraId = null) {
-    // Hvis allerede aktiv, stopp først
+    console.log("Starter kameraskanning med forenklet tilnærming...");
+    
+    // Stopp eventuelle aktive skannere
     if (isScanning) {
         stopCameraScanning();
-        await new Promise(resolve => setTimeout(resolve, 500));
+        await new Promise(resolve => setTimeout(resolve, 300));
     }
     
-    console.log("Starter kameraskanning...");
-    
     try {
-        // Rengjør først
-        cleanupCamera();
-        
-        const initialized = await initCameraWithDebug();
-        if (!initialized) {
-            throw new Error("Kamera-API ikke tilgjengelig eller tillatelse mangler");
-        }
-        
-        // Konfigurer kamerainnstillinger
-        const constraints = { 
-            video: true,  // Forenklet constraint for bedre kompatibilitet
-            audio: false
-        };
-        
-        console.log("Ber om tilgang til kamera med følgende constraints:", constraints);
-        
-        // Be om tilgang til kamera
-        const stream = await navigator.mediaDevices.getUserMedia(constraints);
-        cameraStream = stream;
-        
-        // Logg informasjon om kamerastrømmen
-        logCameraInfo(stream);
-        
-        // Forbered video-element
-        if (!videoElement) {
-            throw new Error("Video-element mangler");
-        }
-        
-        // Vis kameracontainere
+        // Hent containerelementene
         const container = videoElement.closest('.camera-wrapper');
-        if (container) {
-            container.style.display = 'block';
-        }
-        
         const scannerContainer = container.closest('.camera-scanner-container');
-        if (scannerContainer) {
-            scannerContainer.style.display = 'block';
-        }
         
-        // Stopp eventuelle eksisterende videostrømmer
+        // Vis containere
+        if (scannerContainer) scannerContainer.style.display = 'block';
+        if (container) container.style.display = 'block';
+        
+        // Fjern eventuelle tidligere videokilder
         if (videoElement.srcObject) {
             try {
-                let oldStream = videoElement.srcObject;
+                const oldStream = videoElement.srcObject;
                 oldStream.getTracks().forEach(track => track.stop());
-            } catch (e) {}
-            videoElement.srcObject = null;
-        }
-        
-        // VIKTIG: Sett stil FØR vi tilordner srcObject
-        videoElement.style.display = 'block !important';
-        videoElement.style.opacity = '1 !important';
-        videoElement.style.visibility = 'visible !important';
-        videoElement.style.zIndex = '1';
-        videoElement.style.width = '100%';
-        videoElement.style.height = '100%';
-        videoElement.style.objectFit = 'cover';
-        videoElement.style.backgroundColor = '#000';
-
-        // Force video visibility with dirty tricks
-        setTimeout(() => {
-          if (videoElement) {
-            // Manipulate DOM directly
-            videoElement.style.cssText = `
-              display: block !important;
-              opacity: 1 !important;
-              visibility: visible !important;
-              position: absolute !important;
-              top: 0 !important;
-              left: 0 !important;
-              width: 100% !important;
-              height: 100% !important;
-              z-index: 10 !important;
-              object-fit: cover !important;
-            `;
-            
-            // Try playing again
-            videoElement.play().catch(e => console.error("Play failed:", e));
-            
-            // Debug video stream
-            console.log("Video element forced to be visible");
-            console.log("Video dimensions:", videoElement.videoWidth, "x", videoElement.videoHeight);
-            console.log("Video ready state:", videoElement.readyState);
-          }
-        }, 1000);
-        
-        // Fjern alle tidligere hendelseshåndterere
-        videoElement.onloadedmetadata = null;
-        videoElement.onloadeddata = null;
-        videoElement.oncanplay = null;
-        videoElement.onerror = null;
-        
-        // Muted er nødvendig for autoplay
-        videoElement.muted = true;
-        videoElement.setAttribute('playsinline', '');
-        videoElement.setAttribute('autoplay', '');
-        
-        // Koble til video-strømmen
-        videoElement.srcObject = stream;
-        
-        // Vis scanner-overlay
-        if (scannerOverlay) {
-            scannerOverlay.style.display = 'flex';
-        }
-        
-        // DIREKTE AVSPILLING: Prøv å spille av umiddelbart
-        try {
-            await videoElement.play();
-            console.log("Video starter avspilling manuelt");
-        } catch (e) {
-            console.warn("Kunne ikke starte video manuelt:", e);
-            // Vi fortsetter likevel
-        }
-        
-        // Sett opp canvas
-        if (canvasElement) {
-            // Sett stil
-            canvasElement.style.display = 'block';
-            canvasElement.style.position = 'absolute';
-            canvasElement.style.top = '0';
-            canvasElement.style.left = '0';
-            canvasElement.style.width = '100%';
-            canvasElement.style.height = '100%';
-            canvasElement.style.zIndex = '2';
-            canvasElement.style.backgroundColor = 'transparent';
-            
-            // Sett opp canvas context med willReadFrequently
-            const ctx = canvasElement.getContext('2d', { willReadFrequently: true });
-            
-            // Sett canvas-størrelse - bruk standardverdier først
-            canvasElement.width = 640;
-            canvasElement.height = 480;
-        }
-        
-        // Last Quagga hvis nødvendig
-        if (typeof Quagga === 'undefined') {
-            console.log("Laster Quagga dynamisk...");
-            try {
-                await loadQuaggaScript();
+                videoElement.srcObject = null;
             } catch (e) {
-                console.error("Kunne ikke laste Quagga:", e);
-                throw new Error("Quagga kunne ikke lastes");
+                console.error("Feil ved stopping av tidligere video:", e);
             }
         }
         
-        // Konfigurer og start Quagga
-        console.log("Starter Quagga med forenklet oppsett...");
+        // Sett stil på videoelementet FØR vi starter kamera
+        videoElement.style.cssText = `
+            display: block !important;
+            opacity: 1 !important;
+            visibility: visible !important;
+            position: absolute !important;
+            top: 0 !important;
+            left: 0 !important;
+            width: 100% !important;
+            height: 100% !important;
+            z-index: 10 !important;
+            background-color: #000 !important;
+            object-fit: cover !important;
+        `;
         
-        // Bruk en alternativ tilnærming for å starte Quagga
-        // som ikke er avhengig av at video er fullstendig lastet
+        // Forsikre at attributter er satt
+        videoElement.setAttribute('autoplay', '');
+        videoElement.setAttribute('playsinline', '');
+        videoElement.muted = true;
+        
+        // Start kamera med enkel tilnærming
+        console.log("Ber om kameratilgang...");
+        const stream = await navigator.mediaDevices.getUserMedia({
+            video: true,
+            audio: false
+        });
+        
+        // Koble til strøm
+        videoElement.srcObject = stream;
+        cameraStream = stream;
+        
+        // Start avspilling manuelt 
+        try {
+            await videoElement.play();
+            console.log("Video avspilling startet manuelt");
+        } catch (e) {
+            console.warn("Kunne ikke starte video manuelt:", e);
+        }
+        
+        // Vent litt for å være sikker på at video har startet
+        await new Promise(resolve => setTimeout(resolve, 500));
+        
+        // Initialiser Quagga bare om video er synlig
+        console.log("Initialiserer Quagga...");
+        if (!Quagga) {
+            await loadQuaggaScript();
+        }
+        
         Quagga.init({
             inputStream: {
                 name: "Live",
                 type: "LiveStream",
-                target: videoElement,   // Pass videoelementet direkte
-                constraints: {          // Bruk minimale begrensninger
+                target: videoElement,
+                constraints: {
                     width: 640,
-                    height: 480,
-                    facingMode: "environment"
-                },
-                area: {                 // Bruk et litt større område for skanning
-                    top: "10%",    
-                    right: "10%",
-                    left: "10%",
-                    bottom: "10%"
-                },
+                    height: 480
+                }
             },
             locator: {
                 patchSize: "medium",
                 halfSample: true
             },
             numOfWorkers: 2,
-            frequency: 10,
             decoder: {
                 readers: [
                     "code_128_reader",
                     "ean_reader",
                     "ean_8_reader",
-                    "code_39_reader",
-                    "code_93_reader",
-                    "upc_reader",
-                    "upc_e_reader",
-                    "codabar_reader",
-                    "i2of5_reader"
-                ],
-                multiple: false
+                    "code_39_reader"
+                ]
             },
             locate: true
         }, function(err) {
             if (err) {
-                console.error('Quagga initialisering feilet:', err);
+                console.error("Quagga init error:", err);
                 return;
             }
             
-            console.log("Quagga initialisert vellykket!");
-            
-            // Start Quagga
+            console.log("Quagga initialisert vellykket");
             Quagga.start();
             isScanning = true;
             
-            // Legg til event listener for resultater
+            // Legg til event listeners
             Quagga.onDetected(handleCameraScanResult);
-            
-            // Tegn deteksjonsresultater på canvas
             Quagga.onProcessed(handleProcessedResult);
-            
-            // Oppdater canvas-størrelse etter at Quagga er startet
-            if (canvasElement && videoElement.videoWidth && videoElement.videoHeight) {
-                canvasElement.width = videoElement.videoWidth;
-                canvasElement.height = videoElement.videoHeight;
-                console.log(`Canvas-størrelse oppdatert til ${canvasElement.width}x${canvasElement.height}`);
-            }
             
             // Informer om statusendring
             if (scannerStatusCallback) {
                 scannerStatusCallback(true, { type: 'camera' });
             }
             
-            console.log("Kameraskanning er nå aktiv!");
+            console.log("Kameraskanning aktiv");
         });
         
         return { success: true };
     } catch (error) {
-        console.error('Kamera-tilkobling feilet:', error);
+        console.error("Kamera start feilet:", error);
         
-        // Gi tilbakemelding om feilen
         if (scannerStatusCallback) {
             scannerStatusCallback(false);
         }
-        
-        // Clean up ved feil
-        cleanupCamera();
         
         throw error;
     }

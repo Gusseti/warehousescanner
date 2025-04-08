@@ -1,29 +1,403 @@
 <!DOCTYPE html>
-<html>
+<html lang="no">
 <head>
-  <title>Kameratest</title>
-  <style>
-    video {
-      width: 100%;
-      height: 400px;
-      background: #000;
-    }
-  </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#2196f3">
+    <title>Lagerstyring</title>
+    <link rel="manifest" href="manifest.json">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
+    <link rel="stylesheet" href="css/styles.css">
+    <link rel="stylesheet" href="css/camera-styles.css">
 </head>
 <body>
-  <video id="video" autoplay playsinline></video>
-  <button id="startBtn">Start kamera</button>
-  
-  <script>
-    document.getElementById('startBtn').addEventListener('click', async () => {
-      const video = document.getElementById('video');
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({video: true});
-        video.srcObject = stream;
-      } catch (err) {
-        console.error("Kamerafeil:", err);
-      }
-    });
-  </script>
+    <header>
+        <button id="backButton" class="back-button">
+            <i class="fas fa-arrow-left"></i>
+        </button>
+        <h1>Lagerstyring</h1>
+        <div id="scannerStatusHeader" class="scanner-status">
+            <div id="scannerIndicator" class="scanner-indicator"></div>
+            <span id="scannerStatus">Skanner: Ikke tilkoblet</span>
+        </div>
+    </header>
+    
+    <div class="main-container">
+        <!-- Main Menu -->
+        <div id="mainMenu" class="main-menu">
+            <div class="menu-grid">
+                <div class="menu-item" data-module="picking">
+                    <i class="fas fa-clipboard-list"></i>
+                    <span>Plukk</span>
+                </div>
+                <div class="menu-item" data-module="receiving">
+                    <i class="fas fa-truck-loading"></i>
+                    <span>Mottak</span>
+                </div>
+                <div class="menu-item" data-module="returns">
+                    <i class="fas fa-undo-alt"></i>
+                    <span>Retur</span>
+                </div>
+                <div class="menu-item" data-module="settings">
+                    <i class="fas fa-cogs"></i>
+                    <span>Innstillinger</span>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Picking Module -->
+        <div id="pickingModule" class="module-container">
+            <div class="card">
+                <div class="card-title">
+                    Plukk
+                </div>
+                
+                <div class="btn-group">
+                    <input type="file" id="importPickFile" accept=".csv,.txt,.json,.pdf" style="display: none;">
+                    <button id="importPickBtn" class="btn btn-primary">
+                        <i class="fas fa-file-import"></i> Importer plukkliste
+                    </button>
+                    <button id="connectScannerPick" class="btn btn-primary">
+                        <i class="fas fa-bluetooth"></i> Bluetooth
+                    </button>
+                    <button id="cameraScannerPick" class="btn btn-primary">
+                        <i class="fas fa-camera"></i> Kamera
+                    </button>
+                </div>
+                
+                <div id="pickFileInfo" class="form-group">Ingen fil lastet inn</div>
+                
+                <div class="status-bar">
+                    <div id="pickStatusPicked" class="status-picked" style="width: 0%"></div>
+                    <div id="pickStatusRemaining" class="status-remaining" style="width: 100%"></div>
+                </div>
+                <div id="pickStatusText" class="status-text">0 av 0 varer plukket (0%)</div>
+                
+                <!-- Kameraskanner for plukk -->
+                <div id="cameraScannerPickContainer" class="camera-scanner-container" style="display: none;">
+                    <div class="camera-wrapper">
+                        <!-- Video burde komme først i DOM for å være i bunnen -->
+                        <video id="videoPickScanner" class="scanner-video" playsinline autoplay></video>
+                        <!-- Canvas bør være over -->
+                        <canvas id="canvasPickScanner" class="scanner-canvas"></canvas>
+                        <!-- Overlay på toppen -->
+                        <div id="scannerPickOverlay" class="scanner-overlay">
+                            <div class="scan-area">
+                                <span></span>
+                                <div class="scan-line"></div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="scanner-controls">
+                        <button id="switchCameraPick" class="btn btn-primary scanner-switch-btn">
+                            <i class="fas fa-sync"></i> Bytt kamera
+                        </button>
+                        <button id="closePickScanner" class="btn btn-danger scanner-close-btn">
+                            <i class="fas fa-times"></i> Lukk skanner
+                        </button>
+                    </div>
+                </div>
+                
+                <div class="list-container">
+                    <table id="pickList">
+                        <thead>
+                            <tr>
+                                <th>Varenr.</th>
+                                <th>Beskrivelse</th>
+                                <th>Antall</th>
+                                <th>Vekt (kg)</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <!-- Data fylles inn via JavaScript -->
+                        </tbody>
+                    </table>
+                </div>
+                
+                <div class="weight-calculator">
+                    <div class="weight-title">Vektberegning</div>
+                    <div class="weight-info">
+                        <span>Total vekt:</span>
+                        <span id="totalWeight" class="weight-box">0 kg</span>
+                    </div>
+                </div>
+                
+                <div class="form-group">
+                    <input type="text" id="pickManualScan" class="form-control" placeholder="Skann eller skriv inn varenummer">
+                </div>
+                
+                <div class="btn-group">
+                    <button id="pickManualScanBtn" class="btn btn-primary">
+                        <i class="fas fa-barcode"></i> Registrer vare
+                    </button>
+                    <button id="pickUndoBtn" class="btn btn-warning" disabled>
+                        <i class="fas fa-undo"></i> Angre siste skann
+                    </button>
+                    <button id="pickExportBtn" class="btn btn-success" disabled>
+                        <i class="fas fa-file-export"></i> Eksporter resultat
+                    </button>
+                    <button id="pickClearBtn" class="btn btn-danger" disabled>
+                        <i class="fas fa-trash"></i> Tøm plukkliste
+                    </button>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Receiving Module -->
+        <div id="receivingModule" class="module-container">
+            <div class="card">
+                <div class="card-title">
+                    Mottak
+                </div>
+                
+                <div class="btn-group">
+                    <input type="file" id="importReceiveFile" accept=".csv,.txt,.json,.pdf" style="display: none;">
+                    <button id="importReceiveBtn" class="btn btn-primary">
+                        <i class="fas fa-file-import"></i> Importer mottaksliste
+                    </button>
+                    <button id="connectScannerReceive" class="btn btn-primary">
+                        <i class="fas fa-bluetooth"></i> Bluetooth
+                    </button>
+                    <button id="cameraScannerReceive" class="btn btn-primary">
+                        <i class="fas fa-camera"></i> Kamera
+                    </button>
+                </div>
+                
+                <div id="receiveFileInfo" class="form-group">Ingen fil lastet inn</div>
+                
+                <div class="status-bar">
+                    <div id="receiveStatusReceived" class="status-picked" style="width: 0%"></div>
+                    <div id="receiveStatusRemaining" class="status-remaining" style="width: 100%"></div>
+                </div>
+                <div id="receiveStatusText" class="status-text">0 av 0 varer mottatt (0%)</div>
+                
+                <!-- Kameraskanner for mottak -->
+                <div id="cameraScannerReceiveContainer" class="camera-scanner-container" style="display: none;">
+                    <div class="camera-wrapper">
+                        <video id="videoReceiveScanner" class="scanner-video" playsinline autoplay></video>
+                        <canvas id="canvasReceiveScanner" class="scanner-canvas"></canvas>
+                        <div id="scannerReceiveOverlay" class="scanner-overlay">
+                            <div class="scan-area">
+                                <span></span>
+                                <div class="scan-line"></div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="scanner-controls">
+                        <button id="switchCameraReceive" class="btn btn-primary scanner-switch-btn">
+                            <i class="fas fa-sync"></i> Bytt kamera
+                        </button>
+                        <button id="closeReceiveScanner" class="btn btn-danger scanner-close-btn">
+                            <i class="fas fa-times"></i> Lukk skanner
+                        </button>
+                    </div>
+                </div>
+                
+                <div class="list-container">
+                    <table id="receiveList">
+                        <thead>
+                            <tr>
+                                <th>Varenr.</th>
+                                <th>Beskrivelse</th>
+                                <th>Antall</th>
+                                <th>Vekt (kg)</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <!-- Data fylles inn via JavaScript -->
+                        </tbody>
+                    </table>
+                </div>
+                
+                <div class="weight-calculator">
+                    <div class="weight-title">Vektberegning</div>
+                    <div class="weight-info">
+                        <span>Total vekt:</span>
+                        <span id="totalReceiveWeight" class="weight-box">0 kg</span>
+                    </div>
+                </div>
+                
+                <div class="form-group">
+                    <input type="text" id="receiveManualScan" class="form-control" placeholder="Skann eller skriv inn varenummer">
+                </div>
+                
+                <div class="btn-group">
+                    <button id="receiveManualScanBtn" class="btn btn-primary">
+                        <i class="fas fa-barcode"></i> Registrer vare
+                    </button>
+                    <button id="receiveUndoBtn" class="btn btn-warning" disabled>
+                        <i class="fas fa-undo"></i> Angre siste skann
+                    </button>
+                    <button id="receiveExportBtn" class="btn btn-success" disabled>
+                        <i class="fas fa-file-export"></i> Eksporter resultat
+                    </button>
+                    <button id="receiveClearBtn" class="btn btn-danger" disabled>
+                        <i class="fas fa-trash"></i> Tøm mottaksliste
+                    </button>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Returns Module -->
+        <div id="returnsModule" class="module-container">
+            <div class="card">
+                <div class="card-title">
+                    Retur
+                </div>
+                
+                <div class="btn-group">
+                    <button id="connectScannerReturn" class="btn btn-primary">
+                        <i class="fas fa-bluetooth"></i> Bluetooth
+                    </button>
+                    <button id="cameraScannerReturn" class="btn btn-primary">
+                        <i class="fas fa-camera"></i> Kamera
+                    </button>
+                    <button id="clearReturnList" class="btn btn-danger" disabled>
+                        <i class="fas fa-trash"></i> Tøm returliste
+                    </button>
+                </div>
+                
+                <!-- Kameraskanner for retur -->
+                <div id="cameraScannerReturnContainer" class="camera-scanner-container" style="display: none;">
+                    <div class="camera-wrapper">
+                        <video id="videoReturnScanner" class="scanner-video" playsinline autoplay></video>
+                        <canvas id="canvasReturnScanner" class="scanner-canvas"></canvas>
+                        <div id="scannerReturnOverlay" class="scanner-overlay">
+                            <div class="scan-area">
+                                <span></span>
+                                <div class="scan-line"></div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="scanner-controls">
+                        <button id="switchCameraReturn" class="btn btn-primary scanner-switch-btn">
+                            <i class="fas fa-sync"></i> Bytt kamera
+                        </button>
+                        <button id="closeReturnScanner" class="btn btn-danger scanner-close-btn">
+                            <i class="fas fa-times"></i> Lukk skanner
+                        </button>
+                    </div>
+                </div>
+                
+                <div class="list-container">
+                    <table id="returnList">
+                        <thead>
+                            <tr>
+                                <th>Varenr.</th>
+                                <th>Beskrivelse</th>
+                                <th>Antall</th>
+                                <th>Vekt (kg)</th>
+                                <th>Handlinger</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <!-- Data fylles inn via JavaScript -->
+                        </tbody>
+                    </table>
+                </div>
+                
+                <div class="weight-calculator">
+                    <div class="weight-title">Vektberegning</div>
+                    <div class="weight-info">
+                        <span>Total vekt:</span>
+                        <span id="totalReturnWeight" class="weight-box">0 kg</span>
+                    </div>
+                </div>
+                
+                <div class="form-group">
+                    <input type="text" id="returnManualScan" class="form-control" placeholder="Skann eller skriv inn varenummer">
+                </div>
+                
+                <div class="form-group">
+                    <input type="number" id="returnQuantity" class="form-control" value="1" min="1" placeholder="Antall">
+                </div>
+                
+                <div class="btn-group">
+                    <button id="returnManualScanBtn" class="btn btn-primary">
+                        <i class="fas fa-barcode"></i> Registrer retur
+                    </button>
+                    <button id="returnExportBtn" class="btn btn-success" disabled>
+                        <i class="fas fa-file-export"></i> Eksporter returliste
+                    </button>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Settings Module -->
+        <div id="settingsModule" class="module-container">
+            <div class="card">
+                <div class="card-title">
+                    Innstillinger
+                </div>
+                
+                <div class="form-group">
+                    <label for="weightUnit">Vektenhet</label>
+                    <select id="weightUnit" class="form-control">
+                        <option value="kg">Kilogram (kg)</option>
+                        <option value="g">Gram (g)</option>
+                    </select>
+                </div>
+                
+                <div class="form-group">
+                    <label for="defaultItemWeight">Standard varevekt (kg)</label>
+                    <input type="number" id="defaultItemWeight" class="form-control" value="1" min="0.01" step="0.01">
+                </div>
+                
+                <div class="form-group">
+                    <label>Importer strekkodeoversikt</label>
+                    <input type="file" id="importBarcodeFile" accept=".json" style="display: none;">
+                    <button id="importBarcodeBtn" class="btn btn-primary">
+                        <i class="fas fa-barcode"></i> Importer strekkoder
+                    </button>
+                    <div id="barcodeFileInfo">Ingen strekkoder lastet inn</div>
+                </div>
+                
+                <div class="form-group">
+                    <button id="clearBarcodeData" class="btn btn-warning">
+                        <i class="fas fa-trash"></i> Tøm strekkodedata
+                    </button>
+                </div>
+                
+                <div class="form-group">
+                    <button id="clearAllData" class="btn btn-danger">
+                        <i class="fas fa-trash-alt"></i> Tøm alle data
+                    </button>
+                </div>
+                
+                <div id="featuresSupportInfo" class="form-group">
+                    <!-- Innhold fylles via JavaScript -->
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Weight Input Modal -->
+    <div id="weightModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 class="modal-title">Angi vekt for <span id="weightModalItemId"></span></h2>
+                <span class="close" id="closeWeightModal">&times;</span>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label for="itemWeight">Vekt per enhet (kg)</label>
+                    <input type="number" id="itemWeight" class="form-control" value="1" min="0.01" step="0.01">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button id="saveWeightBtn" class="btn btn-success">Lagre</button>
+                <button id="cancelWeightBtn" class="btn btn-danger">Avbryt</button>
+            </div>
+        </div>
+    </div>
+    
+    <div id="toast" class="toast"></div>
+    
+    <!-- Scripts -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.7.107/pdf.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/quagga/0.12.1/quagga.min.js"></script>
+    <script type="module" src="js/app.js"></script>
 </body>
 </html>
