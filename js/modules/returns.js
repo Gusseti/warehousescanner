@@ -4,7 +4,7 @@ import { showToast } from './utils.js';
 import { saveListsToStorage } from './storage.js';
 import { updateScannerStatus } from './ui.js';
 import { initCameraScanner, startCameraScanning, stopCameraScanning, connectToBluetoothScanner } from './scanner.js';
-import { exportList } from './import-export.js';
+import { exportList, exportWithFormat, exportToPDF } from './import-export.js';
 import { openWeightModal } from './weights.js';
 
 // DOM elementer - Retur
@@ -88,8 +88,18 @@ function setupReturnsEventListeners() {
         }
     });
     
+    // Hovedeksportknapp (PDF som standard)
     returnExportBtnEl.addEventListener('click', function() {
-        exportReturnList();
+        exportReturnList('pdf');
+    });
+    
+    // Eksportformat velgere
+    document.querySelectorAll('#returnsModule .dropdown-content a').forEach(link => {
+        link.addEventListener('click', function(e) {
+            e.preventDefault();
+            const format = this.getAttribute('data-format');
+            exportReturnList(format);
+        });
     });
     
     clearReturnListEl.addEventListener('click', function() {
@@ -288,9 +298,32 @@ function removeReturnItem(index) {
 
 /**
  * Eksporterer returlisten
+ * @param {string} format - Format for eksport (pdf, csv, json, txt, html)
  */
-function exportReturnList() {
-    exportList(appState.returnListItems, 'retur');
+function exportReturnList(format = 'pdf') {
+    // Sjekk om vi har varer å eksportere
+    if (appState.returnListItems.length === 0) {
+        showToast('Ingen varer å eksportere!', 'warning');
+        return;
+    }
+    
+    try {
+        if (format.toLowerCase() === 'pdf') {
+            // Bruk den nye PDF-eksportfunksjonen
+            exportToPDF(appState.returnListItems, 'retur', {
+                title: 'Returliste',
+                subtitle: 'Eksportert fra Lagerstyring PWA',
+                exportDate: new Date(),
+                showStatus: true
+            });
+        } else {
+            // Bruk den eksisterende eksportfunksjonen for andre formater
+            exportWithFormat(appState.returnListItems, 'retur', format);
+        }
+    } catch (error) {
+        console.error('Feil ved eksport:', error);
+        showToast('Kunne ikke eksportere liste. Prøv igjen senere.', 'error');
+    }
 }
 
 /**

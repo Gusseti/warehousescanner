@@ -1,7 +1,8 @@
 // import-export.js - Håndtering av import og eksport
 import { appState } from '../app.js';
-import { showToast } from './utils.js';
+import { showToast, formatDate } from './utils.js';
 import { saveListsToStorage, saveBarcodeMapping } from './storage.js';
+import { generatePDF, generatePDFFilename } from './pdf-export.js';
 
 /**
  * Importerer data fra CSV/TXT fil
@@ -540,7 +541,6 @@ function parseComplexProductLines(lines) {
     return products;
 }
 
-
 /**
  * Eksporterer liste til forskjellige formater
  * @param {Array} items - Liste med varer
@@ -755,7 +755,7 @@ function generateHTML(items, type, summary) {
         </style>
     </head>
     <body>
-        <h1>Lagerstyring - ${type.toUpperCase()}LISTE</h1>
+    <h1>Lagerstyring - ${type.toUpperCase()}LISTE</h1>
         <p>Eksportdato: ${new Date().toLocaleString('nb-NO')}</p>
 
         <div class="summary">
@@ -794,7 +794,56 @@ function generateHTML(items, type, summary) {
     </html>`;
 }
 
-// Eksporter en hjelpefunksjon for å støtte flere formater ved eksport
+/**
+ * Eksporterer liste til PDF-format
+ * @param {Array} items - Liste med varer
+ * @param {string} type - Type liste (plukk, mottak, retur)
+ * @param {Object} options - Alternativer for PDF-generering
+ */
+export async function exportToPDF(items, type, options = {}) {
+    if (!items || items.length === 0) {
+        showToast('Ingen varer å eksportere!', 'warning');
+        return;
+    }
+    
+    try {
+        showToast('Genererer PDF...', 'info');
+        
+        // Generer PDF
+        const pdfBlob = await generatePDF(items, type, options);
+        const fileName = generatePDFFilename(type);
+        
+        // Last ned PDF
+        const url = URL.createObjectURL(pdfBlob);
+        const downloadLink = document.createElement('a');
+        downloadLink.href = url;
+        downloadLink.download = fileName;
+        document.body.appendChild(downloadLink);
+        downloadLink.click();
+        
+        // Rydd opp
+        setTimeout(() => {
+            document.body.removeChild(downloadLink);
+            URL.revokeObjectURL(url);
+        }, 100);
+        
+        showToast(`Liste eksportert som ${fileName}!`, 'success');
+    } catch (error) {
+        console.error('Feil ved eksport til PDF:', error);
+        showToast('Kunne ikke generere PDF. ' + error.message, 'error');
+    }
+}
+
+/**
+ * Utvidet eksportfunksjon med støtte for PDF
+ * @param {Array} items - Liste med varer
+ * @param {string} type - Type liste (plukk, mottak, retur)
+ * @param {string} format - Eksportformat (json, csv, txt, html, pdf)
+ */
 export function exportWithFormat(items, type, format) {
-    exportList(items, type, format);
+    if (format.toLowerCase() === 'pdf') {
+        exportToPDF(items, type);
+    } else {
+        exportList(items, type, format);
+    }
 }

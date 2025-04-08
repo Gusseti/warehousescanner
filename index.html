@@ -196,9 +196,18 @@
                     <button id="pickUndoBtn" class="btn btn-warning" disabled>
                         <i class="fas fa-undo"></i> Angre siste skann
                     </button>
-                    <button id="pickExportBtn" class="btn btn-success" disabled>
-                        <i class="fas fa-file-export"></i> Eksporter resultat
-                    </button>
+                    <div class="dropdown" style="display:inline-block;">
+                        <button id="pickExportBtn" class="btn btn-success dropdown-toggle" disabled>
+                            <i class="fas fa-file-export"></i> Eksporter resultat
+                        </button>
+                        <div class="dropdown-content">
+                            <a href="#" data-format="pdf">PDF-dokument</a>
+                            <a href="#" data-format="html">HTML-dokument</a>
+                            <a href="#" data-format="csv">CSV-fil</a>
+                            <a href="#" data-format="json">JSON-fil</a>
+                            <a href="#" data-format="txt">Tekst-fil</a>
+                        </div>
+                    </div>
                     <button id="pickClearBtn" class="btn btn-danger" disabled>
                         <i class="fas fa-trash"></i> Tøm plukkliste
                     </button>
@@ -289,9 +298,18 @@
                     <button id="receiveUndoBtn" class="btn btn-warning" disabled>
                         <i class="fas fa-undo"></i> Angre siste skann
                     </button>
-                    <button id="receiveExportBtn" class="btn btn-success" disabled>
-                        <i class="fas fa-file-export"></i> Eksporter resultat
-                    </button>
+                    <div class="dropdown" style="display:inline-block;">
+                        <button id="receiveExportBtn" class="btn btn-success dropdown-toggle" disabled>
+                            <i class="fas fa-file-export"></i> Eksporter resultat
+                        </button>
+                        <div class="dropdown-content">
+                            <a href="#" data-format="pdf">PDF-dokument</a>
+                            <a href="#" data-format="html">HTML-dokument</a>
+                            <a href="#" data-format="csv">CSV-fil</a>
+                            <a href="#" data-format="json">JSON-fil</a>
+                            <a href="#" data-format="txt">Tekst-fil</a>
+                        </div>
+                    </div>
                     <button id="receiveClearBtn" class="btn btn-danger" disabled>
                         <i class="fas fa-trash"></i> Tøm mottaksliste
                     </button>
@@ -374,9 +392,18 @@
                     <button id="returnManualScanBtn" class="btn btn-primary">
                         <i class="fas fa-barcode"></i> Registrer retur
                     </button>
-                    <button id="returnExportBtn" class="btn btn-success" disabled>
-                        <i class="fas fa-file-export"></i> Eksporter returliste
-                    </button>
+                    <div class="dropdown" style="display:inline-block;">
+                        <button id="returnExportBtn" class="btn btn-success dropdown-toggle" disabled>
+                            <i class="fas fa-file-export"></i> Eksporter returliste
+                        </button>
+                        <div class="dropdown-content">
+                            <a href="#" data-format="pdf">PDF-dokument</a>
+                            <a href="#" data-format="html">HTML-dokument</a>
+                            <a href="#" data-format="csv">CSV-fil</a>
+                            <a href="#" data-format="json">JSON-fil</a>
+                            <a href="#" data-format="txt">Tekst-fil</a>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>

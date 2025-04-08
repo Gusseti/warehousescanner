@@ -4,7 +4,7 @@ import { showToast } from './utils.js';
 import { saveListsToStorage } from './storage.js';
 import { updateScannerStatus } from './ui.js';
 import { initCameraScanner, startCameraScanning, stopCameraScanning, connectToBluetoothScanner } from './scanner.js';
-import { importFromCSV, importFromJSON, importFromPDF, exportList } from './import-export.js';
+import { importFromCSV, importFromJSON, importFromPDF, exportList, exportWithFormat, exportToPDF } from './import-export.js';
 import { openWeightModal } from './weights.js';
 
 // DOM elementer - Mottak
@@ -112,8 +112,18 @@ function setupReceivingEventListeners() {
         undoLastReceiveScan();
     });
     
+    // Hovedeksportknapp (PDF som standard)
     receiveExportBtnEl.addEventListener('click', function() {
-        exportReceiveList();
+        exportReceiveList('pdf');
+    });
+    
+    // Eksportformat velgere
+    document.querySelectorAll('#receivingModule .dropdown-content a').forEach(link => {
+        link.addEventListener('click', function(e) {
+            e.preventDefault();
+            const format = this.getAttribute('data-format');
+            exportReceiveList(format);
+        });
     });
     
     receiveClearBtnEl.addEventListener('click', function() {
@@ -445,9 +455,32 @@ function undoLastReceiveScan() {
 
 /**
  * Eksporterer mottakslisten
+ * @param {string} format - Format for eksport (pdf, csv, json, txt, html)
  */
-function exportReceiveList() {
-    exportList(appState.receiveListItems, 'mottak');
+function exportReceiveList(format = 'pdf') {
+    // Sjekk om vi har varer å eksportere
+    if (appState.receiveListItems.length === 0) {
+        showToast('Ingen varer å eksportere!', 'warning');
+        return;
+    }
+    
+    try {
+        if (format.toLowerCase() === 'pdf') {
+            // Bruk den nye PDF-eksportfunksjonen
+            exportToPDF(appState.receiveListItems, 'mottak', {
+                title: 'Mottaksliste',
+                subtitle: 'Eksportert fra Lagerstyring PWA',
+                exportDate: new Date(),
+                showStatus: true
+            });
+        } else {
+            // Bruk den eksisterende eksportfunksjonen for andre formater
+            exportWithFormat(appState.receiveListItems, 'mottak', format);
+        }
+    } catch (error) {
+        console.error('Feil ved eksport:', error);
+        showToast('Kunne ikke eksportere liste. Prøv igjen senere.', 'error');
+    }
 }
 
 /**

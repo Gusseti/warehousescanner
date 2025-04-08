@@ -4,7 +4,7 @@ import { showToast } from './utils.js';
 import { saveListsToStorage } from './storage.js';
 import { updateScannerStatus } from './ui.js';
 import { initCameraScanner, startCameraScanning, stopCameraScanning, connectToBluetoothScanner } from './scanner.js';
-import { importFromCSV, importFromJSON, importFromPDF, exportList } from './import-export.js';
+import { importFromCSV, importFromJSON, importFromPDF, exportList, exportWithFormat, exportToPDF } from './import-export.js';
 import { openWeightModal } from './weights.js';
 
 // DOM elementer - Plukk
@@ -110,8 +110,18 @@ function setupPickingEventListeners() {
         undoLastPickScan();
     });
     
+    // Hovedeksportknapp (PDF som standard)
     pickExportBtnEl.addEventListener('click', function() {
-        exportPickList();
+        exportPickList('pdf');
+    });
+    
+    // Eksportformat velgere
+    document.querySelectorAll('#pickingModule .dropdown-content a').forEach(link => {
+        link.addEventListener('click', function(e) {
+            e.preventDefault();
+            const format = this.getAttribute('data-format');
+            exportPickList(format);
+        });
     });
     
     pickClearBtnEl.addEventListener('click', function() {
@@ -418,9 +428,32 @@ function undoLastPickScan() {
 
 /**
  * Eksporterer plukklisten
+ * @param {string} format - Format for eksport (pdf, csv, json, txt, html)
  */
-function exportPickList() {
-    exportList(appState.pickListItems, 'plukk');
+function exportPickList(format = 'pdf') {
+    // Sjekk om vi har varer å eksportere
+    if (appState.pickListItems.length === 0) {
+        showToast('Ingen varer å eksportere!', 'warning');
+        return;
+    }
+    
+    try {
+        if (format.toLowerCase() === 'pdf') {
+            // Bruk den nye PDF-eksportfunksjonen
+            exportToPDF(appState.pickListItems, 'plukk', {
+                title: 'Plukkliste',
+                subtitle: 'Eksportert fra Lagerstyring PWA',
+                exportDate: new Date(),
+                showStatus: true
+            });
+        } else {
+            // Bruk den eksisterende eksportfunksjonen for andre formater
+            exportWithFormat(appState.pickListItems, 'plukk', format);
+        }
+    } catch (error) {
+        console.error('Feil ved eksport:', error);
+        showToast('Kunne ikke eksportere liste. Prøv igjen senere.', 'error');
+    }
 }
 
 /**
