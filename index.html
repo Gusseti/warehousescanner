@@ -514,34 +514,36 @@
       </div>
       
       <script>
-        // Legg til denne script-blokken rett før </body> taggen i index.html
         document.getElementById('forceRefreshBtn').addEventListener('click', function() {
-          // Vis lastestatus
-          this.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16" style="margin-right: 5px; animation: spin 1s linear infinite;"><path d="M8 3a5 5 0 1 0 4.546 2.914.5.5 0 0 1 .908-.417A6 6 0 1 1 8 2v1z"/><path d="M8 4.466V.534a.25.25 0 0 1 .41-.192l2.36 1.966c.12.1.12.284 0 .384L8.41 4.658A.25.25 0 0 1 8 4.466z"/></svg> Laster...';
-          
-          // Legg til CSS for rotasjon
-          const style = document.createElement('style');
-          style.textContent = '@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }';
-          document.head.appendChild(style);
-      
-          // Tøm cache og last på nytt
-          if ('caches' in window) {
-            caches.keys().then(function(names) {
-              for (let name of names) {
-                caches.delete(name);
-              }
+            // Vis lastestatus
+            this.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16" style="margin-right: 5px; animation: spin 1s linear infinite;"><path d="M8 3a5 5 0 1 0 4.546 2.914.5.5 0 0 1 .908-.417A6 6 0 1 1 8 2v1z"/><path d="M8 4.466V.534a.25.25 0 0 1 .41-.192l2.36 1.966c.12.1.12.284 0 .384L8.41 4.658A.25.25 0 0 1 8 4.466z"/></svg> Laster...';
+            
+            // Avregistrer service worker først
+            if ('serviceWorker' in navigator) {
+                navigator.serviceWorker.getRegistrations().then(function(registrations) {
+                for (let registration of registrations) {
+                    registration.unregister();
+                    console.log('Service Worker avregistrert');
+                }
+                });
+            }
+            
+            // Tøm caches
+            if ('caches' in window) {
+                caches.keys().then(function(names) {
+                for (let name of names) {
+                    caches.delete(name);
+                    console.log('Cache slettet:', name);
+                }
+                });
+            }
+            
+            // Vent litt for å gi tid til at caches og service workers slettes
+            setTimeout(function() {
+                // Bruk location.reload(true) for å tvinge en full refresh
+                window.location.href = window.location.href + '?refresh=' + new Date().getTime();
+            }, 1500);
             });
-          }
-          
-          // Tøm localStorage om nødvendig (vær forsiktig med dette)
-          // localStorage.clear();
-          
-          // Vent litt for å gi tid til at caches slettes
-          setTimeout(function() {
-            // Bruk location.reload(true) for å tvinge en full refresh
-            window.location.href = window.location.href + '?refresh=' + new Date().getTime();
-          }, 1000);
-        });
       </script>
 </body>
 </html>
