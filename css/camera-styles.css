@@ -9,19 +9,33 @@
     border-radius: 8px;
     background-color: #000;
     margin-bottom: 1rem;
+    /* Hardware akselerasjon */
+    transform: translateZ(0);
+    backface-visibility: hidden;
+    -webkit-backface-visibility: hidden;
+    perspective: 1000;
+    -webkit-perspective: 1000;
 }
 
-/* Video-element stiler */
+/* Video-element stiler - VIKTIG for å fikse svart skjerm */
 .scanner-video {
     position: absolute;
     top: 0;
     left: 0;
-    width: 100%;
-    height: 100%;
+    width: 100% !important;
+    height: 100% !important;
     object-fit: cover;
     z-index: 1;
-    display: block;
-    /* Fjern alle transform-stiler her - de settes i JS */
+    /* Tving visning av video */
+    display: block !important;
+    opacity: 1 !important;
+    visibility: visible !important;
+    /* Hardware akselerasjon */
+    transform: translateZ(0);
+    backface-visibility: hidden;
+    -webkit-backface-visibility: hidden;
+    /* Forbedret visning */
+    background-color: #000;
 }
 
 /* Spesielle klasser for kameratype */
@@ -41,7 +55,8 @@
     width: 100%;
     height: 100%;
     z-index: 2;
-    background-color: transparent;
+    background-color: transparent !important;
+    pointer-events: none; /* La interaksjoner gå igjennom */
 }
 
 /* Overlay for skanneområde */
@@ -56,6 +71,7 @@
     justify-content: center;
     align-items: center;
     pointer-events: none; /* La interaksjoner gå igjennom overlaget */
+    background-color: transparent !important;
 }
 
 /* Skanneområde-indikator */
@@ -118,6 +134,18 @@
     animation: scan 2s linear infinite;
 }
 
+/* Knappegruppe for kamerakontrollen */
+.scanner-controls {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    margin-bottom: 0.5rem;
+}
+
+.scanner-close-btn {
+    width: 100%;
+}
+
 /* Animasjoner */
 @keyframes scan {
     0% { top: 0; }
@@ -137,14 +165,18 @@
     }
 }
 
-/* Knappegruppe for kamerakontrollen */
-.scanner-controls {
-    display: flex;
-    flex-direction: column;
-    gap: 0.5rem;
-    margin-bottom: 0.5rem;
+/* Kamera-skanner container - vis som en kapslet boks */
+.camera-scanner-container {
+    margin: 1rem 0;
+    padding: 1rem;
+    background-color: #f0f8ff;
+    border-radius: 8px;
+    border: 1px solid var(--primary-light);
 }
 
-.scanner-close-btn {
-    width: 100%;
+/* Forenklet visning for spesialtilpasninger */
+@media (max-width: 767px) {
+    .camera-wrapper {
+        height: 300px;
+    }
 }
