@@ -4,7 +4,7 @@ import os
 
 def convert_barcodes_to_json():
     # Ask for input file
-    input_file = input("Enter the name of the input file: ")
+    input_file = input("barcodes_ny.txt")
     
     # Set output file name with .json extension
     output_file = os.path.splitext(input_file)[0] + ".json"
