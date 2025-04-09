@@ -332,7 +332,7 @@ function initCameraScanner(videoEl, canvasEl, overlayEl, callback, statusCallbac
         button.addEventListener('click', switchCamera);
     });
     
-    // Tilbakestill pauseflagg
+    // Sikre at vi starter i riktig tilstand
     scannerIsPaused = false;
 }
 
@@ -655,56 +655,6 @@ function stopCameraScanning() {
 }
 
 /**
- * Håndterer resultater fra kameraskanning
- * @param {Object} result - Skanningsresultat-objekt fra Quagga
- */
-/**
- * Håndterer resultater fra kameraskanning
- * @param {Object} result - Skanningsresultat-objekt fra Quagga
- */
-async function handleCameraScanResult(result) {
-    // Hopp over hvis skanneren allerede er pauset
-    if (scannerIsPaused) return;
-    
-    if (result && result.codeResult && result.codeResult.code) {
-        const barcode = result.codeResult.code;
-        
-        // Valider at dette er en strekkode og ikke bare et tall
-        if (validateBarcode(barcode)) {
-            console.log("Strekkode funnet:", barcode);
-            
-            // Marker som pauset for å unngå gjentatte skanninger av samme kode
-            scannerIsPaused = true;
-            
-            // Spill lyd for å indikere at strekkode er funnet
-            playBeepSound();
-            
-            // Marker strekkoden på canvas
-            if (canvasElement && result.box) {
-                const ctx = canvasElement.getContext('2d');
-                drawSuccessBox(ctx, result.box);
-            }
-
-            // Vis visuell suksess-indikator
-            showScanSuccessAnimation();
-            
-            // Send resultatet til callback
-            if (onScanCallback) {
-                onScanCallback(barcode);
-            }
-            
-            // Vent litt før vi fortsetter skanningen (men ikke stopper den fullstendig)
-            setTimeout(() => {
-                scannerIsPaused = false;
-                console.log("Skanner fortsetter etter pause");
-            }, 1000);
-        } else {
-            console.log("Ugyldig strekkode ignorert:", barcode);
-        }
-    }
-}
-
-/**
  * Validerer at en strekkode er gyldig og ikke bare et tilfeldig tall
  * @param {string} barcode - Strekkode som skal valideres
  * @returns {boolean} Om strekkoden er gyldig
@@ -938,6 +888,119 @@ function loadQuaggaScript() {
         
         document.head.appendChild(script);
     });
+}
+
+/**
+ * Viser "skannet" animasjon over kameravisningen
+ */
+function showScanSuccessAnimation() {
+    // Sjekk om vi har overlay-elementet
+    if (!scannerOverlay) return;
+    
+    // Legg til suksess-indikator
+    const successIndicator = document.createElement('div');
+    successIndicator.className = 'scan-success-indicator';
+    successIndicator.innerHTML = '<i class="fas fa-check"></i>';
+    successIndicator.style.cssText = `
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        background-color: rgba(76, 175, 80, 0.8);
+        color: white;
+        font-size: 2rem;
+        width: 80px;
+        height: 80px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 10;
+        animation: pulse-success 1s ease-out;
+    `;
+    
+    // Legg til i overlay
+    scannerOverlay.appendChild(successIndicator);
+    
+    // Fjern indikatoren etter animasjonen
+    setTimeout(() => {
+        if (successIndicator.parentNode) {
+            successIndicator.parentNode.removeChild(successIndicator);
+        }
+    }, 1000);
+}
+
+/**
+ * Håndterer resultater fra kameraskanning
+ * @param {Object} result - Skanningsresultat-objekt fra Quagga
+ */
+function handleCameraScanResult(result) {
+    if (result && result.codeResult && result.codeResult.code) {
+        const barcode = result.codeResult.code;
+        
+        // Valider at dette er en strekkode og ikke bare et tall
+        if (validateBarcode(barcode)) {
+            console.log("Strekkode funnet:", barcode);
+            
+            // Spill lyd for å indikere at strekkode er funnet
+            playBeepSound();
+            
+            // Marker strekkoden på canvas
+            if (canvasElement && result.box) {
+                const ctx = canvasElement.getContext('2d');
+                drawSuccessBox(ctx, result.box);
+            }
+            
+            // Send resultatet til callback
+            if (onScanCallback) {
+                onScanCallback(barcode);
+            }
+            
+            // Vis suksessanimering - fjerner den automatisk etter 1.5 sekunder
+            if (scannerOverlay) {
+                const successIndicator = document.createElement('div');
+                successIndicator.style.cssText = `
+                    position: absolute;
+                    top: 50%;
+                    left: 50%;
+                    transform: translate(-50%, -50%);
+                    background-color: rgba(76, 175, 80, 0.8);
+                    color: white;
+                    font-size: 2rem;
+                    width: 80px;
+                    height: 80px;
+                    border-radius: 50%;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    z-index: 10;
+                `;
+                successIndicator.innerHTML = '<i class="fas fa-check"></i>';
+                scannerOverlay.appendChild(successIndicator);
+                
+                // Fjern indikatoren etter kort tid
+                setTimeout(() => {
+                    if (successIndicator.parentNode) {
+                        successIndicator.parentNode.removeChild(successIndicator);
+                    }
+                }, 1500);
+            }
+            
+            // Stopp Quagga i 1.5 sekunder, så starter den igjen
+            if (typeof Quagga !== 'undefined') {
+                Quagga.stop();
+                
+                setTimeout(() => {
+                    if (cameraStream && cameraStream.active) {
+                        Quagga.start();
+                        console.log("Skanner restartet etter pause");
+                    }
+                }, 1500);
+            }
+        } else {
+            console.log("Ugyldig strekkode ignorert:", barcode);
+        }
+    }
 }
 
 // Eksporter funksjoner
