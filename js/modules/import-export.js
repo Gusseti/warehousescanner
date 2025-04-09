@@ -283,65 +283,34 @@ export async function importFromPDF(file, type) {
                 const page = await pdf.getPage(i);
                 const textContent = await page.getTextContent();
                 
-                // Konverter tekst-elementer til strenger og bevar posisjoner
-                const textItems = textContent.items.map(item => ({
-                    text: item.str,
-                    x: item.transform[4],  // x-posisjon
-                    y: item.transform[5],  // y-posisjon
-                    width: item.width,
-                    height: item.height
-                }));
+                // Konverter tekst-elementer til strenger
+                const textItems = textContent.items.map(item => item.str);
+                const pageText = textItems.join('\n');
                 
-                // Sorter elementer først etter y-posisjon (rad) og deretter etter x-posisjon (kolonne)
-                // Dette gir en bedre representasjon av PDF-strukturen
-                textItems.sort((a, b) => {
-                    // Gruppér elementer i samme "rad" (med en viss margin)
-                    const yThreshold = 5;
-                    if (Math.abs(a.y - b.y) > yThreshold) {
-                        return b.y - a.y; // Reverse y-sort (top to bottom)
-                    }
-                    return a.x - b.x; // Left to right within same row
-                });
+                // Del opp teksten i linjer
+                const lines = pageText.split('\n')
+                    .map(line => line.trim())
+                    .filter(line => line.length > 0);
                 
-                // Behold linjeinformasjon for bedre parsing
-                allTextLines.push(...textItems);
-                
-                console.log(`Side ${i}: Hentet ${textItems.length} tekstelementer`);
+                console.log(`Side ${i}: Hentet ${lines.length} linjer`);
+                allTextLines.push(...lines);
             } catch (error) {
                 console.error(`Feil ved behandling av side ${i}:`, error);
             }
         }
         
-        console.log(`Ekstrahert totalt ${allTextLines.length} tekstelementer fra PDF-en`);
+        console.log(`Ekstrahert totalt ${allTextLines.length} linjer fra PDF-en`);
         
         if (allTextLines.length === 0) {
             throw new Error('Ingen tekst funnet i PDF-en. Sjekk at PDF-en ikke er skannet bilde eller passordbeskyttet.');
         }
         
-        // Prøv ulike parsing-strategier for å identifisere produkter
+        // Bruk parseProductLinesWithFallback-funksjonen for å identifisere produkter
         console.log('Starter parsing av produktlinjer...');
-        
-        // Konverter til tekstlinjer for tradisjonell parsing først
-        const simpleTextLines = allTextLines.map(item => item.text);
-        
-        // Prøv først standard parsing
-        let parsedItems = parseProductLines(simpleTextLines);
-        
-        // Hvis standard parsing ikke fungerer, prøv med posisjonsdataen
-        if (parsedItems.length === 0) {
-            console.log('Standard parsing fant ingen produkter, prøver posisjonell parsing...');
-            parsedItems = parseProductsWithPositions(allTextLines);
-        }
-        
-        // Hvis fortsatt ingen resultater, prøv kompleks parsing
-        if (parsedItems.length === 0) {
-            console.log('Posisjonell parsing fant ingen produkter, prøver kompleks parsing...');
-            parsedItems = parseComplexProductLines(simpleTextLines);
-        }
-        
+        const parsedItems = parseProductLinesFromPDF(allTextLines);
         console.log(`Identifisert ${parsedItems.length} produkter fra PDF-en`);
         
-        // Tilknytt ekstra data og oppdater state
+        // Legg til de nødvendige feltene basert på type
         let items = [];
         if (type === 'pick') {
             items = parsedItems.map(item => ({
@@ -385,6 +354,24 @@ export async function importFromPDF(file, type) {
         console.error('Feil ved import av PDF:', error);
         throw error;
     }
+}
+
+/**
+ * Parser produktlinjer fra PDF-tekst
+ * @param {Array} lines - Tekstlinjer fra PDF
+ * @returns {Array} Liste med produkter
+ */
+function parseProductLinesFromPDF(lines) {
+    // Prøv først med standard-metoden
+    let products = parseProductLines(lines);
+    
+    // Hvis ingen produkter ble funnet, prøv den alternative metoden
+    if (products.length === 0) {
+        console.log('Standard parsing fant ingen produkter, prøver alternativ metode...');
+        products = parseComplexProductLines(lines);
+    }
+    
+    return products;
 }
 
 /**
