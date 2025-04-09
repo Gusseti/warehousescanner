@@ -5,6 +5,7 @@ let bluetoothDevice = null;
 let isBluetoothConnected = false;
 let cameraStream = null;
 let isScanning = false;
+let scannerIsPaused = false; // Nå definert
 let currentCameraIndex = 0;
 let availableCameras = [];
 
