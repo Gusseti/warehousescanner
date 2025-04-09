@@ -315,6 +315,8 @@ async function startPickCameraScanning() {
     }
 }
 
+// picking.js - Forbedret håndtering av skanning for plukklisten
+
 /**
  * Håndterer skanning for plukk
  * @param {string} barcode - Skannet strekkode
@@ -322,12 +324,15 @@ async function startPickCameraScanning() {
 function handlePickScan(barcode) {
     if (!barcode) return;
     
+    console.log('Håndterer strekkode i plukk-modulen:', barcode);
+    
     // Tøm input etter skanning
     if (pickManualScanEl) pickManualScanEl.value = '';
     
-    // Bruk den forbedrede strekkodehåndtereren
+    // Bruk den forbedrede strekkodehåndtereren for ukjente strekkoder/varer
     // Hvis den returnerer true, har den allerede håndtert strekkoden
     if (handleScannedBarcode(barcode, 'pick')) {
+        console.log('Strekkoden ble håndtert av barcode-handler');
         return;
     }
     
@@ -342,7 +347,9 @@ function handlePickScan(barcode) {
     const item = appState.pickListItems.find(item => item.id === itemId);
     
     if (!item) {
-        // Varen finnes ikke i listen, dette skal nå håndteres av handleScannedBarcode
+        // Varen finnes ikke i listen - skal ha blitt håndtert av handleScannedBarcode over
+        console.log(`Vare ${itemId} finnes ikke i plukklisten og ble ikke håndtert av barcode-handler`);
+        showToast(`Vare "${itemId}" finnes ikke i plukklisten!`, 'error');
         return;
     }
     
@@ -359,6 +366,7 @@ function handlePickScan(barcode) {
     
     // Øk antallet plukket
     item.pickedCount++;
+    console.log(`Økte pickedCount til ${item.pickedCount} for vare ${itemId}`);
     
     // Merk varen som fullstendig plukket hvis alle enheter er skannet
     if (item.pickedCount >= item.quantity) {
