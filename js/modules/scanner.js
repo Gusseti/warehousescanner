@@ -10,9 +10,6 @@ let availableCameras = [];
 
 import { appState } from '../app.js';
 import { showToast } from './utils.js';
-import { handlePickScan } from './picking.js';
-import { handleReceiveScan } from './receiving.js';
-import { handleReturnScan } from './returns.js';
 
 // DOM-elementer
 let videoElement = null;
@@ -830,19 +827,25 @@ function handleScan(barcode, type) {
     try {
         switch (type) {
             case 'pick':
-                // Direkte kall til håndteringsfunksjonen i picking.js
-                handlePickScan(itemId);
+                // Bruk onScanCallback i stedet for direkte kall til handlePickScan
+                if (typeof onScanCallback === 'function') {
+                    onScanCallback(itemId);
+                }
                 break;
             case 'receive':
-                // Direkte kall til håndteringsfunksjonen i receiving.js
-                handleReceiveScan(itemId);
+                // For receiving-modulen
+                if (typeof onScanCallback === 'function') {
+                    onScanCallback(itemId);
+                }
                 break;
             case 'return':
                 const quantityEl = document.getElementById('returnQuantity');
                 const quantity = quantityEl ? parseInt(quantityEl.value) || 1 : 1;
                 
-                // Direkte kall til håndteringsfunksjonen i returns.js
-                handleReturnScan(itemId, quantity);
+                // For return-modulen
+                if (typeof onScanCallback === 'function') {
+                    onScanCallback(itemId, quantity);
+                }
                 break;
             default:
                 showToast(`Ukjent modul: ${type}`, 'error');
