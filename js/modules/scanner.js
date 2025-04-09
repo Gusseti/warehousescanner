@@ -343,7 +343,7 @@ function initCameraScanner(videoEl, canvasEl, overlayEl, callback, statusCallbac
  * @returns {Promise} Løftebasert resultat av oppstartforsøket
  */
 async function startCameraScanning(cameraId = null, options = {}) {
-    console.log("Starter kameraskanning med minimalt oppsett...");
+    console.log("Starter kameraskanning...");
     
     // Stopp eventuelle aktive skannere
     if (isScanning) {
@@ -360,7 +360,7 @@ async function startCameraScanning(cameraId = null, options = {}) {
             else if (appState.currentModule === 'returns') modulePrefix = 'Return';
         }
         
-        // Finn elementer direkte uten å bruke closest()
+        // Finn elementer
         const containerId = `cameraScanner${modulePrefix}Container`;
         const videoId = `video${modulePrefix}Scanner`;
         const canvasId = `canvas${modulePrefix}Scanner`;
@@ -369,21 +369,11 @@ async function startCameraScanning(cameraId = null, options = {}) {
         videoElement = document.getElementById(videoId);
         canvasElement = document.getElementById(canvasId);
         
-        console.log("Elementer funnet:", { 
-            container: container ? true : false, 
-            videoElement: videoElement ? true : false, 
-            canvasElement: canvasElement ? true : false 
-        });
+        console.log("Scanner elementer:", { container, videoElement, canvasElement });
         
         // Vis feilmelding og avbryt hvis elementer mangler
         if (!container || !videoElement || !canvasElement) {
-            console.error("Kritiske elementer mangler:", { 
-                containerId, 
-                videoId, 
-                canvasId,
-                modulePrefix, 
-                currentModule: appState ? appState.currentModule : 'unknown' 
-            });
+            console.error("Kritiske elementer mangler:", { containerId, videoId, canvasId });
             throw new Error("Kamera-elementer ikke funnet");
         }
         
@@ -400,34 +390,20 @@ async function startCameraScanning(cameraId = null, options = {}) {
             videoElement.srcObject = null;
         }
         
-        // Sett direkte stiler på video-elementet
-        videoElement.style.cssText = `
-            display: block !important;
-            opacity: 1 !important;
-            visibility: visible !important;
-            position: absolute !important; 
-            top: 0 !important;
-            left: 0 !important;
-            width: 100% !important;
-            height: 100% !important;
-            z-index: 1 !important;
-            background-color: #000 !important;
-            object-fit: cover !important;
-        `;
-        
-        // Sett nødvendige attributter
+        // Sett viktige attributter for iOS-kompatibilitet
         videoElement.setAttribute('autoplay', '');
         videoElement.setAttribute('playsinline', '');
+        videoElement.setAttribute('muted', '');
         videoElement.muted = true;
         
         // Sjekk for iOS-enhet
         const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
         if (isIOS) {
             console.log("iOS-enhet oppdaget, bruker spesielle innstillinger");
-            videoElement.setAttribute('webkit-playsinline', ''); // For eldre iOS
+            videoElement.setAttribute('webkit-playsinline', '');
         }
         
-        // Konfigurer kamerainnstillinger med hensyn til iOS
+        // Konfigurer kamerainnstillinger
         const constraints = { 
             video: {
                 width: { ideal: 1280 },
@@ -450,61 +426,96 @@ async function startCameraScanning(cameraId = null, options = {}) {
             constraints.video.facingMode = { ideal: "environment" };
         }
         
-        // Start kameraet
-        console.log("Ber om kameratilgang med constraints:", JSON.stringify(constraints));
-        const stream = await navigator.mediaDevices.getUserMedia(constraints);
-        cameraStream = stream;
+        // Start kameraet med retries for bedre pålitelighet
+        let retryCount = 0;
+        const maxRetries = 3;
+        let stream = null;
         
-        // Logg kamerainformasjon
-        logCameraInfo(stream);
+        while (retryCount < maxRetries && !stream) {
+            try {
+                console.log(`Forsøk ${retryCount + 1}/${maxRetries} for å få kameratilgang med constraints:`, 
+                    JSON.stringify(constraints));
+                stream = await navigator.mediaDevices.getUserMedia(constraints);
+                break;
+            } catch (error) {
+                console.warn(`Forsøk ${retryCount + a} feilet:`, error);
+                retryCount++;
+                
+                // Prøv med en annen konfigurasjon ved feil
+                if (retryCount < maxRetries) {
+                    if (constraints.video.facingMode) {
+                        // Bytt fra environment til user eller omvendt
+                        const currentMode = 
+                            constraints.video.facingMode.ideal || 
+                            constraints.video.facingMode.exact || 
+                            "environment";
+                            
+                        constraints.video.facingMode = { 
+                            ideal: currentMode === "environment" ? "user" : "environment" 
+                        };
+                        console.log("Bytter kameraretning og prøver igjen");
+                    } else {
+                        // Fjern ekstra begrensninger
+                        constraints.video = { facingMode: { ideal: "environment" }};
+                        console.log("Forenkler kamerabegrensninger og prøver igjen");
+                    }
+                    
+                    // Kort pause før nytt forsøk
+                    await new Promise(resolve => setTimeout(resolve, 500));
+                }
+            }
+        }
+        
+        if (!stream) {
+            throw new Error("Kunne ikke få tilgang til kamera etter flere forsøk");
+        }
+        
+        cameraStream = stream;
+        console.log("Kameratilgang oppnådd:", stream);
         
         // Tilkoble video til strøm
         videoElement.srcObject = stream;
         
-        // Forsøk å starte avspillingen manuelt
-        try {
-            await videoElement.play();
-            console.log("Video avspilling startet");
-        } catch (e) {
-            console.warn("Kunne ikke starte video manuelt:", e);
-        }
+        // Vis kamerabilde
+        videoElement.style.display = 'block';
+        videoElement.style.visibility = 'visible';
+        videoElement.style.opacity = '1';
         
-        // Spesifikk håndtering for iOS-enheter
-        let keepAliveInterval;
-        if (isIOS) {
-            // Periodisk sjekk for å sikre at video fortsatt spiller på iOS
-            keepAliveInterval = setInterval(function() {
-                if (videoElement && videoElement.paused && cameraStream && cameraStream.active) {
-                    console.log("iOS video pauset - prøver å starte på nytt");
-                    videoElement.play().catch(e => console.log("Kunne ikke starte video igjen:", e));
-                }
-            }, 1000);
+        // Vent på at videoen er klar og start avspilling
+        const videoReady = new Promise((resolve, reject) => {
+            const timeout = setTimeout(() => {
+                reject(new Error("Timeout waiting for video to load"));
+            }, 5000);
             
-            // Håndter orientering for iOS
-            window.addEventListener('orientationchange', function() {
-                // Gi litt tid til at orienteringsendringen skal fullføres
-                setTimeout(function() {
-                    if (videoElement && videoElement.style) {
-                        // Trigger reflow
-                        videoElement.style.display = 'none';
-                        // Force reflow
-                        void videoElement.offsetHeight;
-                        videoElement.style.display = 'block';
-                    }
-                }, 500);
-            });
-        }
+            videoElement.onloadedmetadata = () => {
+                clearTimeout(timeout);
+                videoElement.play()
+                    .then(() => {
+                        console.log("Video avspilling startet");
+                        resolve();
+                    })
+                    .catch(err => {
+                        console.warn("Kunne ikke starte video automatisk:", err);
+                        // På iOS må vi kanskje vente på brukerinteraksjon
+                        if (isIOS) {
+                            resolve(); // Fortsett likevel
+                        } else {
+                            reject(err);
+                        }
+                    });
+            };
+            
+            videoElement.onerror = (err) => {
+                clearTimeout(timeout);
+                reject(new Error(`Video error: ${err}`));
+            };
+        });
         
-        // Sett opp canvas
-        canvasElement.width = 640;
-        canvasElement.height = 480;
-        canvasElement.style.position = 'absolute';
-        canvasElement.style.top = '0';
-        canvasElement.style.left = '0';
-        canvasElement.style.width = '100%';
-        canvasElement.style.height = '100%';
-        canvasElement.style.zIndex = '2';
-        canvasElement.style.backgroundColor = 'transparent';
+        try {
+            await videoReady;
+        } catch (err) {
+            console.warn("Video ikke klar, men fortsetter likevel:", err);
+        }
         
         // Last Quagga hvis nødvendig
         if (typeof Quagga === 'undefined') {
@@ -512,14 +523,19 @@ async function startCameraScanning(cameraId = null, options = {}) {
             await loadQuaggaScript();
         }
         
-        // Initialiser Quagga
+        // Initialiser Quagga med optimaliserte innstillinger
         console.log("Initialiserer Quagga...");
         Quagga.init({
             inputStream: {
                 name: "Live",
                 type: "LiveStream",
                 target: videoElement,
-                constraints: { width: 640, height: 480 },
+                constraints: {
+                    width: { min: 640 },
+                    height: { min: 480 },
+                    aspectRatio: { min: 1, max: 2 },
+                    facingMode: "environment"
+                },
                 area: { 
                     top: "20%",    
                     right: "20%",
@@ -531,16 +547,24 @@ async function startCameraScanning(cameraId = null, options = {}) {
                 patchSize: "medium",
                 halfSample: true
             },
-            numOfWorkers: isIOS ? 1 : 2, // Reduser workers på iOS for bedre ytelse
+            numOfWorkers: isIOS ? 1 : navigator.hardwareConcurrency > 4 ? 4 : 2,
+            frequency: 10,
             decoder: {
-                readers: ["ean_reader", "ean_8_reader", "code_128_reader", "code_39_reader"]
+                readers: [
+                    "ean_reader",
+                    "ean_8_reader",
+                    "code_128_reader",
+                    "code_39_reader",
+                    "code_93_reader",
+                    "upc_reader",
+                    "upc_e_reader"
+                ],
+                multiple: false
             },
             locate: true
         }, function(err) {
             if (err) {
                 console.error("Quagga initialisering feilet:", err);
-                // Rydd opp
-                if (keepAliveInterval) clearInterval(keepAliveInterval);
                 return;
             }
             
