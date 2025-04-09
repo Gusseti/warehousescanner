@@ -5,7 +5,6 @@ let bluetoothDevice = null;
 let isBluetoothConnected = false;
 let cameraStream = null;
 let isScanning = false;
-let scannerIsPaused = false; // Nå definert
 let currentCameraIndex = 0;
 let availableCameras = [];
 
@@ -27,8 +26,6 @@ let scannerStatusCallback = null;
  * @returns {Promise} Løftebasert resultat av tilkoblingsforsøket
  */
 async function connectToBluetoothScanner() {
-    // Implementering uendret
-    // (Bluetooth-funksjonalitet beholdes som den er)
     if (!navigator.bluetooth) {
         throw new Error('Bluetooth støttes ikke i denne nettleseren. Vennligst bruk Chrome eller Edge.');
     }
@@ -96,210 +93,12 @@ function handleBluetoothScannerData(event) {
     const textDecoder = new TextDecoder('utf-8');
     const barcode = textDecoder.decode(value).trim();
     
-    if (barcode && onScanCallback) {
-        onScanCallback(barcode);
+    if (barcode) {
+        processScannedBarcode(barcode);
     }
 }
 
 // ========== KAMERA SKANNER FUNKSJONALITET ==========
-
-/**
- * Logger kamera-informasjon for debugging
- * @param {MediaStream} stream - Kamerastrøm
- */
-function logCameraInfo(stream) {
-    console.log("======= KAMERAINFORMASJON =======");
-    console.log("Kamerastrøm aktiv:", stream.active);
-    console.log("Video-spor:", stream.getVideoTracks().length);
-    
-    const videoTrack = stream.getVideoTracks()[0];
-    if (videoTrack) {
-        console.log("Spor-status:", videoTrack.enabled ? "Aktivert" : "Deaktivert");
-        console.log("Spor-ID:", videoTrack.id);
-        console.log("Sporets begrensninger:", videoTrack.getConstraints());
-        console.log("Sporets innstillinger:", videoTrack.getSettings());
-        
-        // Vis alle track-capabilities
-        try {
-            console.log("Sporets capabilities:", videoTrack.getCapabilities());
-        } catch (e) {
-            console.log("Kunne ikke hente capabilities:", e);
-        }
-    }
-    console.log("================================");
-}
-
-/**
- * Sjekker og viser tilgjengelige kameraer
- */
-async function checkAvailableCameras() {
-    try {
-        const devices = await navigator.mediaDevices.enumerateDevices();
-        const videoDevices = devices.filter(device => device.kind === 'videoinput');
-        
-        console.log("Tilgjengelige kameraer:", videoDevices.length);
-        videoDevices.forEach((device, index) => {
-            console.log(`Kamera ${index + 1}: ${device.label || 'Ukjent kamera'} (ID: ${device.deviceId})`);
-        });
-        
-        return videoDevices;
-    } catch (error) {
-        console.error("Feil ved enumerering av enheter:", error);
-        return [];
-    }
-}
-
-/**
- * Sjekker om kamera er tilgjengelig og har tillatelse
- */
-async function checkCameraPermission() {
-    try {
-        // Forsøk å få en enkel kamerastrøm for å sjekke tillatelse
-        const stream = await navigator.mediaDevices.getUserMedia({ 
-            video: true, 
-            audio: false 
-        });
-        
-        // Stopp strømmen med en gang - vi gjør dette bare for å sjekke tillatelse
-        stream.getTracks().forEach(track => track.stop());
-        
-        return true;
-    } catch (error) {
-        console.error("Kameratillatelse avslått eller ikke tilgjengelig:", error);
-        return false;
-    }
-}
-
-// Rengjør og tilbakestiller kamera-ressurser
-function cleanupCamera() {
-  // Stopp eventuelle aktive kamerastrømmer
-  if (cameraStream) {
-    try {
-      cameraStream.getTracks().forEach(track => {
-        if (track.readyState === 'live') {
-          track.stop();
-        }
-      });
-    } catch (e) {
-      console.error("Feil ved stopp av kamerastrøm:", e);
-    }
-    cameraStream = null;
-  }
- 
-  // Tilbakestill video-elementet
-  if (videoElement) {
-    try {
-      videoElement.srcObject = null;
-      videoElement.onloadedmetadata = null;
-      videoElement.onloadeddata = null;
-      videoElement.oncanplay = null;
-    } catch (e) {
-      console.error("Feil ved tilbakestilling av video-element:", e);
-    }
-  }
- 
-  // Stopp Quagga hvis det kjører
-  if (typeof Quagga !== 'undefined' && isScanning) {
-    try {
-      Quagga.stop();
-    } catch (e) {
-      console.error("Feil ved stopp av Quagga:", e);
-    }
-  }
- 
-  isScanning = false;
-}
-
-/**
- * Initialiserer kamera-debugging
- */
-async function initCameraWithDebug() {
-    console.log("Starter kamera-initialisering med debugging...");
-    
-    // Sjekk om kamera-API er tilgjengelig
-    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-        console.error("getUserMedia API ikke støttet av denne nettleseren");
-        return false;
-    }
-    
-    // Sjekk kameratillatelser
-    const hasPermission = await checkCameraPermission();
-    if (!hasPermission) {
-        console.error("Kameratillatelse mangler");
-        return false;
-    }
-    
-    // List opp tilgjengelige kameraer
-    const cameras = await checkAvailableCameras();
-    if (cameras.length === 0) {
-        console.warn("Ingen kameraer funnet!");
-    }
-    
-    return true;
-}
-
-/**
- * Bytter mellom tilgjengelige kameraer
- */
-async function switchCamera() {
-    if (isScanning) {
-        console.log("Bytter kamera...");
-        
-        // Stopp nåværende skanning
-        stopCameraScanning();
-        
-        // Vent litt for å være sikker på at kameraet er stoppet
-        await new Promise(resolve => setTimeout(resolve, 500));
-        
-        // For iOS-enheter
-        if (/iPad|iPhone|iPod/.test(navigator.userAgent)) {
-            console.log("iOS-enhet oppdaget, bruker direkte facingMode bytting...");
-            
-            // Hvis vi allerede bruker environment, bytt til user, og omvendt
-            const currentFacingMode = currentCameraIndex === 0 ? "user" : "environment";
-            const newFacingMode = currentFacingMode === "user" ? "environment" : "user";
-            
-            console.log(`Bytter fra ${currentFacingMode} til ${newFacingMode}`);
-            
-            // Oppdater gjeldende kameraindeks
-            currentCameraIndex = currentCameraIndex === 0 ? 1 : 0;
-            
-            // Start skanning med spesifikk facingMode for iOS
-            try {
-                await startCameraScanning(null, { facingMode: { exact: newFacingMode } });
-            } catch (error) {
-                console.error(`Kunne ikke bytte til ${newFacingMode} kamera:`, error);
-                
-                // Fallback til standard kamera hvis det spesifikke kameraet ikke kunne brukes
-                console.log("Prøver fallback til standard kamera...");
-                await startCameraScanning();
-            }
-            return;
-        }
-        
-        // For andre enheter, bruk den originale logikken
-        if (availableCameras.length === 0) {
-            availableCameras = await checkAvailableCameras();
-        }
-        
-        // Gå til neste kamera i listen
-        if (availableCameras.length > 1) {
-            currentCameraIndex = (currentCameraIndex + 1) % availableCameras.length;
-            console.log(`Bytter til kamera ${currentCameraIndex + 1}: ${availableCameras[currentCameraIndex].label || 'Ukjent kamera'}`);
-            
-            // Start skanning med nytt kamera
-            startCameraScanning(availableCameras[currentCameraIndex].deviceId);
-        } else {
-            console.log("Bare ett kamera tilgjengelig, fortsetter med samme kamera");
-            startCameraScanning();
-        }
-    } else {
-        console.log("Skanning er ikke aktiv, starter kamera først");
-        startCameraScanning();
-    }
-}
-
-// scanner.js - Forbedret initCameraScanner funksjon
 
 /**
  * Initialiserer kameraskanneren
@@ -314,9 +113,6 @@ function initCameraScanner(videoEl, canvasEl, overlayEl, callback, statusCallbac
     videoElement = videoEl;
     canvasElement = canvasEl;
     scannerOverlay = overlayEl;
-    
-    // Viktig: Lagre callbacks
-    console.log("Registrerer skann-callback:", typeof callback);
     onScanCallback = callback;
     scannerStatusCallback = statusCallback;
     
@@ -326,14 +122,11 @@ function initCameraScanner(videoEl, canvasEl, overlayEl, callback, statusCallbac
         console.log(`Fant ${cameras.length} kameraer`);
     });
     
-    // Sett opp event listeners for bytt-kamera-knapper hvis de finnes
+    // Sett opp event listeners for bytt-kamera-knapper
     const switchCameraButtons = document.querySelectorAll('.scanner-switch-btn');
     switchCameraButtons.forEach(button => {
         button.addEventListener('click', switchCamera);
     });
-    
-    // Sikre at vi starter i riktig tilstand
-    scannerIsPaused = false;
 }
 
 /**
@@ -450,61 +243,96 @@ async function startCameraScanning(cameraId = null, options = {}) {
             constraints.video.facingMode = { ideal: "environment" };
         }
         
-        // Start kameraet
-        console.log("Ber om kameratilgang med constraints:", JSON.stringify(constraints));
-        const stream = await navigator.mediaDevices.getUserMedia(constraints);
-        cameraStream = stream;
+        // Start kameraet med retries for bedre pålitelighet
+        let retryCount = 0;
+        const maxRetries = 3;
+        let stream = null;
         
-        // Logg kamerainformasjon
-        logCameraInfo(stream);
+        while (retryCount < maxRetries && !stream) {
+            try {
+                console.log(`Forsøk ${retryCount + 1}/${maxRetries} for å få kameratilgang med constraints:`, 
+                    JSON.stringify(constraints));
+                stream = await navigator.mediaDevices.getUserMedia(constraints);
+                break;
+            } catch (error) {
+                console.warn(`Forsøk ${retryCount + a} feilet:`, error);
+                retryCount++;
+                
+                // Prøv med en annen konfigurasjon ved feil
+                if (retryCount < maxRetries) {
+                    if (constraints.video.facingMode) {
+                        // Bytt fra environment til user eller omvendt
+                        const currentMode = 
+                            constraints.video.facingMode.ideal || 
+                            constraints.video.facingMode.exact || 
+                            "environment";
+                            
+                        constraints.video.facingMode = { 
+                            ideal: currentMode === "environment" ? "user" : "environment" 
+                        };
+                        console.log("Bytter kameraretning og prøver igjen");
+                    } else {
+                        // Fjern ekstra begrensninger
+                        constraints.video = { facingMode: { ideal: "environment" }};
+                        console.log("Forenkler kamerabegrensninger og prøver igjen");
+                    }
+                    
+                    // Kort pause før nytt forsøk
+                    await new Promise(resolve => setTimeout(resolve, 500));
+                }
+            }
+        }
+        
+        if (!stream) {
+            throw new Error("Kunne ikke få tilgang til kamera etter flere forsøk");
+        }
+        
+        cameraStream = stream;
+        console.log("Kameratilgang oppnådd:", stream);
         
         // Tilkoble video til strøm
         videoElement.srcObject = stream;
         
-        // Forsøk å starte avspillingen manuelt
-        try {
-            await videoElement.play();
-            console.log("Video avspilling startet");
-        } catch (e) {
-            console.warn("Kunne ikke starte video manuelt:", e);
-        }
+        // Vis kamerabilde
+        videoElement.style.display = 'block';
+        videoElement.style.visibility = 'visible';
+        videoElement.style.opacity = '1';
         
-        // Spesifikk håndtering for iOS-enheter
-        let keepAliveInterval;
-        if (isIOS) {
-            // Periodisk sjekk for å sikre at video fortsatt spiller på iOS
-            keepAliveInterval = setInterval(function() {
-                if (videoElement && videoElement.paused && cameraStream && cameraStream.active) {
-                    console.log("iOS video pauset - prøver å starte på nytt");
-                    videoElement.play().catch(e => console.log("Kunne ikke starte video igjen:", e));
-                }
-            }, 1000);
+        // Vent på at videoen er klar og start avspilling
+        const videoReady = new Promise((resolve, reject) => {
+            const timeout = setTimeout(() => {
+                reject(new Error("Timeout waiting for video to load"));
+            }, 5000);
             
-            // Håndter orientering for iOS
-            window.addEventListener('orientationchange', function() {
-                // Gi litt tid til at orienteringsendringen skal fullføres
-                setTimeout(function() {
-                    if (videoElement && videoElement.style) {
-                        // Trigger reflow
-                        videoElement.style.display = 'none';
-                        // Force reflow
-                        void videoElement.offsetHeight;
-                        videoElement.style.display = 'block';
-                    }
-                }, 500);
-            });
-        }
+            videoElement.onloadedmetadata = () => {
+                clearTimeout(timeout);
+                videoElement.play()
+                    .then(() => {
+                        console.log("Video avspilling startet");
+                        resolve();
+                    })
+                    .catch(err => {
+                        console.warn("Kunne ikke starte video automatisk:", err);
+                        // På iOS må vi kanskje vente på brukerinteraksjon
+                        if (isIOS) {
+                            resolve(); // Fortsett likevel
+                        } else {
+                            reject(err);
+                        }
+                    });
+            };
+            
+            videoElement.onerror = (err) => {
+                clearTimeout(timeout);
+                reject(new Error(`Video error: ${err}`));
+            };
+        });
         
-        // Sett opp canvas
-        canvasElement.width = 640;
-        canvasElement.height = 480;
-        canvasElement.style.position = 'absolute';
-        canvasElement.style.top = '0';
-        canvasElement.style.left = '0';
-        canvasElement.style.width = '100%';
-        canvasElement.style.height = '100%';
-        canvasElement.style.zIndex = '2';
-        canvasElement.style.backgroundColor = 'transparent';
+        try {
+            await videoReady;
+        } catch (err) {
+            console.warn("Video ikke klar, men fortsetter likevel:", err);
+        }
         
         // Last Quagga hvis nødvendig
         if (typeof Quagga === 'undefined') {
@@ -574,9 +402,6 @@ async function startCameraScanning(cameraId = null, options = {}) {
     }
 }
 
-/**
- * Stopper kameraskanning
- */
 /**
  * Stopper kameraskanning
  */
@@ -655,143 +480,108 @@ function stopCameraScanning() {
 }
 
 /**
- * Validerer at en strekkode er gyldig og ikke bare et tilfeldig tall
- * @param {string} barcode - Strekkode som skal valideres
- * @returns {boolean} Om strekkoden er gyldig
+ * Bytter mellom tilgjengelige kameraer
  */
-function validateBarcode(barcode) {
-    // Fjern eventuelle blanke tegn
-    barcode = barcode.trim();
-    
-    // Sjekk lengden - de fleste strekkoder er minst 8 tegn
-    if (barcode.length < 8) {
-        return false;
-    }
-    
-    // Sjekk om strekkoden inneholder bare tall
-    // EAN-13, UPC og de fleste vanlige strekkodeformater er numeriske
-    const isNumeric = /^\d+$/.test(barcode);
-    
-    // For numeriske strekkoder, sjekk vanlige formater
-    if (isNumeric) {
-        // Kjente strekkodeformater
-        if (barcode.length === 8) return true;  // EAN-8
-        if (barcode.length === 12) return true; // UPC-A
-        if (barcode.length === 13) return true; // EAN-13
-        if (barcode.length === 14) return true; // GTIN-14
+async function switchCamera() {
+    if (isScanning) {
+        console.log("Bytter kamera...");
         
-        // Hvis det er et annet antall siffer, sjekk sjekksiffer for EAN-13
-        // Dette er en enkel validering som ikke garanterer at det er en strekkode,
-        // men gjør det mindre sannsynlig at tilfeldige tall blir tolket som strekkoder
-        if (barcode.length === 13) {
+        // Stopp nåværende skanning
+        stopCameraScanning();
+        
+        // Vent litt for å være sikker på at kameraet er stoppet
+        await new Promise(resolve => setTimeout(resolve, 500));
+        
+        // For iOS-enheter
+        if (/iPad|iPhone|iPod/.test(navigator.userAgent)) {
+            console.log("iOS-enhet oppdaget, bruker direkte facingMode bytting...");
+            
+            // Hvis vi allerede bruker environment, bytt til user, og omvendt
+            const currentFacingMode = currentCameraIndex === 0 ? "user" : "environment";
+            const newFacingMode = currentFacingMode === "user" ? "environment" : "user";
+            
+            console.log(`Bytter fra ${currentFacingMode} til ${newFacingMode}`);
+            
+            // Oppdater gjeldende kameraindeks
+            currentCameraIndex = currentCameraIndex === 0 ? 1 : 0;
+            
+            // Start skanning med spesifikk facingMode for iOS
             try {
-                // EAN-13 sjekksum validering
-                let sum = 0;
-                for (let i = 0; i < 12; i++) {
-                    sum += parseInt(barcode[i]) * (i % 2 === 0 ? 1 : 3);
-                }
-                const checkDigit = (10 - (sum % 10)) % 10;
-                return parseInt(barcode[12]) === checkDigit;
-            } catch (e) {
-                console.error("Feil ved validering av strekkode:", e);
-                return false;
+                await startCameraScanning(null, { facingMode: { exact: newFacingMode } });
+            } catch (error) {
+                console.error(`Kunne ikke bytte til ${newFacingMode} kamera:`, error);
+                
+                // Fallback til standard kamera hvis det spesifikke kameraet ikke kunne brukes
+                console.log("Prøver fallback til standard kamera...");
+                await startCameraScanning();
             }
+            return;
         }
-    }
-    
-    // For alfanumeriske strekkoder (Code 39, Code 128, etc.)
-    // Sjekk etter mønstre som er typiske for disse formatene
-    if (/^[A-Z0-9\-\.$/+%]+$/.test(barcode)) {
-        return true;
-    }
-    
-    // Sjekk om strekkoden matcher formatet til dine egne strekkoder
-    // For eksempel: hvis dine interne strekkoder starter med et bestemt prefix
-    if (appState && appState.barcodeMapping && barcode in appState.barcodeMapping) {
-        return true;
-    }
-    
-    // Sjekk om strekkoden matcher formatet for noen kjente varer
-    // For eksempel: hvis varenumrene har et bestemt format
-    if (/^\d{3}-[A-Z0-9]+-?[A-Z0-9]*$/.test(barcode)) {
-        return true;
-    }
-    
-    // Hvis strekkoden ikke passerer noen av disse testene, anta at det er en feil skanning
-    return false;
-}
-
-/**
- * Spiller en lyd for å indikere vellykket skanning
- */
-function playBeepSound() {
-    try {
-        // Kort beep-lyd generert med oscillator
-        const audioContext = new (window.AudioContext || window.webkitAudioContext)();
-        const oscillator = audioContext.createOscillator();
-        const gainNode = audioContext.createGain();
         
-        oscillator.type = 'sine';
-        oscillator.frequency.value = 1000;
-        gainNode.gain.value = 0.1;
+        // For andre enheter, bruk den originale logikken
+        if (availableCameras.length === 0) {
+            availableCameras = await checkAvailableCameras();
+        }
         
-        oscillator.connect(gainNode);
-        gainNode.connect(audioContext.destination);
-        
-        oscillator.start();
-        setTimeout(() => {
-            oscillator.stop();
-        }, 200);
-    } catch (error) {
-        console.error("Kunne ikke spille lyd:", error);
+        // Gå til neste kamera i listen
+        if (availableCameras.length > 1) {
+            currentCameraIndex = (currentCameraIndex + 1) % availableCameras.length;
+            console.log(`Bytter til kamera ${currentCameraIndex + 1}: ${availableCameras[currentCameraIndex].label || 'Ukjent kamera'}`);
+            
+            // Start skanning med nytt kamera
+            startCameraScanning(availableCameras[currentCameraIndex].deviceId);
+        } else {
+            console.log("Bare ett kamera tilgjengelig, fortsetter med samme kamera");
+            startCameraScanning();
+        }
+    } else {
+        console.log("Skanning er ikke aktiv, starter kamera først");
+        startCameraScanning();
     }
 }
 
 /**
- * Tegner en suksess-boks rundt en identifisert strekkode
- * @param {CanvasRenderingContext2D} ctx - Canvas-kontekst
- * @param {Array} box - Koordinater for strekkoden
+ * Håndterer resultater fra kameraskanning
+ * @param {Object} result - Skanningsresultat-objekt fra Quagga
  */
-function drawSuccessBox(ctx, box) {
-    try {
-        if (!ctx || !box || box.length < 4) return;
+function handleCameraScanResult(result) {
+    if (result && result.codeResult && result.codeResult.code) {
+        const barcode = result.codeResult.code;
         
-        ctx.clearRect(0, 0, canvasElement.width, canvasElement.height);
-        
-        // Tegn fylt grønn boks med gjennomskinnelighet
-        ctx.fillStyle = 'rgba(76, 175, 80, 0.3)';
-        ctx.beginPath();
-        ctx.moveTo(box[0][0], box[0][1]);
-        for (let i = 1; i < box.length; i++) {
-            ctx.lineTo(box[i][0], box[i][1]);
+        // Valider at dette er en strekkode og ikke bare et tall
+        if (validateBarcode(barcode)) {
+            console.log("Strekkode funnet:", barcode);
+            
+            // Spill lyd for å indikere at strekkode er funnet
+            playSuccessSound();
+            
+            // Marker strekkoden på canvas
+            if (canvasElement && result.box) {
+                const ctx = canvasElement.getContext('2d');
+                drawSuccessBox(ctx, result.box);
+            }
+            
+            // Send resultatet til sentral prosessering
+            processScannedBarcode(barcode);
+            
+            // Stopp skanning midlertidig for å unngå gjentatte skanninger av samme kode
+            // Starter igjen etter 2 sekunder
+            if (typeof Quagga !== 'undefined') {
+                Quagga.stop();
+            }
+            isScanning = false;
+            
+            setTimeout(() => {
+                if (cameraStream && cameraStream.active) {
+                    if (typeof Quagga !== 'undefined') {
+                        Quagga.start();
+                    }
+                    isScanning = true;
+                }
+            }, 2000);
+        } else {
+            console.log("Ugyldig strekkode ignorert:", barcode);
         }
-        ctx.closePath();
-        ctx.fill();
-        
-        // Tegn kant
-        ctx.strokeStyle = 'rgb(76, 175, 80)';
-        ctx.lineWidth = 3;
-        ctx.beginPath();
-        ctx.moveTo(box[0][0], box[0][1]);
-        for (let i = 1; i < box.length; i++) {
-            ctx.lineTo(box[i][0], box[i][1]);
-        }
-        ctx.closePath();
-        ctx.stroke();
-        
-        // Tegn "checkmark"
-        const centerX = (box[0][0] + box[2][0]) / 2;
-        const centerY = (box[0][1] + box[2][1]) / 2;
-        
-        ctx.strokeStyle = 'white';
-        ctx.lineWidth = 4;
-        ctx.beginPath();
-        ctx.moveTo(centerX - 20, centerY);
-        ctx.lineTo(centerX - 5, centerY + 15);
-        ctx.lineTo(centerX + 20, centerY - 15);
-        ctx.stroke();
-    } catch (error) {
-        console.error("Feil ved tegning av suksess-boks:", error);
     }
 }
 
@@ -861,6 +651,89 @@ function handleProcessedResult(result) {
 }
 
 /**
+ * Spiller en lyd for å gi tilbakemelding ved vellykket skanning
+ */
+function playSuccessSound() {
+    try {
+        // Forsøk å bruke AudioContext for mest pålitelig lyd på tvers av enheter
+        const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        const oscillator = audioContext.createOscillator();
+        const gainNode = audioContext.createGain();
+        
+        oscillator.type = 'sine';
+        oscillator.frequency.value = 1800; // Høyere frekvens for å skille seg ut
+        gainNode.gain.value = 0.1;
+        
+        oscillator.connect(gainNode);
+        gainNode.connect(audioContext.destination);
+        
+        oscillator.start();
+        setTimeout(() => {
+            oscillator.stop();
+        }, 150);
+    } catch (error) {
+        console.error("Kunne ikke spille lyd:", error);
+        
+        // Fallback til å vibrere enheten hvis tilgjengelig
+        try {
+            if (navigator.vibrate) {
+                navigator.vibrate(100);
+            }
+        } catch (e) {
+            console.log("Kunne ikke vibrere:", e);
+        }
+    }
+}
+
+/**
+ * Tegner en suksess-boks rundt en identifisert strekkode
+ * @param {CanvasRenderingContext2D} ctx - Canvas-kontekst
+ * @param {Array} box - Koordinater for strekkoden
+ */
+function drawSuccessBox(ctx, box) {
+    try {
+        if (!ctx || !box || box.length < 4) return;
+        
+        ctx.clearRect(0, 0, canvasElement.width, canvasElement.height);
+        
+        // Tegn fylt grønn boks med gjennomskinnelighet
+        ctx.fillStyle = 'rgba(76, 175, 80, 0.3)';
+        ctx.beginPath();
+        ctx.moveTo(box[0][0], box[0][1]);
+        for (let i = 1; i < box.length; i++) {
+            ctx.lineTo(box[i][0], box[i][1]);
+        }
+        ctx.closePath();
+        ctx.fill();
+        
+        // Tegn kant
+        ctx.strokeStyle = 'rgb(76, 175, 80)';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.moveTo(box[0][0], box[0][1]);
+        for (let i = 1; i < box.length; i++) {
+            ctx.lineTo(box[i][0], box[i][1]);
+        }
+        ctx.closePath();
+        ctx.stroke();
+        
+        // Tegn "checkmark"
+        const centerX = (box[0][0] + box[2][0]) / 2;
+        const centerY = (box[0][1] + box[2][1]) / 2;
+        
+        ctx.strokeStyle = 'white';
+        ctx.lineWidth = 4;
+        ctx.beginPath();
+        ctx.moveTo(centerX - 20, centerY);
+        ctx.lineTo(centerX - 5, centerY + 15);
+        ctx.lineTo(centerX + 20, centerY - 15);
+        ctx.stroke();
+    } catch (error) {
+        console.error("Feil ved tegning av suksess-boks:", error);
+    }
+}
+
+/**
  * Laster dynamisk inn Quagga.js hvis det ikke allerede er lastet
  * @returns {Promise} Løftebasert resultat av skriptlasting
  */
@@ -891,116 +764,147 @@ function loadQuaggaScript() {
 }
 
 /**
- * Viser "skannet" animasjon over kameravisningen
+ * Sjekker og viser tilgjengelige kameraer
  */
-function showScanSuccessAnimation() {
-    // Sjekk om vi har overlay-elementet
-    if (!scannerOverlay) return;
-    
-    // Legg til suksess-indikator
-    const successIndicator = document.createElement('div');
-    successIndicator.className = 'scan-success-indicator';
-    successIndicator.innerHTML = '<i class="fas fa-check"></i>';
-    successIndicator.style.cssText = `
-        position: absolute;
-        top: 50%;
-        left: 50%;
-        transform: translate(-50%, -50%);
-        background-color: rgba(76, 175, 80, 0.8);
-        color: white;
-        font-size: 2rem;
-        width: 80px;
-        height: 80px;
-        border-radius: 50%;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        z-index: 10;
-        animation: pulse-success 1s ease-out;
-    `;
-    
-    // Legg til i overlay
-    scannerOverlay.appendChild(successIndicator);
-    
-    // Fjern indikatoren etter animasjonen
-    setTimeout(() => {
-        if (successIndicator.parentNode) {
-            successIndicator.parentNode.removeChild(successIndicator);
-        }
-    }, 1000);
+async function checkAvailableCameras() {
+    try {
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        const videoDevices = devices.filter(device => device.kind === 'videoinput');
+        
+        console.log("Tilgjengelige kameraer:", videoDevices.length);
+        videoDevices.forEach((device, index) => {
+            console.log(`Kamera ${index + 1}: ${device.label || 'Ukjent kamera'} (ID: ${device.deviceId})`);
+        });
+        
+        return videoDevices;
+    } catch (error) {
+        console.error("Feil ved enumerering av enheter:", error);
+        return [];
+    }
 }
 
 /**
- * Håndterer resultater fra kameraskanning
- * @param {Object} result - Skanningsresultat-objekt fra Quagga
+ * Validerer at en strekkode er gyldig med forbedret logikk
+ * @param {string} barcode - Strekkode som skal valideres
+ * @returns {boolean} Om strekkoden er gyldig
  */
-function handleCameraScanResult(result) {
-    if (result && result.codeResult && result.codeResult.code) {
-        const barcode = result.codeResult.code;
-        
-        // Valider at dette er en strekkode og ikke bare et tall
-        if (validateBarcode(barcode)) {
-            console.log("Strekkode funnet:", barcode);
-            
-            // Spill lyd for å indikere at strekkode er funnet
-            playBeepSound();
-            
-            // Marker strekkoden på canvas
-            if (canvasElement && result.box) {
-                const ctx = canvasElement.getContext('2d');
-                drawSuccessBox(ctx, result.box);
+function validateBarcode(barcode) {
+    // Fjern eventuelle blanke tegn og kontroller for nullverdier
+    if (!barcode) return false;
+    
+    barcode = barcode.trim();
+    
+    // Hvis strekkoden er tom etter trim, er den ikke gyldig
+    if (barcode === '') return false;
+    
+    // Enkel validering: har strekkoden en minimumlengde?
+    // De fleste strekkoder er minst 8 tegn, men noen interne koder kan være kortere
+    if (barcode.length < 3) {
+        return false;
+    }
+    
+    // Sjekk om strekkoden er i vår kjente strekkodeoversikt
+    if (appState.barcodeMapping && barcode in appState.barcodeMapping) {
+        return true;
+    }
+    
+    // Sjekk for kjente strekkodeformater
+    const isEAN13 = /^\d{13}$/.test(barcode);
+    const isEAN8 = /^\d{8}$/.test(barcode);
+    const isUPCA = /^\d{12}$/.test(barcode);
+    const isCode128 = /^[A-Z0-9\-\.$/+%]{6,}$/.test(barcode);
+    
+    // Sjekk for interne produktkoder
+    const isInternalCode = /^\d{3}-[A-Z][A-Z0-9]+-?[A-Z0-9]*$/.test(barcode) || // 000-XX-000 format
+                          /^[A-Z]{2}\d{5}$/.test(barcode) ||                    // XX00000 format
+                          /^BP\d{5}$/.test(barcode) ||                          // BP00000 format
+                          /^[A-Z][A-Z0-9]{4,}$/.test(barcode);                 // Andre alfanumeriske koder
+    
+    // Validér EAN-13 sjekksiffer hvis strekkoden er i det formatet
+    if (isEAN13) {
+        try {
+            // EAN-13 sjekksum validering
+            let sum = 0;
+            for (let i = 0; i < 12; i++) {
+                sum += parseInt(barcode[i]) * (i % 2 === 0 ? 1 : 3);
             }
-            
-            // Send resultatet til callback
-            if (onScanCallback) {
-                onScanCallback(barcode);
-            }
-            
-            // Vis suksessanimering - fjerner den automatisk etter 1.5 sekunder
-            if (scannerOverlay) {
-                const successIndicator = document.createElement('div');
-                successIndicator.style.cssText = `
-                    position: absolute;
-                    top: 50%;
-                    left: 50%;
-                    transform: translate(-50%, -50%);
-                    background-color: rgba(76, 175, 80, 0.8);
-                    color: white;
-                    font-size: 2rem;
-                    width: 80px;
-                    height: 80px;
-                    border-radius: 50%;
-                    display: flex;
-                    align-items: center;
-                    justify-content: center;
-                    z-index: 10;
-                `;
-                successIndicator.innerHTML = '<i class="fas fa-check"></i>';
-                scannerOverlay.appendChild(successIndicator);
-                
-                // Fjern indikatoren etter kort tid
-                setTimeout(() => {
-                    if (successIndicator.parentNode) {
-                        successIndicator.parentNode.removeChild(successIndicator);
-                    }
-                }, 1500);
-            }
-            
-            // Stopp Quagga i 1.5 sekunder, så starter den igjen
-            if (typeof Quagga !== 'undefined') {
-                Quagga.stop();
-                
-                setTimeout(() => {
-                    if (cameraStream && cameraStream.active) {
-                        Quagga.start();
-                        console.log("Skanner restartet etter pause");
-                    }
-                }, 1500);
-            }
-        } else {
-            console.log("Ugyldig strekkode ignorert:", barcode);
+            const checkDigit = (10 - (sum % 10)) % 10;
+            return parseInt(barcode[12]) === checkDigit;
+        } catch (e) {
+            console.error("Feil ved validering av EAN-13 strekkode:", e);
+            return false;
         }
     }
+    
+    // Hvis strekkoden har et kjent format, anta at den er gyldig
+    return isEAN8 || isUPCA || isCode128 || isInternalCode;
+}
+
+/**
+ * Sentralisert funksjon for håndtering av skannede strekkoder
+ * @param {string} barcode - Skannede strekkode
+ */
+function processScannedBarcode(barcode) {
+    // Sjekk hvilken modul som er aktiv
+    if (!appState.currentModule) {
+        showToast('Ingen aktiv modul. Velg plukk, mottak eller retur først.', 'warning');
+        return;
+    }
+    
+    // Valider og håndter strekkoden basert på aktiv modul
+    if (appState.currentModule === 'picking') {
+        handleScan(barcode, 'pick');
+    } else if (appState.currentModule === 'receiving') {
+        handleScan(barcode, 'receive');
+    } else if (appState.currentModule === 'returns') {
+        handleScan(barcode, 'return');
+    }
+}
+
+/**
+ * Håndterer skanning for alle moduler med forbedret strekkodevalidering
+ * @param {string} barcode - Skannet strekkode
+ * @param {string} type - Type modul (pick, receive, return)
+ */
+function handleScan(barcode, type) {
+    if (!barcode) return;
+    
+    // Valider strekkoden før videre prosessering
+    if (!validateBarcode(barcode)) {
+        console.log(`Ugyldig strekkode ignorert: ${barcode}`);
+        showToast(`Ukjent strekkodeformat: ${barcode}`, 'warning');
+        return;
+    }
+    
+    console.log(`Håndterer strekkode i ${type}-modulen: ${barcode}`);
+    
+    // Tøm input etter skanning
+    const manualScanInput = document.getElementById(`${type}ManualScan`);
+    if (manualScanInput) {
+        manualScanInput.value = '';
+    }
+    
+    // Sjekk om strekkoden finnes i barcode mapping
+    let itemId = barcode;
+    if (appState.barcodeMapping[barcode]) {
+        itemId = appState.barcodeMapping[barcode];
+        console.log(`Strekkode ${barcode} mappet til varenummer ${itemId}`);
+    }
+    
+    // Send til korrekt håndtering basert på type
+    if (type === 'pick') {
+        handlePickScan(itemId);
+    } else if (type === 'receive') {
+        handleReceiveScan(itemId);
+    } else if (type === 'return') {
+        // For retur, bruk standard antall 1 hvis ikke annet er spesifisert
+        const quantityEl = document.getElementById('returnQuantity');
+        const quantity = quantityEl ? parseInt(quantityEl.value) || 1 : 1;
+        handleReturnScan(itemId, quantity);
+    }
+    
+    // Spill lyd for å gi tilbakemelding om vellykket skanning
+    playSuccessSound();
 }
 
 // Eksporter funksjoner
@@ -1011,5 +915,6 @@ export {
     stopCameraScanning,
     switchCamera,
     isBluetoothConnected,
-    isScanning
+    isScanning,
+    processScannedBarcode
 };
