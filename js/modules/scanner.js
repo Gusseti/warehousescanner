@@ -798,7 +798,7 @@ function processScannedBarcode(barcode) {
     }
 }
 /**
- * Håndterer skanning for alle moduler med forbedret strekkodevalidering
+ * Håndterer skanning for alle moduler
  * @param {string} barcode - Skannet strekkode
  * @param {string} type - Type modul (pick, receive, return)
  */
@@ -819,40 +819,22 @@ function handleScan(barcode, type) {
     
     // Sjekk om strekkoden finnes i barcode mapping
     let itemId = barcode;
-    if (appState.barcodeMapping[barcode]) {
+    if (appState.barcodeMapping && appState.barcodeMapping[barcode]) {
         itemId = appState.barcodeMapping[barcode];
     }
     
-    // Send til korrekt håndtering basert på type
-    try {
-        switch (type) {
-            case 'pick':
-                // Bruk onScanCallback i stedet for direkte kall til handlePickScan
-                if (typeof onScanCallback === 'function') {
-                    onScanCallback(itemId);
-                }
-                break;
-            case 'receive':
-                // For receiving-modulen
-                if (typeof onScanCallback === 'function') {
-                    onScanCallback(itemId);
-                }
-                break;
-            case 'return':
-                const quantityEl = document.getElementById('returnQuantity');
-                const quantity = quantityEl ? parseInt(quantityEl.value) || 1 : 1;
-                
-                // For return-modulen
-                if (typeof onScanCallback === 'function') {
-                    onScanCallback(itemId, quantity);
-                }
-                break;
-            default:
-                showToast(`Ukjent modul: ${type}`, 'error');
+    // Bruk den callback-funksjonen som ble registrert ved initialisering
+    if (typeof onScanCallback === 'function') {
+        // For return, send med antall
+        if (type === 'return') {
+            const quantityEl = document.getElementById('returnQuantity');
+            const quantity = quantityEl ? parseInt(quantityEl.value) || 1 : 1;
+            onScanCallback(itemId, quantity);
+        } else {
+            onScanCallback(itemId);
         }
-    } catch (error) {
-        showToast(`Feil ved håndtering av skann: ${error.message}`, 'error');
-        console.error('Skanningshåndteringsfeil:', error);
+    } else {
+        showToast('Ingen skanner-callback funksjon registrert', 'error');
     }
 }
 // Gjør debug-informasjon tilgjengelig globalt
