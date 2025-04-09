@@ -218,7 +218,7 @@ function handleBarcodeJSON(data, fileName) {
 }
 
 /**
- * Importerer data fra PDF-fil
+ * Importerer data fra PDF-fil med forbedret parselogikk
  * @param {File} file - PDF-fil
  * @param {string} type - Type import (pick, receive)
  * @returns {Promise} Løftebasert resultat av importeringen
@@ -283,34 +283,65 @@ export async function importFromPDF(file, type) {
                 const page = await pdf.getPage(i);
                 const textContent = await page.getTextContent();
                 
-                // Konverter tekst-elementer til strenger
-                const textItems = textContent.items.map(item => item.str);
-                const pageText = textItems.join('\n');
+                // Konverter tekst-elementer til strenger og bevar posisjoner
+                const textItems = textContent.items.map(item => ({
+                    text: item.str,
+                    x: item.transform[4],  // x-posisjon
+                    y: item.transform[5],  // y-posisjon
+                    width: item.width,
+                    height: item.height
+                }));
                 
-                // Del opp teksten i linjer
-                const lines = pageText.split('\n')
-                    .map(line => line.trim())
-                    .filter(line => line.length > 0);
+                // Sorter elementer først etter y-posisjon (rad) og deretter etter x-posisjon (kolonne)
+                // Dette gir en bedre representasjon av PDF-strukturen
+                textItems.sort((a, b) => {
+                    // Gruppér elementer i samme "rad" (med en viss margin)
+                    const yThreshold = 5;
+                    if (Math.abs(a.y - b.y) > yThreshold) {
+                        return b.y - a.y; // Reverse y-sort (top to bottom)
+                    }
+                    return a.x - b.x; // Left to right within same row
+                });
                 
-                console.log(`Side ${i}: Hentet ${lines.length} linjer`);
-                allTextLines.push(...lines);
+                // Behold linjeinformasjon for bedre parsing
+                allTextLines.push(...textItems);
+                
+                console.log(`Side ${i}: Hentet ${textItems.length} tekstelementer`);
             } catch (error) {
                 console.error(`Feil ved behandling av side ${i}:`, error);
             }
         }
         
-        console.log(`Ekstrahert totalt ${allTextLines.length} linjer fra PDF-en`);
+        console.log(`Ekstrahert totalt ${allTextLines.length} tekstelementer fra PDF-en`);
         
         if (allTextLines.length === 0) {
             throw new Error('Ingen tekst funnet i PDF-en. Sjekk at PDF-en ikke er skannet bilde eller passordbeskyttet.');
         }
         
-        // Bruk parseProductLinesWithFallback-funksjonen for å identifisere produkter
+        // Prøv ulike parsing-strategier for å identifisere produkter
         console.log('Starter parsing av produktlinjer...');
-        const parsedItems = parseProductLinesFromPDF(allTextLines);
+        
+        // Konverter til tekstlinjer for tradisjonell parsing først
+        const simpleTextLines = allTextLines.map(item => item.text);
+        
+        // Prøv først standard parsing
+        let parsedItems = parseProductLines(simpleTextLines);
+        
+        // Hvis standard parsing ikke fungerer, prøv med posisjonsdataen
+        if (parsedItems.length === 0) {
+            console.log('Standard parsing fant ingen produkter, prøver posisjonell parsing...');
+            parsedItems = parseProductsWithPositions(allTextLines);
+        }
+        
+        // Hvis fortsatt ingen resultater, prøv kompleks parsing
+        if (parsedItems.length === 0) {
+            console.log('Posisjonell parsing fant ingen produkter, prøver kompleks parsing...');
+            parsedItems = parseComplexProductLines(simpleTextLines);
+        }
+        
         console.log(`Identifisert ${parsedItems.length} produkter fra PDF-en`);
         
-        // Legg til de nødvendige feltene basert på type
+        // Tilknytt ekstra data og oppdater state
         let items = [];
         if (type === 'pick') {
             items = parsedItems.map(item => ({
@@ -357,21 +388,207 @@ export async function importFromPDF(file, type) {
 }
 
 /**
- * Parser produktlinjer fra PDF-tekst
- * @param {Array} lines - Tekstlinjer fra PDF
+ * Parser produkter basert på posisjonell informasjon
+ * @param {Array} textItems - Tekstelementer med posisjonsinformasjon
  * @returns {Array} Liste med produkter
  */
-function parseProductLinesFromPDF(lines) {
-    // Prøv først med standard-metoden
-    let products = parseProductLines(lines);
+function parseProductsWithPositions(textItems) {
+    const products = [];
+    const productPatterns = [
+        /^(\d{3}-[A-Z][A-Z0-9]*-\d+)/,  // 000-XX-000 format
+        /^(\d{3}-[A-Z][A-Z0-9]*)/,      // 000-XX format
+        /^([A-Z]{2}\d{5})/,             // XX00000 format
+        /^(BP\d{5})/,                   // BP00000 format
+        /^([A-Z][A-Z0-9]{4,})/          // Andre alfanumeriske koder
+    ];
     
-    // Hvis ingen produkter ble funnet, prøv den alternative metoden
-    if (products.length === 0) {
-        console.log('Standard parsing fant ingen produkter, prøver alternativ metode...');
-        products = parseComplexProductLines(lines);
-    }
+    // Identifiser kolonner basert på x-posisjoner
+    const xPositions = textItems.map(item => item.x);
+    const groupedX = groupSimilarValues(xPositions, 10); // 10 er terskelen for å gruppere x-verdier
+    
+    // Sorter for å få kolonnene fra venstre til høyre
+    const sortedColumns = Object.keys(groupedX).sort((a, b) => parseFloat(a) - parseFloat(b));
+    
+    console.log('Identifiserte kolonner på x-posisjoner:', sortedColumns);
+    
+    // Identifiser rader basert på y-posisjoner
+    const yPositions = textItems.map(item => item.y);
+    const groupedY = groupSimilarValues(yPositions, 5); // 5 er terskelen for å gruppere y-verdier
+    
+    // Sorter for å få radene fra topp til bunn (revers sortering da PDF koordinater har y-aksen invertert)
+    const sortedRows = Object.keys(groupedY).sort((a, b) => parseFloat(b) - parseFloat(a));
+    
+    console.log('Identifiserte rader på y-posisjoner:', sortedRows.length);
+    
+    // Opprett en matrise av celler
+    const grid = {};
+    textItems.forEach(item => {
+        // Finn nærmeste rad og kolonne
+        const row = findClosestValue(item.y, sortedRows);
+        const col = findClosestValue(item.x, sortedColumns);
+        
+        if (!grid[row]) grid[row] = {};
+        if (!grid[row][col]) {
+            grid[row][col] = item.text;
+        } else {
+            // Hvis det allerede er tekst i cellen, append med mellomrom
+            grid[row][col] += ' ' + item.text;
+        }
+    });
+    
+    // Identifiser rader som inneholder produktID-er
+    const productRows = [];
+    sortedRows.forEach(row => {
+        const rowData = grid[row];
+        if (!rowData) return;
+        
+        // Sjekk hver celle i raden for produktmønster
+        for (const col in rowData) {
+            const cellText = rowData[col];
+            for (const pattern of productPatterns) {
+                if (pattern.test(cellText)) {
+                    productRows.push(row);
+                    break;
+                }
+            }
+            if (productRows.includes(row)) break;
+        }
+    });
+    
+    console.log('Identifiserte produktrader:', productRows.length);
+    
+    // Prosesser hver produktrad
+    productRows.forEach(row => {
+        let productId = null;
+        let description = '';
+        let quantity = 1;
+        
+        // Finn produktID i raden
+        for (const col in grid[row]) {
+            const cellText = grid[row][col];
+            for (const pattern of productPatterns) {
+                const match = cellText.match(pattern);
+                if (match) {
+                    productId = match[1];
+                    break;
+                }
+            }
+            if (productId) break;
+        }
+        
+        if (!productId) return;
+        
+        // Finn kvantum - anta at det er et tall i nærheten
+        const rowIndex = sortedRows.indexOf(row);
+        
+        // Sjekk først samme rad
+        for (const col in grid[row]) {
+            const cellText = grid[row][col];
+            const quantityMatch = cellText.match(/^\s*(\d+)\s*$/);
+            if (quantityMatch && !isNaN(parseInt(quantityMatch[1]))) {
+                quantity = parseInt(quantityMatch[1]);
+                break;
+            }
+        }
+        
+        // Hvis ikke funnet, sjekk raden under
+        if (quantity === 1 && rowIndex < sortedRows.length - 1) {
+            const nextRow = sortedRows[rowIndex + 1];
+            if (grid[nextRow]) {
+                for (const col in grid[nextRow]) {
+                    const cellText = grid[nextRow][col];
+                    const quantityMatch = cellText.match(/^\s*(\d+)\s*$/);
+                    if (quantityMatch && !isNaN(parseInt(quantityMatch[1]))) {
+                        quantity = parseInt(quantityMatch[1]);
+                        break;
+                    }
+                }
+            }
+        }
+        
+        // Finn beskrivelse - se etter lengre tekst i nærheten
+        // Sjekk først i samme rad
+        const potentialDescriptions = [];
+        
+        for (const col in grid[row]) {
+            const cellText = grid[row][col].trim();
+            // Unngå tall og korte tekster
+            if (cellText.length > 3 && !/^[\d\s]+$/.test(cellText)) {
+                potentialDescriptions.push(cellText);
+            }
+        }
+        
+        // Sjekk i nærliggende rader (2 over og 2 under)
+        for (let i = Math.max(0, rowIndex - 2); i <= Math.min(sortedRows.length - 1, rowIndex + 2); i++) {
+            const nearbyRow = sortedRows[i];
+            if (nearbyRow === row || !grid[nearbyRow]) continue;
+            
+            for (const col in grid[nearbyRow]) {
+                const cellText = grid[nearbyRow][col].trim();
+                // Unngå tall, korte tekster og produktkoder
+                if (cellText.length > 5 && !/^[\d\s]+$/.test(cellText) && !productPatterns.some(p => p.test(cellText))) {
+                    potentialDescriptions.push(cellText);
+                }
+            }
+        }
+        
+        // Velg den lengste beskrivelsen som mest sannsynlig
+        if (potentialDescriptions.length > 0) {
+            potentialDescriptions.sort((a, b) => b.length - a.length); // Lengste først
+            description = potentialDescriptions[0];
+        } else {
+            description = "Ukjent beskrivelse";
+        }
+        
+        // Legg til produktet i produktlisten
+        products.push({
+            id: productId,
+            description: description,
+            quantity: quantity
+        });
+    });
     
     return products;
+}
+
+/**
+ * Grupperer lignende verdier for å finne kolonner/rader
+ * @param {Array} values - Liste med verdier
+ * @param {number} threshold - Terskel for å anse verdier som like
+ * @returns {Object} Grupperte verdier
+ */
+function groupSimilarValues(values, threshold) {
+    const groups = {};
+    
+    values.forEach(value => {
+        let assigned = false;
+        
+        for (const groupValue in groups) {
+            if (Math.abs(parseFloat(groupValue) - value) <= threshold) {
+                groups[groupValue].push(value);
+                assigned = true;
+                break;
+            }
+        }
+        
+        if (!assigned) {
+            groups[value] = [value];
+        }
+    });
+    
+    return groups;
+}
+
+/**
+ * Finner nærmeste verdi i en liste
+ * @param {number} value - Verdi å finne nærmeste match for
+ * @param {Array} valuesToCompare - Liste med verdier å sammenligne med
+ * @returns {number} Nærmeste verdi
+ */
+function findClosestValue(value, valuesToCompare) {
+    return valuesToCompare.reduce((prev, curr) => {
+        return Math.abs(parseFloat(curr) - value) < Math.abs(parseFloat(prev) - value) ? curr : prev;
+    });
 }
 
 /**
