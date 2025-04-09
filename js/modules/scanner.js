@@ -495,6 +495,42 @@ async function switchCamera() {
 }
 
 /**
+ * Logger kamera-informasjon for debugging
+ * @param {MediaStream} stream - Kamerastrøm
+ */
+function logCameraInfo(stream) {
+    console.log("======= KAMERAINFORMASJON =======");
+    console.log("Kamerastrøm aktiv:", stream.active);
+    console.log("Video-spor:", stream.getVideoTracks().length);
+    
+    const videoTrack = stream.getVideoTracks()[0];
+    if (videoTrack) {
+        console.log("Spor-status:", videoTrack.enabled ? "Aktivert" : "Deaktivert");
+        console.log("Spor-ID:", videoTrack.id);
+        
+        try {
+            console.log("Sporets begrensninger:", videoTrack.getConstraints());
+        } catch (e) {
+            console.log("Kunne ikke hente begrensninger:", e);
+        }
+        
+        try {
+            console.log("Sporets innstillinger:", videoTrack.getSettings());
+        } catch (e) {
+            console.log("Kunne ikke hente innstillinger:", e);
+        }
+        
+        // Vis alle track-capabilities hvis tilgjengelig
+        try {
+            console.log("Sporets capabilities:", videoTrack.getCapabilities());
+        } catch (e) {
+            console.log("Kunne ikke hente capabilities:", e);
+        }
+    }
+    console.log("================================");
+}
+
+/**
  * Håndterer resultater fra kameraskanning
  * @param {Object} result - Skanningsresultat-objekt fra Quagga
  */
