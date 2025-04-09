@@ -317,6 +317,7 @@ function getTableHeaders(type) {
     return headers;
 }
 
+// Oppdatert funksjon for formatTableData i pdf-export.js
 /**
  * Formaterer tabelldata fra varer
  * @param {Array} items - Liste med varer
@@ -328,10 +329,22 @@ function formatTableData(items, type) {
         const row = [
             item.id,
             item.description,
-            `${item.pickedCount || 0} / ${item.quantity}`,
-            (item.weight * item.quantity).toFixed(2)
         ];
         
+        // Sett riktig antallsformat basert på type
+        if (type === 'retur') {
+            // For retur viser vi bare antallet
+            row.push(`${item.quantity}`);
+        } else {
+            // For plukk/mottak viser vi forhold mellom skannet og totalt
+            const countField = type === 'plukk' ? 'pickedCount' : 'receivedCount';
+            row.push(`${item[countField] || 0} / ${item.quantity}`);
+        }
+        
+        // Legg til vekt
+        row.push((item.weight * item.quantity).toFixed(2));
+        
+        // Legg til status basert på type
         if (type === 'plukk') {
             if (item.picked) {
                 row.push('Ja');
@@ -349,6 +362,7 @@ function formatTableData(items, type) {
                 row.push('Nei');
             }
         } else if (type === 'retur') {
+            // For retur er alt alltid "Ja"
             row.push('Ja');
         }
         

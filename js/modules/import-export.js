@@ -847,3 +847,179 @@ export function exportWithFormat(items, type, format) {
         exportList(items, type, format);
     }
 }
+
+// Legg til i import-export.js
+
+/**
+ * Importerer data fra kvittering-PDF som inkluderer Palle-ID
+ * @param {File} file - PDF-fil
+ * @returns {Promise} Løftebasert resultat av importen
+ */
+export async function importFromReceiptPDF(file) {
+    try {
+        showToast('Leser mottaksliste fra PDF...', 'info');
+        
+        // Konverter filen til en arraybuffer
+        const arrayBuffer = await file.arrayBuffer();
+        
+        // Sjekk om PDF.js er tilgjengelig
+        if (!window.pdfjsLib) {
+            console.error('PDF.js biblioteket er ikke lastet');
+            throw new Error('Feil: PDF-biblioteket er ikke tilgjengelig. Vennligst oppdater siden.');
+        }
+        
+        // Setter worker path
+        window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.7.107/pdf.worker.min.js';
+        
+        // Laster PDF-dokumentet
+        console.log('Starter lasting av mottaksliste PDF...');
+        const loadingTask = window.pdfjsLib.getDocument(arrayBuffer);
+        
+        const pdf = await loadingTask.promise;
+        console.log(`PDF lastet. Antall sider: ${pdf.numPages}`);
+        
+        // Samle all tekst fra PDF-en
+        const allTextLines = [];
+        
+        // Ekstraherer tekst fra hver side
+        for (let i = 1; i <= pdf.numPages; i++) {
+            console.log(`Behandler side ${i}...`);
+            
+            try {
+                const page = await pdf.getPage(i);
+                const textContent = await page.getTextContent();
+                
+                // Konverter tekst-elementer til strenger
+                const textItems = textContent.items.map(item => item.str);
+                const pageText = textItems.join('\n');
+                
+                // Del opp teksten i linjer
+                const lines = pageText.split('\n')
+                    .map(line => line.trim())
+                    .filter(line => line.length > 0);
+                
+                console.log(`Side ${i}: Hentet ${lines.length} linjer`);
+                allTextLines.push(...lines);
+            } catch (error) {
+                console.error(`Feil ved behandling av side ${i}:`, error);
+            }
+        }
+        
+        if (allTextLines.length === 0) {
+            throw new Error('Ingen tekst funnet i PDF-en.');
+        }
+        
+        // Identifiser og behandle mottakslisten
+        const items = processReceiptLines(allTextLines);
+        
+        if (items.length === 0) {
+            throw new Error('Ingen varer funnet i PDF-en.');
+        }
+        
+        // Oppdater mottaksliste i appState
+        appState.receiveListItems = items;
+        
+        saveListsToStorage();
+        showToast(`Importert ${items.length} varer fra mottaksliste!`, 'success');
+        
+        return {
+            success: true,
+            itemCount: items.length
+        };
+    } catch (error) {
+        console.error('Feil ved import av mottaksliste PDF:', error);
+        showToast('Feil ved import: ' + error.message, 'error');
+        throw error;
+    }
+}
+
+/**
+ * Behandler linjer fra mottaksliste-PDF
+ * @param {Array<string>} lines - Tekstlinjer fra PDF
+ * @returns {Array<Object>} Array med vareposter
+ */
+function processReceiptLines(lines) {
+    const items = [];
+    let currentPalleId = null;
+    
+    // Finn "Følgeseddel" eller lignende for å identifisere dokumentet
+    const isReceiptDocument = lines.some(line => 
+        line.includes('Følgeseddel') || 
+        line.includes('Kvik ordrenummer') ||
+        line.includes('Palle id')
+    );
+    
+    if (!isReceiptDocument) {
+        console.warn('Dette ser ikke ut som en mottaksliste/følgeseddel');
+    }
+    
+    // Finn linjer som starter med "Palle id"
+    const palleIdHeader = lines.findIndex(line => line.includes('Palle id'));
+    if (palleIdHeader === -1) {
+        console.warn('Fant ikke "Palle id" i dokumentet, bruker standard format');
+    }
+    
+    // Finn alle paller og deres varer
+    for (let i = 0; i < lines.length; i++) {
+        const line = lines[i].trim();
+        
+        // Sjekk om dette er en palle-id linje (tom celle for palle-id indikerer samme palle)
+        if (line.match(/^\d{9,}$/)) {
+            currentPalleId = line;
+            continue;
+        }
+        
+        // Sjekk om dette er en ordentlig varelinje
+        // Vi ser etter et mønster med varenummer, beskrivelse, bestilt, plukket og gjenstående
+        const lineMatch = line.match(/^(\d{3}-[A-Z0-9]+-\d+|[A-Z]{2}\d{5}|[A-Z0-9-]+)\s(.+?)\s(\d+)\s(\d+)\s(\d+)$/);
+        
+        if (lineMatch) {
+            const varenummer = lineMatch[1];
+            const beskrivelse = lineMatch[2].trim();
+            const bestilt = parseInt(lineMatch[3]);
+            const plukket = parseInt(lineMatch[4]);
+            const gjenstående = parseInt(lineMatch[5]);
+            
+            // Sjekk at tallene gir mening (bestilt = plukket + gjenstående)
+            if (bestilt === plukket + gjenstående) {
+                items.push({
+                    id: varenummer,
+                    description: beskrivelse,
+                    quantity: bestilt,
+                    weight: appState.itemWeights[varenummer] || appState.settings.defaultItemWeight,
+                    received: plukket === bestilt,
+                    receivedAt: plukket === bestilt ? new Date() : null,
+                    receivedCount: plukket,
+                    palleId: currentPalleId
+                });
+            }
+        }
+        // Sekundær sjekk for annet format som ikke har bestilt/plukket/gjenstående tall
+        else {
+            const simpleMatch = line.match(/^(\d{3}-[A-Z0-9]+-\d+|[A-Z]{2}\d{5}|[A-Z0-9-]+)\s(.+?)$/);
+            if (simpleMatch) {
+                const varenummer = simpleMatch[1];
+                const beskrivelse = simpleMatch[2].trim();
+                
+                // Se etter tall i neste linje
+                if (i+1 < lines.length && /^\d+$/.test(lines[i+1].trim())) {
+                    const antall = parseInt(lines[i+1].trim());
+                    i++; // Hopp over antallslinjen
+                    
+                    items.push({
+                        id: varenummer,
+                        description: beskrivelse,
+                        quantity: antall,
+                        weight: appState.itemWeights[varenummer] || appState.settings.defaultItemWeight,
+                        received: false,
+                        receivedAt: null,
+                        receivedCount: 0,
+                        palleId: currentPalleId
+                    });
+                }
+            }
+        }
+    }
+    
+    return items;
+}

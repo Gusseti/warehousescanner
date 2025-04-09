@@ -6,6 +6,7 @@ import { updateScannerStatus } from './ui.js';
 import { initCameraScanner, startCameraScanning, stopCameraScanning, connectToBluetoothScanner } from './scanner.js';
 import { importFromCSV, importFromJSON, importFromPDF, exportList, exportWithFormat, exportToPDF } from './import-export.js';
 import { openWeightModal } from './weights.js';
+import { handleScannedBarcode } from './barcode-handler.js';
 
 // DOM elementer - Plukk
 let importPickFileEl;
@@ -322,7 +323,13 @@ function handlePickScan(barcode) {
     if (!barcode) return;
     
     // Tøm input etter skanning
-    pickManualScanEl.value = '';
+    if (pickManualScanEl) pickManualScanEl.value = '';
+    
+    // Bruk den forbedrede strekkodehåndtereren
+    // Hvis den returnerer true, har den allerede håndtert strekkoden
+    if (handleScannedBarcode(barcode, 'pick')) {
+        return;
+    }
     
     // Sjekk om strekkoden finnes i barcode mapping
     let itemId = barcode;
@@ -335,8 +342,7 @@ function handlePickScan(barcode) {
     const item = appState.pickListItems.find(item => item.id === itemId);
     
     if (!item) {
-        // Varen finnes ikke i listen
-        showToast(`Feil: Vare "${itemId}" finnes ikke i plukklisten!`, 'error');
+        // Varen finnes ikke i listen, dette skal nå håndteres av handleScannedBarcode
         return;
     }
     

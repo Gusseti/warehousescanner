@@ -6,6 +6,7 @@ import { updateScannerStatus } from './ui.js';
 import { initCameraScanner, startCameraScanning, stopCameraScanning, connectToBluetoothScanner } from './scanner.js';
 import { exportList, exportWithFormat, exportToPDF } from './import-export.js';
 import { openWeightModal } from './weights.js';
+import { handleScannedBarcode } from './barcode-handler.js';
 
 // DOM elementer - Retur
 let connectScannerReturnEl;
@@ -225,6 +226,12 @@ export function handleReturnScan(barcode, quantity = 1) {
     // Tøm input etter skanning
     if (returnManualScanEl) {
         returnManualScanEl.value = '';
+    }
+    
+    // Bruk den forbedrede strekkodehåndtereren
+    // Hvis den returnerer true, har den allerede håndtert strekkoden
+    if (handleScannedBarcode(barcode, 'return', quantity)) {
+        return;
     }
     
     // Sjekk om strekkoden finnes i barcode mapping

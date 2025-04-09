@@ -7,6 +7,7 @@ import { initReturns } from './modules/returns.js';
 import { initSettings } from './modules/settings.js';
 import { showToast } from './modules/utils.js';
 import { initWeights } from './modules/weights.js';
+import { initBarcodeHandler } from './modules/barcode-handler.js';
 
 // Applikasjonens state
 export let appState = {
@@ -58,12 +59,12 @@ if ('serviceWorker' in navigator) {
 /**
  * Initialiser applikasjonen
  */
-function initializeApp() {
+async function initializeApp() {
     try {
         console.log('Initialiserer applikasjon...');
         
-        // Last inn lagrede data
-        loadBarcodeMappingFromStorage();
+        // Last inn lagrede data (bruker async for å støtte lasting fra barcodes.json)
+        await loadBarcodeMappingFromStorage();
         loadSettings();
         loadItemWeights();
         loadListsFromStorage();
@@ -78,9 +79,11 @@ function initializeApp() {
         initSettings();
         initWeights();
         
+        // Initialiser barcode-handler
+        initBarcodeHandler();
+        
         // Logg alle strekkoder som er lastet
         console.log('Lastet strekkodeoversikt med', Object.keys(appState.barcodeMapping).length, 'strekkoder:');
-        console.log(appState.barcodeMapping);
         
         // Hent lagret modul og vis den, eller vis hovedmeny
         const storedModule = localStorage.getItem('currentModule');
