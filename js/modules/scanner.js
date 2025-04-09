@@ -10,6 +10,9 @@ let availableCameras = [];
 
 import { appState } from '../app.js';
 import { showToast } from './utils.js';
+import { handlePickScan } from './picking.js';
+import { handleReceiveScan } from './receiving.js';
+import { handleReturnScan } from './returns.js';
 
 // DOM-elementer
 let videoElement = null;
@@ -777,7 +780,6 @@ function validateBarcode(barcode) {
     // Hvis strekkoden har et kjent format, anta at den er gyldig
     return isEAN8 || isUPCA || isCode128 || isInternalCode;
 }
-
 /**
  * Sentralisert funksjon for håndtering av skannede strekkoder
  * @param {string} barcode - Skannede strekkode
@@ -798,7 +800,6 @@ function processScannedBarcode(barcode) {
         handleScan(barcode, 'return');
     }
 }
-
 /**
  * Håndterer skanning for alle moduler med forbedret strekkodevalidering
  * @param {string} barcode - Skannet strekkode
@@ -829,35 +830,19 @@ function handleScan(barcode, type) {
     try {
         switch (type) {
             case 'pick':
-                // Sjekk om handlePickScan-funksjonen er tilgjengelig
-                if (typeof handlePickScan === 'function') {
-                    handlePickScan(itemId);
-                } else if (typeof onScanCallback === 'function') {
-                    onScanCallback(itemId);
-                } else {
-                    showToast('Feil: Håndteringsfunksjon for plukking er ikke tilgjengelig.', 'error');
-                }
+                // Direkte kall til håndteringsfunksjonen i picking.js
+                handlePickScan(itemId);
                 break;
             case 'receive':
-                if (typeof handleReceiveScan === 'function') {
-                    handleReceiveScan(itemId);
-                } else if (typeof onScanCallback === 'function') {
-                    onScanCallback(itemId);
-                } else {
-                    showToast('Feil: Håndteringsfunksjon for mottak er ikke tilgjengelig.', 'error');
-                }
+                // Direkte kall til håndteringsfunksjonen i receiving.js
+                handleReceiveScan(itemId);
                 break;
             case 'return':
                 const quantityEl = document.getElementById('returnQuantity');
                 const quantity = quantityEl ? parseInt(quantityEl.value) || 1 : 1;
                 
-                if (typeof handleReturnScan === 'function') {
-                    handleReturnScan(itemId, quantity);
-                } else if (typeof onScanCallback === 'function') {
-                    onScanCallback(itemId);
-                } else {
-                    showToast('Feil: Håndteringsfunksjon for retur er ikke tilgjengelig.', 'error');
-                }
+                // Direkte kall til håndteringsfunksjonen i returns.js
+                handleReturnScan(itemId, quantity);
                 break;
             default:
                 showToast(`Ukjent modul: ${type}`, 'error');
@@ -867,7 +852,6 @@ function handleScan(barcode, type) {
         console.error('Skanningshåndteringsfeil:', error);
     }
 }
-
 // Gjør debug-informasjon tilgjengelig globalt
 window.scannerDebug = {
     isScanning,
