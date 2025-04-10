@@ -7,6 +7,8 @@ let cameraStream = null;
 let isScanning = false;
 let currentCameraIndex = 0;
 let availableCameras = [];
+let lastScannedCode = '';
+let scanCooldown = false;
 
 import { appState } from '../app.js';
 import { showToast } from './utils.js';
@@ -491,12 +493,23 @@ async function switchCamera() {
  * Håndterer resultater fra kameraskanning
  * @param {Object} result - Skanningsresultat-objekt fra Quagga
  */
+// Endre handleCameraScanResult funksjonen:
 function handleCameraScanResult(result) {
+    if (scanCooldown) return; // Ignorer skann i cooldown-perioden
+    
     if (result && result.codeResult && result.codeResult.code) {
         const barcode = result.codeResult.code;
         
+        // Sjekk om dette er samme strekkode som nettopp ble skannet
+        if (barcode === lastScannedCode) {
+            return; // Ignorer dupliserte skann
+        }
+        
         // Valider at dette er en strekkode og ikke bare et tall
         if (validateBarcode(barcode)) {
+            // Oppdater sist skannede strekkode
+            lastScannedCode = barcode;
+            
             // Spill lyd for å indikere at strekkode er funnet
             playSuccessSound();
             
@@ -506,27 +519,41 @@ function handleCameraScanResult(result) {
                 drawSuccessBox(ctx, result.box);
             }
             
-            // Vis strekkoden til brukeren
-            showToast(`Strekkode skannet: ${barcode}`, 'success');
+            // Finn mappet varenummer
+            let itemId = barcode;
+            if (appState.barcodeMapping && appState.barcodeMapping[barcode]) {
+                itemId = appState.barcodeMapping[barcode];
+                showToast(`Strekkode skannet: ${barcode} → ${itemId}`, 'success');
+            } else {
+                showToast(`Strekkode skannet: ${barcode}`, 'success');
+            }
             
             // Send resultatet til sentral prosessering
             processScannedBarcode(barcode);
             
-            // Stopp skanning midlertidig for å unngå gjentatte skanninger av samme kode
-            // Starter igjen etter 2 sekunder
+            // Sett cooldown for å unngå gjentatte skanninger
+            scanCooldown = true;
+            
+            // Stopp skanning midlertidig
             if (typeof Quagga !== 'undefined') {
                 Quagga.stop();
             }
             isScanning = false;
             
+            // Start skanning igjen etter cooldown
             setTimeout(() => {
+                scanCooldown = false;
                 if (cameraStream && cameraStream.active) {
                     if (typeof Quagga !== 'undefined') {
-                        Quagga.start();
+                        try {
+                            Quagga.start();
+                            isScanning = true;
+                        } catch (e) {
+                            console.error("Kunne ikke starte Quagga igjen:", e);
+                        }
                     }
-                    isScanning = true;
                 }
-            }, 2000);
+            }, 3000); // 3 sekunder cooldown
         }
     }
 }
@@ -801,12 +828,14 @@ function processScannedBarcode(barcode) {
     }
 }
 /**
- * Håndterer skanning for alle moduler
+ * Håndterer skanning for alle moduler med forbedret strekkodevalidering
  * @param {string} barcode - Skannet strekkode
  * @param {string} type - Type modul (pick, receive, return)
  */
 function handleScan(barcode, type) {
     if (!barcode) return;
+    
+    console.log("Håndterer skanning:", barcode, "type:", type); // Legg til for debugging
     
     // Valider strekkoden før videre prosessering
     if (!validateBarcode(barcode)) {
@@ -824,20 +853,101 @@ function handleScan(barcode, type) {
     let itemId = barcode;
     if (appState.barcodeMapping && appState.barcodeMapping[barcode]) {
         itemId = appState.barcodeMapping[barcode];
+        console.log(`Strekkode ${barcode} mappet til varenummer ${itemId}`);
     }
     
-    // Bruk den callback-funksjonen som ble registrert ved initialisering
-    if (typeof onScanCallback === 'function') {
-        // For return, send med antall
-        if (type === 'return') {
-            const quantityEl = document.getElementById('returnQuantity');
-            const quantity = quantityEl ? parseInt(quantityEl.value) || 1 : 1;
-            onScanCallback(itemId, quantity);
-        } else {
-            onScanCallback(itemId);
+    // Send til korrekt håndtering basert på type
+    try {
+        switch (type) {
+            case 'pick':
+                // Bruk callback-funksjonen
+                if (typeof onScanCallback === 'function') {
+                    console.log("Kaller onScanCallback med:", itemId);
+                    onScanCallback(itemId);
+                } else {
+                    console.error("onScanCallback er ikke tilgjengelig");
+                    // Fallback: Prøv å kalle handlePickScan direkte hvis den er globalt tilgjengelig
+                    if (typeof window.handlePickScan === 'function') {
+                        window.handlePickScan(itemId);
+                    } else {
+                        // Siste utvei: Simuler en manuell inntasting
+                        const pickManualScanEl = document.getElementById('pickManualScan');
+                        const pickManualScanBtnEl = document.getElementById('pickManualScanBtn');
+                        
+                        if (pickManualScanEl && pickManualScanBtnEl) {
+                            pickManualScanEl.value = itemId;
+                            pickManualScanBtnEl.click();
+                        } else {
+                            showToast("Kunne ikke registrere vare. Forsøk manuell inntasting.", "error");
+                        }
+                    }
+                }
+                break;
+                
+            case 'receive':
+                // Bruk callback-funksjonen
+                if (typeof onScanCallback === 'function') {
+                    console.log("Kaller onScanCallback med:", itemId);
+                    onScanCallback(itemId);
+                } else {
+                    console.error("onScanCallback er ikke tilgjengelig");
+                    // Fallback: Prøv å kalle handleReceiveScan direkte hvis den er globalt tilgjengelig
+                    if (typeof window.handleReceiveScan === 'function') {
+                        window.handleReceiveScan(itemId);
+                    } else {
+                        // Siste utvei: Simuler en manuell inntasting
+                        const receiveManualScanEl = document.getElementById('receiveManualScan');
+                        const receiveManualScanBtnEl = document.getElementById('receiveManualScanBtn');
+                        
+                        if (receiveManualScanEl && receiveManualScanBtnEl) {
+                            receiveManualScanEl.value = itemId;
+                            receiveManualScanBtnEl.click();
+                        } else {
+                            showToast("Kunne ikke registrere vare. Forsøk manuell inntasting.", "error");
+                        }
+                    }
+                }
+                break;
+                
+            case 'return':
+                const quantityEl = document.getElementById('returnQuantity');
+                const quantity = quantityEl ? parseInt(quantityEl.value) || 1 : 1;
+                
+                // Bruk callback-funksjonen
+                if (typeof onScanCallback === 'function') {
+                    console.log("Kaller onScanCallback med:", itemId, "antall:", quantity);
+                    onScanCallback(itemId, quantity);
+                } else {
+                    console.error("onScanCallback er ikke tilgjengelig");
+                    // Fallback: Prøv å kalle handleReturnScan direkte hvis den er globalt tilgjengelig
+                    if (typeof window.handleReturnScan === 'function') {
+                        window.handleReturnScan(itemId, quantity);
+                    } else {
+                        // Siste utvei: Simuler en manuell inntasting
+                        const returnManualScanEl = document.getElementById('returnManualScan');
+                        const returnManualScanBtnEl = document.getElementById('returnManualScanBtn');
+                        
+                        if (returnManualScanEl && returnManualScanBtnEl) {
+                            returnManualScanEl.value = itemId;
+                            // Sjekk om antall-feltet er endret
+                            const returnQuantityEl = document.getElementById('returnQuantity');
+                            if (returnQuantityEl) {
+                                returnQuantityEl.value = quantity;
+                            }
+                            returnManualScanBtnEl.click();
+                        } else {
+                            showToast("Kunne ikke registrere vare. Forsøk manuell inntasting.", "error");
+                        }
+                    }
+                }
+                break;
+                
+            default:
+                showToast(`Ukjent modul: ${type}`, 'error');
         }
-    } else {
-        showToast('Ingen skanner-callback funksjon registrert', 'error');
+    } catch (error) {
+        console.error("Skanningshåndteringsfeil:", error);
+        showToast(`Feil ved håndtering av skann: ${error.message}`, 'error');
     }
 }
 // Gjør debug-informasjon tilgjengelig globalt
