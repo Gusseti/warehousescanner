@@ -558,7 +558,7 @@ function handleCameraScanResult(result) {
  * Får bakgrunnen til å blinke i en bestemt farge
  * @param {string} color - Farge å blinke (f.eks. 'red', 'green')
  */
-function blinkBackground(color) {
+export function blinkBackground(color) {
     // Legg til et overlay-element hvis det ikke allerede finnes
     let overlay = document.getElementById('blinkOverlay');
     if (!overlay) {
