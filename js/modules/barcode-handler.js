@@ -401,6 +401,7 @@ function addItemToTargetList(itemId, itemDesc, quantity) {
     saveListsToStorage();
 }
 
+// Erstatt handleScannedBarcode i barcode-handler.js med denne forenklede versjonen
 /**
  * Hovedfunksjon for håndtering av skannede strekkoder
  * @param {string} barcode - Skannet strekkode
@@ -410,10 +411,6 @@ function addItemToTargetList(itemId, itemDesc, quantity) {
  */
 export function handleScannedBarcode(barcode, target, quantity = 1) {
     if (!barcode) return false;
-    
-    // Oppdater nåværende skannekontekst
-    currentScanTarget = target;
-    lastScannedBarcode = barcode;
     
     // Sjekk om strekkoden finnes i barcode mapping
     let itemId = barcode;
@@ -428,7 +425,17 @@ export function handleScannedBarcode(barcode, target, quantity = 1) {
                 const pickItem = appState.pickListItems.find(item => item.id === itemId);
                 
                 if (!pickItem) {
-                    showUnknownItemModal(barcode, itemId, target, 'Varen finnes ikke i plukklisten', quantity);
+                    // Ukjent vare - blink rødt og vis feilmelding
+                    blinkBackground('red');
+                    showToast(`Vare "${itemId}" finnes ikke i plukklisten!`, 'error');
+                    playErrorSound();
+                    return true;
+                }
+                
+                // Sjekk om varen allerede er ferdig plukket
+                if (pickItem.pickedCount >= pickItem.quantity) {
+                    blinkBackground('orange');
+                    showToast(`Alle ${pickItem.quantity} enheter av "${itemId}" er allerede plukket!`, 'warning');
                     return true;
                 }
                 
@@ -436,21 +443,91 @@ export function handleScannedBarcode(barcode, target, quantity = 1) {
                 
             case 'receive':
                 // For mottak er det ok å legge til nye varer automatisk
-                // La vanlig håndtering ta over
                 return false;
                 
             case 'return':
                 // For retur er det ok å legge til nye varer automatisk
-                // La vanlig håndtering ta over
                 return false;
         }
     } else {
-        // Strekkode ikke funnet i mapping
-        showUnknownItemModal(barcode, itemId, target, 'Strekkoden er ikke registrert', quantity);
+        // Strekkode ikke funnet i mapping - blink rødt og vis feilmelding
+        blinkBackground('red');
+        showToast(`Ukjent strekkode: ${barcode}`, 'error');
+        playErrorSound();
         return true;
     }
     
     return false;
+}
+
+/**
+ * Får bakgrunnen til å blinke i en bestemt farge
+ * @param {string} color - Farge å blinke (f.eks. 'red', 'green')
+ */
+function blinkBackground(color) {
+    // Legg til et overlay-element hvis det ikke allerede finnes
+    let overlay = document.getElementById('blinkOverlay');
+    if (!overlay) {
+        overlay = document.createElement('div');
+        overlay.id = 'blinkOverlay';
+        overlay.style.position = 'fixed';
+        overlay.style.top = '0';
+        overlay.style.left = '0';
+        overlay.style.width = '100%';
+        overlay.style.height = '100%';
+        overlay.style.backgroundColor = 'transparent';
+        overlay.style.zIndex = '9999';
+        overlay.style.pointerEvents = 'none'; // Ikke blokker klikk
+        overlay.style.transition = 'background-color 0.3s';
+        document.body.appendChild(overlay);
+    }
+    
+    // Sett farge med litt gjennomsiktighet
+    overlay.style.backgroundColor = color === 'red' ? 'rgba(255, 0, 0, 0.3)' : 
+                                   color === 'green' ? 'rgba(0, 255, 0, 0.3)' : 
+                                   color === 'orange' ? 'rgba(255, 165, 0, 0.3)' : 
+                                   'rgba(0, 0, 0, 0.2)';
+    
+    // Fjern etter kort tid
+    setTimeout(() => {
+        overlay.style.backgroundColor = 'transparent';
+    }, 500);
+}
+
+/**
+ * Spiller en lyd for å gi tilbakemelding ved feil
+ */
+function playErrorSound() {
+    try {
+        const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        const oscillator = audioContext.createOscillator();
+        const gainNode = audioContext.createGain();
+        
+        oscillator.type = 'sawtooth';
+        oscillator.frequency.value = 220; // Lavere frekvens for feilmeldinger
+        gainNode.gain.value = 0.1;
+        
+        oscillator.connect(gainNode);
+        gainNode.connect(audioContext.destination);
+        
+        oscillator.start();
+        
+        // Spill en "ned" lyd for å indikere feil
+        oscillator.frequency.exponentialRampToValueAtTime(110, audioContext.currentTime + 0.2);
+        
+        setTimeout(() => {
+            oscillator.stop();
+        }, 300);
+    } catch (error) {
+        // Fallback til å vibrere enheten hvis tilgjengelig
+        try {
+            if (navigator.vibrate) {
+                navigator.vibrate([100, 50, 100]); // Mønster for feil
+            }
+        } catch (e) {
+            // Ignorer feil her
+        }
+    }
 }
 
 /**

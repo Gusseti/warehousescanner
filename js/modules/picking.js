@@ -7,6 +7,7 @@ import { initCameraScanner, startCameraScanning, stopCameraScanning, connectToBl
 import { importFromCSV, importFromJSON, importFromPDF, exportList, exportWithFormat, exportToPDF } from './import-export.js';
 import { openWeightModal } from './weights.js';
 import { handleScannedBarcode } from './barcode-handler.js';
+import { blinkBackground, playErrorSound } from './scanner.js';
 
 // DOM elementer - Plukk
 let importPickFileEl;
@@ -350,9 +351,10 @@ function handlePickScan(barcode) {
     const item = appState.pickListItems.find(item => item.id === itemId);
     
     if (!item) {
-        // Varen finnes ikke i listen - skal ha blitt håndtert av handleScannedBarcode over
-        console.log(`Vare ${itemId} finnes ikke i plukklisten og ble ikke håndtert av barcode-handler`);
+        // Varen finnes ikke i listen - bør allerede være håndtert av handleScannedBarcode
+        blinkBackground('red');
         showToast(`Vare "${itemId}" finnes ikke i plukklisten!`, 'error');
+        playErrorSound();
         return;
     }
     
@@ -363,6 +365,7 @@ function handlePickScan(barcode) {
     
     // Sjekk om vi har plukket alle enhetene av denne varen
     if (item.pickedCount >= item.quantity) {
+        blinkBackground('orange');
         showToast(`Alle ${item.quantity} enheter av "${itemId}" er allerede plukket!`, 'warning');
         return;
     }
@@ -380,6 +383,9 @@ function handlePickScan(barcode) {
         if (!appState.pickedItems.includes(itemId)) {
             appState.pickedItems.push(itemId);
         }
+        
+        // Blink grønt ved fullført vare
+        blinkBackground('green');
     }
     
     // Lagre sist plukket vare for angrefunksjonalitet
@@ -398,7 +404,7 @@ function handlePickScan(barcode) {
     }
 
     updatePickingUI();
-    
+
     // Lagre endringer
     saveListsToStorage();
 }

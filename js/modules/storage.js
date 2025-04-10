@@ -164,22 +164,58 @@ export function loadItemWeights() {
  */
 export function saveListsToStorage() {
     try {
-        // Forsikre oss om at data er i riktig format før lagring
-        console.log("Lagrer pickListItems:", appState.pickListItems);
-        console.log("Lagrer pickedItems:", appState.pickedItems);
+        // Rens dataene før lagring
         
+        // Rett opp feil i plukklisten
+        if (appState.pickListItems) {
+            appState.pickListItems.forEach(item => {
+                // Kontroller at pickedCount ikke er høyere enn quantity
+                if (item.pickedCount > item.quantity) {
+                    console.warn(`Korrigerer pickedCount for ${item.id}: ${item.pickedCount} > ${item.quantity}`);
+                    item.pickedCount = item.quantity;
+                }
+                
+                // Pass på at picked-status er i samsvar med pickedCount
+                if (item.pickedCount >= item.quantity) {
+                    item.picked = true;
+                } else {
+                    item.picked = false;
+                }
+            });
+        }
+        
+        // Tilsvarende for mottakslisten
+        if (appState.receiveListItems) {
+            appState.receiveListItems.forEach(item => {
+                if (item.receivedCount > item.quantity) {
+                    console.warn(`Korrigerer receivedCount for ${item.id}: ${item.receivedCount} > ${item.quantity}`);
+                    item.receivedCount = item.quantity;
+                }
+                
+                if (item.receivedCount >= item.quantity) {
+                    item.received = true;
+                } else {
+                    item.received = false;
+                }
+            });
+        }
+        
+        // Lagre til localStorage
         localStorage.setItem('pickListItems', JSON.stringify(appState.pickListItems || []));
         localStorage.setItem('pickedItems', JSON.stringify(appState.pickedItems || []));
         localStorage.setItem('lastPickedItem', appState.lastPickedItem ? JSON.stringify(appState.lastPickedItem) : null);
         
         localStorage.setItem('receiveListItems', JSON.stringify(appState.receiveListItems || []));
         localStorage.setItem('receivedItems', JSON.stringify(appState.receivedItems || []));
+        localStorage.setItem('lastReceivedItem', appState.lastReceivedItem ? JSON.stringify(appState.lastReceivedItem) : null);
+        
         localStorage.setItem('returnListItems', JSON.stringify(appState.returnListItems || []));
         
-        console.log("Data lagret til localStorage");
+        return true;
     } catch (error) {
         console.error('Feil ved lagring av lister:', error);
         showToast('Kunne ikke lagre listedata.', 'error');
+        return false;
     }
 }
 
