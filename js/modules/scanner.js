@@ -134,202 +134,76 @@ function initCameraScanner(videoEl, canvasEl, overlayEl, callback, statusCallbac
     });
 }
 
-/**
- * Starter kameraskanning
- * @param {string} cameraId - ID til kamera som skal brukes (valgfritt)
- * @param {Object} options - Ekstra alternativer for kameraoppsett
- * @returns {Promise} Løftebasert resultat av oppstartforsøket
- */
-async function startCameraScanning(cameraId = null, options = {}) {
-    showToast('Starter kamera...', 'info');
-    
-    // Stopp eventuelle aktive skannere
-    if (isScanning) {
-        stopCameraScanning();
-        await new Promise(resolve => setTimeout(resolve, 300));
+// Last Quagga2 hvis nødvendig
+if (typeof Quagga === 'undefined') {
+    showToast('Laster strekkodeleser...', 'info');
+    await loadQuaggaScript();
+}
+
+// Initialiser Quagga2 med forbedret konfigurasjon
+Quagga.init({
+    inputStream: {
+        name: "Live",
+        type: "LiveStream",
+        target: videoElement,
+        constraints: {
+            width: { min: 640 },
+            height: { min: 480 }
+        },
+        area: { 
+            top: "20%",    
+            right: "20%",
+            left: "20%",
+            bottom: "20%"
+        },
+        singleChannel: false // viktig for Quagga2
+    },
+    locator: {
+        patchSize: "medium",
+        halfSample: true
+    },
+    decoder: {
+        readers: [
+            "ean_reader",
+            "ean_8_reader",
+            "code_128_reader",
+            "code_39_reader",
+            "code_93_reader",
+            "upc_reader",
+            "upc_e_reader"
+        ],
+        multiple: false
+    },
+    locate: true
+}, function(err) {
+    if (err) {
+        showToast(`Feil ved start av strekkodeleser: ${err.message || 'Ukjent feil'}`, 'error');
+        return;
     }
     
     try {
-        // Finn aktuell scanner-container basert på gjeldende modul
-        let modulePrefix = '';
-        if (appState && appState.currentModule) {
-            if (appState.currentModule === 'picking') modulePrefix = 'Pick';
-            else if (appState.currentModule === 'receiving') modulePrefix = 'Receive';
-            else if (appState.currentModule === 'returns') modulePrefix = 'Return';
-        }
+        Quagga.start();
+        isScanning = true;
         
-        // Finn elementer
-        const containerId = `cameraScanner${modulePrefix}Container`;
-        const videoId = `video${modulePrefix}Scanner`;
-        const canvasId = `canvas${modulePrefix}Scanner`;
-        
-        const container = document.getElementById(containerId);
-        videoElement = document.getElementById(videoId);
-        canvasElement = document.getElementById(canvasId);
-        
-        // Vis feilmelding og avbryt hvis elementer mangler
-        if (!container || !videoElement || !canvasElement) {
-            const missingElements = [];
-            if (!container) missingElements.push(`Container (${containerId})`);
-            if (!videoElement) missingElements.push(`Video (${videoId})`);
-            if (!canvasElement) missingElements.push(`Canvas (${canvasId})`);
-            
-            const errorMsg = `Kamera-elementer mangler: ${missingElements.join(', ')}`;
-            showToast(errorMsg, 'error');
-            throw new Error(errorMsg);
-        }
-        
-        // Vis container
-        container.style.display = 'block';
-        
-        // Stopp eventuelle eksisterende videostrømmer
-        if (videoElement.srcObject) {
-            try {
-                videoElement.srcObject.getTracks().forEach(track => track.stop());
-            } catch (e) {
-                showToast(`Advarsel: ${e.message}`, 'warning');
+        // Sett opp event handlers for Quagga2
+        Quagga.onDetected((result) => {
+            if (result && result.codeResult) {
+                handleCameraScanResult(result);
             }
-            videoElement.srcObject = null;
+        });
+        
+        // Oppdater status
+        if (scannerStatusCallback) {
+            scannerStatusCallback(true, { type: 'camera' });
         }
         
-        // Sett viktige attributter for iOS-kompatibilitet
-        videoElement.setAttribute('autoplay', '');
-        videoElement.setAttribute('playsinline', '');
-        videoElement.setAttribute('muted', '');
-        videoElement.muted = true;
-        
-        // Sjekk for iOS-enhet
-        const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
-        if (isIOS) {
-            videoElement.setAttribute('webkit-playsinline', '');
-        }
-        
-        // Konfigurer kamerainnstillinger
-        const constraints = { 
-            video: {
-                width: { ideal: 1280 },
-                height: { ideal: 720 }
-            },
-            audio: false
-        };
-        
-        // Legg til kamera-ID hvis spesifisert
-        if (cameraId) {
-            constraints.video.deviceId = { exact: cameraId };
-        } 
-        // Legg til facingMode hvis spesifisert i options
-        else if (options && options.facingMode) {
-            constraints.video.facingMode = options.facingMode;
-        }
-        // Standard er environment (bak-kamera) hvis tilgjengelig
-        else {
-            constraints.video.facingMode = { ideal: "environment" };
-        }
-        
-        // Start kameraet
-        try {
-            const stream = await navigator.mediaDevices.getUserMedia(constraints);
-            cameraStream = stream;
-            
-            // Logg kamerainformasjon
-            const videoTrack = stream.getVideoTracks()[0];
-            if (videoTrack) {
-                showToast(`Kamera aktivert: ${videoTrack.label || 'Ukjent kamera'}`, 'success');
-            }
-            
-            // Tilkoble video til strøm
-            videoElement.srcObject = stream;
-            
-            // Forsøk å starte avspillingen manuelt
-            try {
-                await videoElement.play();
-            } catch (e) {
-                showToast(`Kunne ikke starte video: ${e.message}. Prøv å klikke på skjermen.`, 'warning');
-            }
-            
-            // Sett opp canvas
-            canvasElement.width = 640;
-            canvasElement.height = 480;
-            canvasElement.style.position = 'absolute';
-            canvasElement.style.top = '0';
-            canvasElement.style.left = '0';
-            canvasElement.style.width = '100%';
-            canvasElement.style.height = '100%';
-            canvasElement.style.zIndex = '2';
-            canvasElement.style.backgroundColor = 'transparent';
-            
-            // Last Quagga hvis nødvendig
-            if (typeof Quagga === 'undefined') {
-                showToast('Laster strekkodeleser...', 'info');
-                await loadQuaggaScript();
-            }
-            
-            // Erstatt den nåværende Quagga.init-koden med denne
-            Quagga.init({
-                inputStream: {
-                name: "Live",
-                type: "LiveStream",
-                target: document.querySelector("#" + videoId), // Bruk querySelector i stedet for direkte referanse
-                constraints: {
-                    width: 640,
-                    height: 480
-                }
-                },
-                locator: {
-                patchSize: "medium",
-                halfSample: true
-                },
-                numOfWorkers: 2,
-                decoder: {
-                readers: ["ean_reader", "ean_8_reader", "code_128_reader"]
-                },
-                locate: true
-            }, function(err) {
-                if (err) {
-                console.error("Quagga init error:", err);
-                showToast("Kunne ikke starte strekkodeleser", "error");
-                return;
-                }
-                
-                try {
-                Quagga.start();
-                isScanning = true;
-                Quagga.onDetected(handleCameraScanResult);
-                } catch (error) {
-                console.error("Quagga start error:", error);
-                showToast("Feil ved oppstart av strekkodeleser", "error");
-                }
-            });
-            
-            return { success: true };
-        } catch (error) {
-            // Vis detaljert feilmelding til brukeren
-            const errorMsg = `Kunne ikke starte kamera: ${error.name || 'Ukjent feil'}`;
-            const detailMsg = error.message || '';
-            
-            // Vis mer brukervennlige meldinger for vanlige feil
-            if (error.name === 'NotAllowedError') {
-                showToast('Kameratilgang nektet. Vennligst gi tillatelse til kamerabruk.', 'error');
-            } else if (error.name === 'NotFoundError') {
-                showToast('Kamera ikke funnet. Har enheten et kamera?', 'error');
-            } else if (error.name === 'NotReadableError') {
-                showToast('Kamera er i bruk av en annen app. Lukk andre apper som bruker kamera.', 'error');
-            } else {
-                showToast(`${errorMsg}: ${detailMsg}`, 'error');
-            }
-            
-            console.error("Kamera start feilet:", error);
-            
-            if (scannerStatusCallback) {
-                scannerStatusCallback(false);
-            }
-            throw error;
-        }
-    } catch (error) {
-        showToast(`Kamera kunne ikke startes: ${error.message}`, 'error');
-        throw error;
+        showToast('Kamera klar til skanning', 'success');
+    } catch (e) {
+        console.error("Quagga2 start error:", e);
+        showToast(`Kunne ikke starte strekkodeleser: ${e.message}`, 'error');
+        stopCameraScanning();
     }
-}
+});
 
 /**
  * Stopper kameraskanning
@@ -660,8 +534,9 @@ function loadQuaggaScript() {
             return;
         }
         
+        // Merk: Byttet til Quagga2
         const script = document.createElement('script');
-        script.src = 'https://cdnjs.cloudflare.com/ajax/libs/quagga/0.12.1/quagga.min.js';
+        script.src = 'https://cdn.jsdelivr.net/npm/@ericblade/quagga2/dist/quagga.min.js';
         
         script.onload = () => {
             resolve();
@@ -669,7 +544,7 @@ function loadQuaggaScript() {
         
         script.onerror = (err) => {
             showToast('Kunne ikke laste strekkodebibliotek. Sjekk internettforbindelsen.', 'error');
-            reject(new Error("Kunne ikke laste Quagga-script"));
+            reject(new Error("Kunne ikke laste Quagga2-script"));
         };
         
         document.head.appendChild(script);
