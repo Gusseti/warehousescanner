@@ -118,7 +118,18 @@ function initCameraScanner(videoEl, canvasEl, overlayEl, callback, statusCallbac
     videoElement = videoEl;
     canvasElement = canvasEl;
     scannerOverlay = overlayEl;
+    
+    // Lagre callback-funksjonen
     onScanCallback = callback;
+    
+    // Sjekk at callback er en funksjon
+    if (typeof callback !== 'function') {
+        console.error('Callback er ikke en funksjon:', callback);
+        showToast('Feil ved initialisering av skanner: Ugyldig callback', 'error');
+    } else {
+        console.log('Skanner initialisert med callback:', callback.name || 'anonym funksjon');
+    }
+    
     scannerStatusCallback = statusCallback;
     
     // List opp tilgjengelige kameraer
@@ -534,26 +545,10 @@ function handleCameraScanResult(result) {
             // Sett cooldown for å unngå gjentatte skanninger
             scanCooldown = true;
             
-            // Stopp skanning midlertidig
-            if (typeof Quagga !== 'undefined') {
-                Quagga.stop();
-            }
-            isScanning = false;
-            
-            // Start skanning igjen etter cooldown
+            // Kort pause for å unngå multiple skanninger
             setTimeout(() => {
                 scanCooldown = false;
-                if (cameraStream && cameraStream.active) {
-                    if (typeof Quagga !== 'undefined') {
-                        try {
-                            Quagga.start();
-                            isScanning = true;
-                        } catch (e) {
-                            console.error("Kunne ikke starte Quagga igjen:", e);
-                        }
-                    }
-                }
-            }, 3000); // 3 sekunder cooldown
+            }, 1500); // 1.5 sekunder cooldown
         }
     }
 }
@@ -835,7 +830,7 @@ function processScannedBarcode(barcode) {
 function handleScan(barcode, type) {
     if (!barcode) return;
     
-    console.log("Håndterer skanning:", barcode, "type:", type); // Legg til for debugging
+    console.log("Håndterer skanning:", barcode, "type:", type);
     
     // Valider strekkoden før videre prosessering
     if (!validateBarcode(barcode)) {
@@ -854,6 +849,33 @@ function handleScan(barcode, type) {
     if (appState.barcodeMapping && appState.barcodeMapping[barcode]) {
         itemId = appState.barcodeMapping[barcode];
         console.log(`Strekkode ${barcode} mappet til varenummer ${itemId}`);
+    }
+    
+    // Forberedende sjekk for plukking
+    if (type === 'pick' && appState.pickListItems && appState.pickListItems.length > 0) {
+        const item = appState.pickListItems.find(item => item.id === itemId);
+        
+        if (!item) {
+            showToast(`Vare "${itemId}" finnes ikke i plukklisten!`, 'error');
+            playErrorSound(); // Legg til denne funksjonen hvis ønskelig
+            return;
+        }
+        
+        if (item.pickedCount >= item.quantity) {
+            showToast(`Alle ${item.quantity} enheter av "${itemId}" er allerede plukket!`, 'warning');
+            return;
+        }
+    }
+    
+    // Tilsvarende sjekk for mottak
+    if (type === 'receive' && appState.receiveListItems && appState.receiveListItems.length > 0) {
+        const item = appState.receiveListItems.find(item => item.id === itemId);
+        
+        if (item && item.receivedCount >= item.quantity) {
+            showToast(`Alle ${item.quantity} enheter av "${itemId}" er allerede mottatt!`, 'warning');
+            return;
+        }
+        // For mottak tillater vi at varer legges til selv om de ikke er i listen
     }
     
     // Send til korrekt håndtering basert på type
@@ -948,6 +970,42 @@ function handleScan(barcode, type) {
     } catch (error) {
         console.error("Skanningshåndteringsfeil:", error);
         showToast(`Feil ved håndtering av skann: ${error.message}`, 'error');
+    }
+}
+
+/**
+ * Spiller en lyd for å gi tilbakemelding ved feil
+ */
+function playErrorSound() {
+    try {
+        const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        const oscillator = audioContext.createOscillator();
+        const gainNode = audioContext.createGain();
+        
+        oscillator.type = 'sawtooth';
+        oscillator.frequency.value = 220; // Lavere frekvens for feilmeldinger
+        gainNode.gain.value = 0.1;
+        
+        oscillator.connect(gainNode);
+        gainNode.connect(audioContext.destination);
+        
+        oscillator.start();
+        
+        // Spill en "ned" lyd for å indikere feil
+        oscillator.frequency.exponentialRampToValueAtTime(110, audioContext.currentTime + 0.2);
+        
+        setTimeout(() => {
+            oscillator.stop();
+        }, 300);
+    } catch (error) {
+        // Fallback til å vibrere enheten hvis tilgjengelig
+        try {
+            if (navigator.vibrate) {
+                navigator.vibrate([100, 50, 100]); // Mønster for feil
+            }
+        } catch (e) {
+            // Ignorer feil her
+        }
     }
 }
 // Gjør debug-informasjon tilgjengelig globalt
