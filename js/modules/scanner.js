@@ -267,72 +267,43 @@ async function startCameraScanning(cameraId = null, options = {}) {
             // Initialiser Quagga med optimaliserte innstillinger
             Quagga.init({
                 inputStream: {
-                    name: "Live",
-                    type: "LiveStream",
-                    target: videoElement,  // Pass direktereferanse til elementet
-                    constraints: {
-                        width: { min: 640 },
-                        height: { min: 480 },
-                        aspectRatio: { min: 1, max: 2 },
-                        facingMode: "environment"
-                    },
-                    area: { 
-                        top: "20%",    
-                        right: "20%",
-                        left: "20%",
-                        bottom: "20%"
-                    }
+                  name: "Live",
+                  type: "LiveStream",
+                  target: videoElement,
+                  constraints: {
+                    width: 640,
+                    height: 480,
+                    facingMode: "environment"
+                  }
                 },
-                locator: {
-                    patchSize: "medium",
-                    halfSample: true
-                },
-                numOfWorkers: isIOS ? 1 : navigator.hardwareConcurrency > 4 ? 4 : 2,
-                frequency: 10,
                 decoder: {
-                    readers: [
-                        "ean_reader",
-                        "ean_8_reader",
-                        "code_128_reader",
-                        "code_39_reader",
-                        "code_93_reader",
-                        "upc_reader",
-                        "upc_e_reader"
-                    ],
-                    multiple: false
-                },
-                locate: true
-            }, function(err) {
+                  readers: [
+                    "ean_reader",
+                    "ean_8_reader",
+                    "code_128_reader",
+                    "code_39_reader",
+                    "code_93_reader",
+                    "upc_reader",
+                    "upc_e_reader"
+                  ]
+                }
+              }, function(err) {
                 if (err) {
-                    showToast(`Feil ved start av strekkodeleser: ${err.message || 'Ukjent feil'}`, 'error');
-                    return;
+                  console.error("Quagga initialization error:", err);
+                  showToast(`Kunne ikke starte strekkodeleser: ${err.message || 'Ukjent feil'}`, 'error');
+                  return;
                 }
                 
-                // Forsøk å starte Quagga og fang eventuelle feil
                 try {
-                    Quagga.start();
-                    isScanning = true;
-                    
-                    // Sett opp event handlers
-                    Quagga.onDetected(handleCameraScanResult);
-                    
-                    // På iOS, bruk kun onDetected for bedre ytelse
-                    if (!isIOS) {
-                        Quagga.onProcessed(handleProcessedResult);
-                    }
-                    
-                    // Oppdater status
-                    if (scannerStatusCallback) {
-                        scannerStatusCallback(true, { type: 'camera' });
-                    }
-                    
-                    showToast('Kamera klar til skanning', 'success');
+                  Quagga.start();
+                  isScanning = true;
+                  Quagga.onDetected(handleCameraScanResult);
+                  showToast('Kamera klar til skanning', 'success');
                 } catch (e) {
-                    console.error("Quagga start feilet:", e);
-                    showToast(`Kunne ikke starte strekkodeleser: ${e.message}`, 'error');
-                    stopCameraScanning();
+                  console.error("Quagga start error:", e);
+                  showToast(`Feil ved start av strekkodeleser: ${e.message}`, 'error');
                 }
-            });
+              });
             
             return { success: true };
         } catch (error) {
