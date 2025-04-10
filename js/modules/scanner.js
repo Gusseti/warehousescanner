@@ -264,46 +264,42 @@ async function startCameraScanning(cameraId = null, options = {}) {
                 await loadQuaggaScript();
             }
             
-            // Initialiser Quagga med optimaliserte innstillinger
+            // Erstatt den nåværende Quagga.init-koden med denne
             Quagga.init({
                 inputStream: {
-                  name: "Live",
-                  type: "LiveStream",
-                  target: videoElement,
-                  constraints: {
+                name: "Live",
+                type: "LiveStream",
+                target: document.querySelector("#" + videoId), // Bruk querySelector i stedet for direkte referanse
+                constraints: {
                     width: 640,
-                    height: 480,
-                    facingMode: "environment"
-                  }
-                },
-                decoder: {
-                  readers: [
-                    "ean_reader",
-                    "ean_8_reader",
-                    "code_128_reader",
-                    "code_39_reader",
-                    "code_93_reader",
-                    "upc_reader",
-                    "upc_e_reader"
-                  ]
+                    height: 480
                 }
-              }, function(err) {
+                },
+                locator: {
+                patchSize: "medium",
+                halfSample: true
+                },
+                numOfWorkers: 2,
+                decoder: {
+                readers: ["ean_reader", "ean_8_reader", "code_128_reader"]
+                },
+                locate: true
+            }, function(err) {
                 if (err) {
-                  console.error("Quagga initialization error:", err);
-                  showToast(`Kunne ikke starte strekkodeleser: ${err.message || 'Ukjent feil'}`, 'error');
-                  return;
+                console.error("Quagga init error:", err);
+                showToast("Kunne ikke starte strekkodeleser", "error");
+                return;
                 }
                 
                 try {
-                  Quagga.start();
-                  isScanning = true;
-                  Quagga.onDetected(handleCameraScanResult);
-                  showToast('Kamera klar til skanning', 'success');
-                } catch (e) {
-                  console.error("Quagga start error:", e);
-                  showToast(`Feil ved start av strekkodeleser: ${e.message}`, 'error');
+                Quagga.start();
+                isScanning = true;
+                Quagga.onDetected(handleCameraScanResult);
+                } catch (error) {
+                console.error("Quagga start error:", error);
+                showToast("Feil ved oppstart av strekkodeleser", "error");
                 }
-              });
+            });
             
             return { success: true };
         } catch (error) {
