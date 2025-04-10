@@ -269,7 +269,7 @@ async function startCameraScanning(cameraId = null, options = {}) {
                 inputStream: {
                     name: "Live",
                     type: "LiveStream",
-                    target: videoElement,
+                    target: videoElement,  // Pass direktereferanse til elementet
                     constraints: {
                         width: { min: 640 },
                         height: { min: 480 },
@@ -308,23 +308,30 @@ async function startCameraScanning(cameraId = null, options = {}) {
                     return;
                 }
                 
-                Quagga.start();
-                isScanning = true;
-                
-                // Sett opp event handlers
-                Quagga.onDetected(handleCameraScanResult);
-                
-                // På iOS, bruk kun onDetected for bedre ytelse
-                if (!isIOS) {
-                    Quagga.onProcessed(handleProcessedResult);
+                // Forsøk å starte Quagga og fang eventuelle feil
+                try {
+                    Quagga.start();
+                    isScanning = true;
+                    
+                    // Sett opp event handlers
+                    Quagga.onDetected(handleCameraScanResult);
+                    
+                    // På iOS, bruk kun onDetected for bedre ytelse
+                    if (!isIOS) {
+                        Quagga.onProcessed(handleProcessedResult);
+                    }
+                    
+                    // Oppdater status
+                    if (scannerStatusCallback) {
+                        scannerStatusCallback(true, { type: 'camera' });
+                    }
+                    
+                    showToast('Kamera klar til skanning', 'success');
+                } catch (e) {
+                    console.error("Quagga start feilet:", e);
+                    showToast(`Kunne ikke starte strekkodeleser: ${e.message}`, 'error');
+                    stopCameraScanning();
                 }
-                
-                // Oppdater status
-                if (scannerStatusCallback) {
-                    scannerStatusCallback(true, { type: 'camera' });
-                }
-                
-                showToast('Kamera klar til skanning', 'success');
             });
             
             return { success: true };
