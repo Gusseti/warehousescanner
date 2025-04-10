@@ -551,6 +551,31 @@ function handleCameraScanResult(result) {
             }, 1500); // 1.5 sekunder cooldown
         }
     }
+    console.log("Direkte test - modul:", appState.currentModule);
+    
+    if (appState.currentModule === 'picking' && appState.pickListItems && appState.pickListItems.length > 0) {
+        // Få tak i det første elementet i plukklisten
+        const firstItem = appState.pickListItems[0];
+        console.log("Forsøker å simulere skanning av første vare:", firstItem.id);
+        
+        // Prøv å direkte kalle pickingjs-funksjon
+        if (window.handlePickScan) {
+            console.log("Kaller handlePickScan direkte");
+            window.handlePickScan(firstItem.id);
+        } else {
+            console.log("handlePickScan er ikke tilgjengelig globalt");
+        }
+        
+        // Prøv å simulere manuell inntasting
+        const pickManualScanEl = document.getElementById('pickManualScan');
+        const pickManualScanBtnEl = document.getElementById('pickManualScanBtn');
+        
+        if (pickManualScanEl && pickManualScanBtnEl) {
+            console.log("Simulerer manuell inntasting");
+            pickManualScanEl.value = firstItem.id;
+            pickManualScanBtnEl.click();
+        }
+    }
 }
 
 /**
@@ -851,19 +876,63 @@ function handleScan(barcode, type) {
         console.log(`Strekkode ${barcode} mappet til varenummer ${itemId}`);
     }
     
-    // Forberedende sjekk for plukking
-    if (type === 'pick' && appState.pickListItems && appState.pickListItems.length > 0) {
+    // I handleScan, når type er 'pick'
+    if (type === 'pick') {
+        // Direkte manipulasjon av appState
         const item = appState.pickListItems.find(item => item.id === itemId);
         
-        if (!item) {
-            showToast(`Vare "${itemId}" finnes ikke i plukklisten!`, 'error');
-            playErrorSound(); // Legg til denne funksjonen hvis ønskelig
-            return;
-        }
-        
-        if (item.pickedCount >= item.quantity) {
-            showToast(`Alle ${item.quantity} enheter av "${itemId}" er allerede plukket!`, 'warning');
-            return;
+        if (item) {
+            // Initialiser tellefelt hvis det ikke eksisterer
+            if (item.pickedCount === undefined) {
+                item.pickedCount = 0;
+            }
+            
+            // Øk antallet plukket
+            item.pickedCount++;
+            
+            // Merk varen som fullstendig plukket hvis alle enheter er skannet
+            if (item.pickedCount >= item.quantity) {
+                item.picked = true;
+                item.pickedAt = new Date();
+                
+                // Legg til i listen over fullstendig plukkede varer
+                if (!appState.pickedItems.includes(itemId)) {
+                    appState.pickedItems.push(itemId);
+                }
+            }
+            
+            // Lagre sist plukket vare for angrefunksjonalitet
+            appState.lastPickedItem = {
+                id: itemId,
+                timestamp: new Date()
+            };
+            
+            // Oppdater UI
+            if (typeof updatePickingUI === 'function') {
+                updatePickingUI();
+            } else {
+                console.error("updatePickingUI funksjon ikke funnet");
+                // Forsøk å kalle en global versjon
+                if (typeof window.updatePickingUI === 'function') {
+                    window.updatePickingUI();
+                }
+            }
+            
+            // Vis tilbakemelding til brukeren
+            const remainingCount = item.quantity - item.pickedCount;
+            
+            if (remainingCount > 0) {
+                showToast(`Vare "${itemId}" registrert! ${remainingCount} av ${item.quantity} gjenstår.`, 'info');
+            } else {
+                showToast(`Vare "${itemId}" fullstendig plukket!`, 'success');
+            }
+            
+            // Lagre endringer
+            if (typeof saveListsToStorage === 'function') {
+                saveListsToStorage();
+            } else {
+                console.error("saveListsToStorage funksjon ikke funnet");
+            }
         }
     }
     

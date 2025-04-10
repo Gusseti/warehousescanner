@@ -30,6 +30,8 @@ let canvasPickScannerEl;
 let scannerPickOverlayEl;
 let closePickScannerEl;
 
+window.handlePickScan = handlePickScan;
+
 /**
  * Initialiserer plukk-modulen
  */
