@@ -655,7 +655,7 @@ function handleProcessedResult(result) {
 /**
  * Spiller en lyd for å gi tilbakemelding ved vellykket skanning
  */
-function playSuccessSound() {
+export function playSuccessSound() {
     try {
         // Forsøk å bruke AudioContext for mest pålitelig lyd på tvers av enheter
         const audioContext = new (window.AudioContext || window.webkitAudioContext)();
@@ -1054,7 +1054,7 @@ function handleScan(barcode, type) {
 /**
  * Spiller en lyd for å gi tilbakemelding ved feil
  */
-function playErrorSound() {
+export function playErrorSound() {
     try {
         const audioContext = new (window.AudioContext || window.webkitAudioContext)();
         const oscillator = audioContext.createOscillator();
