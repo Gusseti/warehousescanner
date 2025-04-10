@@ -50,10 +50,15 @@ export function initBarcodeHandler() {
     setupBarcodeModalEvents();
 }
 
-/**
- * Oppretter modal for ukjente strekkoder hvis den ikke finnes
- */
+// I barcode-handler.js, erstatt createUnknownBarcodeModal og setupBarcodeModalEvents:
+
 function createUnknownBarcodeModal() {
+    // Sjekk om modal allerede eksisterer
+    let existingModal = document.getElementById('unknownBarcodeModal');
+    if (existingModal) {
+        document.body.removeChild(existingModal); // Fjern eksisterende modal
+    }
+    
     const modalHTML = `
 <div id="unknownBarcodeModal" class="modal">
     <div class="modal-content">
@@ -97,77 +102,129 @@ function createUnknownBarcodeModal() {
 </div>`;
 
     // Legg til modal i DOM
-    const modalContainer = document.createElement('div');
-    modalContainer.innerHTML = modalHTML;
-    document.body.appendChild(modalContainer.firstElementChild);
+    const tempDiv = document.createElement('div');
+    tempDiv.innerHTML = modalHTML;
+    document.body.appendChild(tempDiv.firstElementChild);
     
-    // Oppdater referanse
+    // Oppdater referanser
     unknownBarcodeModalEl = document.getElementById('unknownBarcodeModal');
+    unknownBarcodeValueEl = document.getElementById('unknownBarcodeValue');
+    itemIdInputEl = document.getElementById('itemIdInput');
+    itemDescInputEl = document.getElementById('itemDescInput');
+    itemQuantityInputEl = document.getElementById('itemQuantityInput');
+    saveBarcodeCheckboxEl = document.getElementById('saveBarcodeCheckbox');
+    similarBarcodesListEl = document.getElementById('similarBarcodesList');
+    saveBtnEl = document.getElementById('saveUnknownBarcodeBtn');
+    cancelBtnEl = document.getElementById('cancelUnknownBarcodeBtn');
+    modalCloseEl = document.getElementById('closeUnknownBarcodeModal');
+    
+    // Sett opp event listeners umiddelbart
+    setupBarcodeModalEvents();
 }
 
-/**
- * Setter opp event listeners for barcode modal
- */
 function setupBarcodeModalEvents() {
+    console.log("Setting up barcode modal events");
+    
+    // Sjekk at elementene finnes
+    modalCloseEl = document.getElementById('closeUnknownBarcodeModal');
+    cancelBtnEl = document.getElementById('cancelUnknownBarcodeBtn');
+    saveBtnEl = document.getElementById('saveUnknownBarcodeBtn');
+    similarBarcodesListEl = document.getElementById('similarBarcodesList');
+    
     // Lukk modal knapper
-    modalCloseEl.addEventListener('click', closeUnknownBarcodeModal);
-    cancelBtnEl.addEventListener('click', closeUnknownBarcodeModal);
+    if (modalCloseEl) {
+        console.log("Setting up close button event");
+        modalCloseEl.addEventListener('click', closeUnknownBarcodeModal);
+    } else {
+        console.error("Close button element not found");
+    }
+    
+    if (cancelBtnEl) {
+        console.log("Setting up cancel button event");
+        cancelBtnEl.addEventListener('click', closeUnknownBarcodeModal);
+    } else {
+        console.error("Cancel button element not found");
+    }
     
     // Lagre ukjent strekkode
-    saveBtnEl.addEventListener('click', () => {
-        const itemId = itemIdInputEl.value.trim();
-        const itemDesc = itemDescInputEl.value.trim();
-        const quantity = parseInt(itemQuantityInputEl.value) || 1;
-        
-        if (!itemId) {
-            showToast('Varenummer må fylles ut!', 'error');
-            return;
-        }
-        
-        // Lagre strekkode-mapping hvis valgt
-        if (saveBarcodeCheckboxEl.checked && lastScannedBarcode) {
-            appState.barcodeMapping[lastScannedBarcode] = itemId;
-            saveBarcodeMapping();
-        }
-        
-        // Legg til varen i riktig liste basert på context
-        if (currentScanTarget) {
-            addItemToTargetList(itemId, itemDesc, quantity);
-        }
-        
-        closeUnknownBarcodeModal();
-    });
+    if (saveBtnEl) {
+        console.log("Setting up save button event");
+        saveBtnEl.addEventListener('click', () => {
+            console.log("Save button clicked");
+            
+            const itemId = itemIdInputEl.value.trim();
+            const itemDesc = itemDescInputEl.value.trim();
+            const quantity = parseInt(itemQuantityInputEl.value) || 1;
+            
+            if (!itemId) {
+                showToast('Varenummer må fylles ut!', 'error');
+                return;
+            }
+            
+            // Lagre strekkode-mapping hvis valgt
+            if (saveBarcodeCheckboxEl.checked && lastScannedBarcode) {
+                appState.barcodeMapping[lastScannedBarcode] = itemId;
+                saveBarcodeMapping();
+            }
+            
+            // Legg til varen i riktig liste basert på context
+            if (currentScanTarget) {
+                addItemToTargetList(itemId, itemDesc, quantity);
+            }
+            
+            closeUnknownBarcodeModal();
+        });
+    } else {
+        console.error("Save button element not found");
+    }
     
     // Håndtere klikk på lignende strekkodeforslag
-    similarBarcodesListEl.addEventListener('click', (e) => {
-        if (e.target.classList.contains('similar-barcode-use')) {
-            const barcode = e.target.dataset.barcode;
-            const itemId = e.target.dataset.itemId;
+    if (similarBarcodesListEl) {
+        console.log("Setting up similar barcodes list event");
+        
+        // Fjern eksisterende event-listeners
+        const clonedList = similarBarcodesListEl.cloneNode(true);
+        similarBarcodesListEl.parentNode.replaceChild(clonedList, similarBarcodesListEl);
+        similarBarcodesListEl = clonedList;
+        
+        similarBarcodesListEl.addEventListener('click', (e) => {
+            console.log("Similar barcode list clicked", e.target);
             
-            // Fyll inn data
-            itemIdInputEl.value = itemId;
-            
-            // Finn beskrivelse hvis tilgjengelig fra pick eller receive lister
-            let description = '';
-            
-            // Sjekk først i plukklisten
-            const pickItem = appState.pickListItems.find(item => item.id === itemId);
-            if (pickItem) {
-                description = pickItem.description;
-            } else {
-                // Sjekk så i mottakslisten
-                const receiveItem = appState.receiveListItems.find(item => item.id === itemId);
-                if (receiveItem) {
-                    description = receiveItem.description;
+            if (e.target.classList.contains('similar-barcode-use')) {
+                const barcode = e.target.dataset.barcode;
+                const itemId = e.target.dataset.itemId;
+                
+                console.log("Using similar barcode:", barcode, "->", itemId);
+                
+                // Fyll inn data
+                if (itemIdInputEl) {
+                    itemIdInputEl.value = itemId;
+                    
+                    // Finn beskrivelse hvis tilgjengelig fra pick eller receive lister
+                    let description = '';
+                    
+                    // Sjekk først i plukklisten
+                    const pickItem = appState.pickListItems.find(item => item.id === itemId);
+                    if (pickItem) {
+                        description = pickItem.description;
+                    } else {
+                        // Sjekk så i mottakslisten
+                        const receiveItem = appState.receiveListItems.find(item => item.id === itemId);
+                        if (receiveItem) {
+                            description = receiveItem.description;
+                        }
+                    }
+                    
+                    // Sett beskrivelse hvis funnet
+                    if (description && itemDescInputEl) {
+                        itemDescInputEl.value = description;
+                    }
                 }
             }
-            
-            // Sett beskrivelse hvis funnet
-            if (description) {
-                itemDescInputEl.value = description;
-            }
-        }
-    });
+        });
+    } else {
+        console.error("Similar barcodes list element not found");
+    }
 }
 
 /**

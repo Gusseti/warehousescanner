@@ -164,11 +164,19 @@ export function loadItemWeights() {
  */
 export function saveListsToStorage() {
     try {
-        localStorage.setItem('pickListItems', JSON.stringify(appState.pickListItems));
-        localStorage.setItem('pickedItems', JSON.stringify(appState.pickedItems));
-        localStorage.setItem('receiveListItems', JSON.stringify(appState.receiveListItems));
-        localStorage.setItem('receivedItems', JSON.stringify(appState.receivedItems));
-        localStorage.setItem('returnListItems', JSON.stringify(appState.returnListItems));
+        // Forsikre oss om at data er i riktig format før lagring
+        console.log("Lagrer pickListItems:", appState.pickListItems);
+        console.log("Lagrer pickedItems:", appState.pickedItems);
+        
+        localStorage.setItem('pickListItems', JSON.stringify(appState.pickListItems || []));
+        localStorage.setItem('pickedItems', JSON.stringify(appState.pickedItems || []));
+        localStorage.setItem('lastPickedItem', appState.lastPickedItem ? JSON.stringify(appState.lastPickedItem) : null);
+        
+        localStorage.setItem('receiveListItems', JSON.stringify(appState.receiveListItems || []));
+        localStorage.setItem('receivedItems', JSON.stringify(appState.receivedItems || []));
+        localStorage.setItem('returnListItems', JSON.stringify(appState.returnListItems || []));
+        
+        console.log("Data lagret til localStorage");
     } catch (error) {
         console.error('Feil ved lagring av lister:', error);
         showToast('Kunne ikke lagre listedata.', 'error');
@@ -181,34 +189,115 @@ export function saveListsToStorage() {
  */
 export function loadListsFromStorage() {
     try {
+        console.log("Laster data fra localStorage");
+        
         // Plukkliste
         const storedPickListItems = localStorage.getItem('pickListItems');
         if (storedPickListItems) {
-            appState.pickListItems = JSON.parse(storedPickListItems);
+            try {
+                appState.pickListItems = JSON.parse(storedPickListItems);
+                console.log("Lastet pickListItems:", appState.pickListItems);
+            } catch (e) {
+                console.error("Feil ved parsing av pickListItems:", e);
+                appState.pickListItems = [];
+            }
+        } else {
+            appState.pickListItems = [];
         }
         
         const storedPickedItems = localStorage.getItem('pickedItems');
         if (storedPickedItems) {
-            appState.pickedItems = JSON.parse(storedPickedItems);
+            try {
+                appState.pickedItems = JSON.parse(storedPickedItems);
+                console.log("Lastet pickedItems:", appState.pickedItems);
+            } catch (e) {
+                console.error("Feil ved parsing av pickedItems:", e);
+                appState.pickedItems = [];
+            }
+        } else {
+            appState.pickedItems = [];
+        }
+        
+        const storedLastPickedItem = localStorage.getItem('lastPickedItem');
+        if (storedLastPickedItem && storedLastPickedItem !== "null") {
+            try {
+                appState.lastPickedItem = JSON.parse(storedLastPickedItem);
+            } catch (e) {
+                console.error("Feil ved parsing av lastPickedItem:", e);
+                appState.lastPickedItem = null;
+            }
+        } else {
+            appState.lastPickedItem = null;
         }
         
         // Mottaksliste
         const storedReceiveListItems = localStorage.getItem('receiveListItems');
         if (storedReceiveListItems) {
-            appState.receiveListItems = JSON.parse(storedReceiveListItems);
+            try {
+                appState.receiveListItems = JSON.parse(storedReceiveListItems);
+                console.log("Lastet receiveListItems:", appState.receiveListItems.length, "varer");
+            } catch (e) {
+                console.error("Feil ved parsing av receiveListItems:", e);
+                appState.receiveListItems = [];
+            }
+        } else {
+            appState.receiveListItems = [];
         }
         
         const storedReceivedItems = localStorage.getItem('receivedItems');
         if (storedReceivedItems) {
-            appState.receivedItems = JSON.parse(storedReceivedItems);
+            try {
+                appState.receivedItems = JSON.parse(storedReceivedItems);
+            } catch (e) {
+                console.error("Feil ved parsing av receivedItems:", e);
+                appState.receivedItems = [];
+            }
+        } else {
+            appState.receivedItems = [];
         }
         
         // Returliste
         const storedReturnListItems = localStorage.getItem('returnListItems');
         if (storedReturnListItems) {
-            appState.returnListItems = JSON.parse(storedReturnListItems);
+            try {
+                appState.returnListItems = JSON.parse(storedReturnListItems);
+                console.log("Lastet returnListItems:", appState.returnListItems.length, "varer");
+            } catch (e) {
+                console.error("Feil ved parsing av returnListItems:", e);
+                appState.returnListItems = [];
+            }
+        } else {
+            appState.returnListItems = [];
         }
         
+        // Oppdater UI basert på gjeldende modul hvis den er satt
+        if (appState.currentModule) {
+            switch (appState.currentModule) {
+                case 'picking':
+                    if (typeof updatePickingUI === 'function') {
+                        updatePickingUI();
+                    } else if (window.updatePickingUI) {
+                        window.updatePickingUI();
+                    }
+                    break;
+                case 'receiving':
+                    if (typeof updateReceivingUI === 'function') {
+                        updateReceivingUI();
+                    } else if (window.updateReceivingUI) {
+                        window.updateReceivingUI();
+                    }
+                    break;
+                case 'returns':
+                    if (typeof updateReturnsUI === 'function') {
+                        updateReturnsUI();
+                    } else if (window.updateReturnsUI) {
+                        window.updateReturnsUI();
+                    }
+                    break;
+            }
+        }
+        
+        console.log("Alle lister lastet fra localStorage");
         return true;
     } catch (error) {
         console.error('Feil ved lasting av lister:', error);
