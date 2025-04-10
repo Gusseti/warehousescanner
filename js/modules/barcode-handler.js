@@ -404,63 +404,88 @@ export function handleScannedBarcode(barcode, target, quantity = 1) {
  * @param {string} message - Melding å vise
  * @param {number} quantity - Antall (valgfritt)
  */
+// I barcode-handler.js, modifiser showUnknownItemModal-funksjonen for å sjekke om elementene finnes før du forsøker å bruke dem
 function showUnknownItemModal(barcode, itemId, target, message, quantity = 1) {
     // Sjekk om modalen finnes
+    let unknownBarcodeModalEl = document.getElementById('unknownBarcodeModal');
+    
     if (!unknownBarcodeModalEl) {
         createUnknownBarcodeModal();
         setupBarcodeModalEvents();
+        unknownBarcodeModalEl = document.getElementById('unknownBarcodeModal');
     }
     
-    // Oppdater UI med strekkode
-    unknownBarcodeValueEl.textContent = barcode;
+    // Få referanser til andre elementer
+    const unknownBarcodeValueEl = document.getElementById('unknownBarcodeValue');
+    const itemIdInputEl = document.getElementById('itemIdInput');
+    const itemDescInputEl = document.getElementById('itemDescInput');
+    const itemQuantityInputEl = document.getElementById('itemQuantityInput');
+    const similarBarcodesListEl = document.getElementById('similarBarcodesList');
+    const similarBarcodesCont = document.getElementById('similarBarcodesCont');
     
-    // Sett foreslått varenummer (men ikke samme som strekkoden)
-    if (itemId === barcode) {
-        itemIdInputEl.value = ''; // La brukeren sette dette
-    } else {
-        itemIdInputEl.value = itemId;
+    // Sjekk at alle elementer finnes før vi forsøker å bruke dem
+    if (unknownBarcodeValueEl) {
+        unknownBarcodeValueEl.textContent = barcode;
+    }
+    
+    if (itemIdInputEl) {
+        // Sett foreslått varenummer (men ikke samme som strekkoden)
+        if (itemId === barcode) {
+            itemIdInputEl.value = ''; // La brukeren sette dette
+        } else {
+            itemIdInputEl.value = itemId;
+        }
     }
     
     // Reset beskrivelse
-    itemDescInputEl.value = '';
+    if (itemDescInputEl) {
+        itemDescInputEl.value = '';
+    }
     
     // Sett antall
-    itemQuantityInputEl.value = quantity;
+    if (itemQuantityInputEl) {
+        itemQuantityInputEl.value = quantity;
+    }
     
     // Finn og vis lignende strekkoder
-    const similarBarcodes = findSimilarBarcodes(barcode, 0.7);
-    const similarBarcodesCont = document.getElementById('similarBarcodesCont');
+    const similarBarcodes = findSimilarBarcodes ? findSimilarBarcodes(barcode, 0.7) : [];
     
-    if (similarBarcodes.length > 0) {
-        similarBarcodesCont.style.display = 'block';
-        similarBarcodesListEl.innerHTML = '';
-        
-        similarBarcodes.forEach(item => {
-            const li = document.createElement('li');
-            li.className = 'similar-barcode-item';
-            li.style.margin = '5px 0';
-            li.style.padding = '5px';
-            li.style.border = '1px solid #ddd';
-            li.style.borderRadius = '4px';
+    if (similarBarcodesListEl && similarBarcodesCont) {
+        if (similarBarcodes.length > 0) {
+            similarBarcodesCont.style.display = 'block';
+            similarBarcodesListEl.innerHTML = '';
             
-            const useBtn = document.createElement('button');
-            useBtn.className = 'btn btn-sm btn-primary similar-barcode-use';
-            useBtn.textContent = 'Bruk';
-            useBtn.dataset.barcode = item.barcode;
-            useBtn.dataset.itemId = item.itemId;
-            useBtn.style.marginLeft = '10px';
-            
-            li.innerHTML = `<span>${item.barcode} -> ${item.itemId} (${Math.round(item.similarity * 100)}% match)</span>`;
-            li.appendChild(useBtn);
-            
-            similarBarcodesListEl.appendChild(li);
-        });
-    } else {
-        similarBarcodesCont.style.display = 'none';
+            similarBarcodes.forEach(item => {
+                const li = document.createElement('li');
+                li.className = 'similar-barcode-item';
+                li.style.margin = '5px 0';
+                li.style.padding = '5px';
+                li.style.border = '1px solid #ddd';
+                li.style.borderRadius = '4px';
+                
+                const useBtn = document.createElement('button');
+                useBtn.className = 'btn btn-sm btn-primary similar-barcode-use';
+                useBtn.textContent = 'Bruk';
+                useBtn.dataset.barcode = item.barcode;
+                useBtn.dataset.itemId = item.itemId;
+                useBtn.style.marginLeft = '10px';
+                
+                li.innerHTML = `<span>${item.barcode} -> ${item.itemId} (${Math.round(item.similarity * 100)}% match)</span>`;
+                li.appendChild(useBtn);
+                
+                similarBarcodesListEl.appendChild(li);
+            });
+        } else {
+            similarBarcodesCont.style.display = 'none';
+        }
     }
     
     // Vis modalen
-    unknownBarcodeModalEl.style.display = 'block';
+    if (unknownBarcodeModalEl) {
+        unknownBarcodeModalEl.style.display = 'block';
+    } else {
+        console.error('Kunne ikke vise modal for ukjent strekkode - element ikke funnet');
+    }
 }
 
 /**

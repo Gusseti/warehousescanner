@@ -31,6 +31,7 @@ let scannerPickOverlayEl;
 let closePickScannerEl;
 
 window.handlePickScan = handlePickScan;
+window.updatePickingUI = updatePickingUI;
 
 /**
  * Initialiserer plukk-modulen
@@ -387,9 +388,6 @@ function handlePickScan(barcode) {
         timestamp: new Date()
     };
     
-    // Oppdater UI
-    updatePickingUI();
-    
     // Vis tilbakemelding til brukeren
     const remainingCount = item.quantity - item.pickedCount;
     
@@ -398,6 +396,8 @@ function handlePickScan(barcode) {
     } else {
         showToast(`Vare "${itemId}" fullstendig plukket!`, 'success');
     }
+
+    updatePickingUI();
     
     // Lagre endringer
     saveListsToStorage();
