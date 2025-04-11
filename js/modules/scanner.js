@@ -858,6 +858,8 @@ function processScannedBarcode(barcode) {
     }
 }
 
+// scanner.js - handleScan funksjon komplett reparert
+
 /**
  * Håndterer skanning for alle moduler med forbedret strekkodevalidering
  * @param {string} barcode - Skannet strekkode
@@ -887,51 +889,29 @@ function handleScan(barcode, type) {
         console.log(`Strekkode ${barcode} mappet til varenummer ${itemId}`);
     }
     
-    // Forbedret kontroll for picking-modulen 
-    // Vi har flyttet kontrollene til handlePickScan
-    // Dette holder vi enkelt her for å ikke duplisere kontrollen
-    if (type === 'pick') {
-        // Finn varen i plukklisten
-        const item = appState.pickListItems.find(item => item.id === itemId);
-        
-        // Sjekk om varen finnes i listen
-        if (!item) {
-            blinkBackground('red');
-            playErrorSound();
-            showToast(`Vare "${itemId}" finnes ikke i plukklisten!`, 'error');
-            return;
-        }
-        
-        // La selve håndteringen skje i handlePickScan for å unngå duplikat-logikk
-    }
-    
-    // Tilsvarende sjekk for mottak
-    if (type === 'receive' && appState.receiveListItems && appState.receiveListItems.length > 0) {
-        const item = appState.receiveListItems.find(item => item.id === itemId);
-        
-        if (item && item.receivedCount >= item.quantity) {
-            blinkBackground('orange');
-            showToast(`Alle ${item.quantity} enheter av "${itemId}" er allerede mottatt!`, 'warning');
-            return;
-        }
-        // For mottak tillater vi at varer legges til selv om de ikke er i listen
-    }
-    
-    // Send til korrekt håndtering basert på type
+    // Her fjerner vi alle kontroller og lar onScanCallback håndtere det
+    // Vi vil kun sikre at vi ALLTID kaller riktig funksjon
     try {
         switch (type) {
             case 'pick':
-                // Bruk callback-funksjonen
+                // Logger utvidet informasjon for debugging
+                console.log(`Sender varenummer ${itemId} til plukk-modulen`);
+                
+                // Om vi har onScanCallback (satt opp ved initialisering av scanner)
                 if (typeof onScanCallback === 'function') {
                     console.log("Kaller onScanCallback med:", itemId);
                     onScanCallback(itemId);
-                } else {
-                    console.error("onScanCallback er ikke tilgjengelig");
-                    // Fallback: Prøv å kalle handlePickScan direkte hvis den er globalt tilgjengelig
+                } 
+                // Hvis den ikke finnes, fallback til andre metoder
+                else {
+                    console.log("onScanCallback er ikke tilgjengelig, prøver handlePickScan");
+                    // Direkte kall til global handlePickScan
                     if (typeof window.handlePickScan === 'function') {
                         window.handlePickScan(itemId);
-                    } else {
-                        // Siste utvei: Simuler en manuell inntasting
+                    } 
+                    // Siste utvei: simuler manuell inntasting
+                    else {
+                        console.log("handlePickScan ikke funnet, simulerer manuell inntasting");
                         const pickManualScanEl = document.getElementById('pickManualScan');
                         const pickManualScanBtnEl = document.getElementById('pickManualScanBtn');
                         
@@ -939,19 +919,70 @@ function handleScan(barcode, type) {
                             pickManualScanEl.value = itemId;
                             pickManualScanBtnEl.click();
                         } else {
-                            showToast("Kunne ikke registrere vare. Forsøk manuell inntasting.", "error");
+                            showToast("Feil: Kunne ikke finne skanningselementer.", "error");
                         }
                     }
                 }
                 break;
                 
-            // Resten av koden er uendret
             case 'receive':
-                // (uendret kode)
+                // Om vi har onScanCallback (satt opp ved initialisering av scanner)
+                if (typeof onScanCallback === 'function') {
+                    onScanCallback(itemId);
+                } 
+                // Hvis den ikke finnes, fallback til andre metoder
+                else {
+                    // Direkte kall til global handleReceiveScan
+                    if (typeof window.handleReceiveScan === 'function') {
+                        window.handleReceiveScan(itemId);
+                    } 
+                    // Siste utvei: simuler manuell inntasting
+                    else {
+                        const receiveManualScanEl = document.getElementById('receiveManualScan');
+                        const receiveManualScanBtnEl = document.getElementById('receiveManualScanBtn');
+                        
+                        if (receiveManualScanEl && receiveManualScanBtnEl) {
+                            receiveManualScanEl.value = itemId;
+                            receiveManualScanBtnEl.click();
+                        } else {
+                            showToast("Feil: Kunne ikke finne skanningselementer.", "error");
+                        }
+                    }
+                }
                 break;
                 
             case 'return':
-                // (uendret kode)
+                const quantityEl = document.getElementById('returnQuantity');
+                const quantity = quantityEl ? parseInt(quantityEl.value) || 1 : 1;
+                
+                // Om vi har onScanCallback (satt opp ved initialisering av scanner)
+                if (typeof onScanCallback === 'function') {
+                    onScanCallback(itemId, quantity);
+                } 
+                // Hvis den ikke finnes, fallback til andre metoder
+                else {
+                    // Direkte kall til global handleReturnScan
+                    if (typeof window.handleReturnScan === 'function') {
+                        window.handleReturnScan(itemId, quantity);
+                    } 
+                    // Siste utvei: simuler manuell inntasting
+                    else {
+                        const returnManualScanEl = document.getElementById('returnManualScan');
+                        const returnManualScanBtnEl = document.getElementById('returnManualScanBtn');
+                        
+                        if (returnManualScanEl && returnManualScanBtnEl) {
+                            returnManualScanEl.value = itemId;
+                            // Sjekk om antall-feltet er endret
+                            const returnQuantityEl = document.getElementById('returnQuantity');
+                            if (returnQuantityEl) {
+                                returnQuantityEl.value = quantity;
+                            }
+                            returnManualScanBtnEl.click();
+                        } else {
+                            showToast("Feil: Kunne ikke finne skanningselementer.", "error");
+                        }
+                    }
+                }
                 break;
                 
             default:
