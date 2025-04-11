@@ -401,7 +401,6 @@ function addItemToTargetList(itemId, itemDesc, quantity) {
     saveListsToStorage();
 }
 
-// Erstatt handleScannedBarcode i barcode-handler.js med denne forenklede versjonen
 /**
  * Hovedfunksjon for håndtering av skannede strekkoder
  * @param {string} barcode - Skannet strekkode
@@ -446,10 +445,31 @@ export function handleScannedBarcode(barcode, target, quantity = 1) {
                 return false;
                 
             case 'return':
-                // For retur er det ok å legge til nye varer automatisk
+                // VIKTIG: For retur er det ALLTID ok å legge til nye varer
+                // Vi skal ikke validere om varenummeret finnes i plukklisten her
                 return false;
         }
     } else {
+        // For retur og mottak er det ok å bruke strekkoden direkte som varenummer
+        if (target === 'return' || target === 'receive') {
+            return false;
+        }
+        
+        // For plukk må strekkoden finnes i mappingen eller i plukklisten
+        if (target === 'pick') {
+            // Finn varen direkte i plukklisten (i tilfelle strekkoden er identisk med varenummer)
+            const pickItem = appState.pickListItems.find(item => item.id === barcode);
+            if (!pickItem) {
+                // Strekkode ikke funnet i mapping eller plukkliste - blink rødt og vis feilmelding
+                blinkBackground('red');
+                showToast(`Ukjent strekkode: ${barcode}`, 'error');
+                playErrorSound();
+                return true;
+            }
+            // Strekkoden er identisk med et varenummer i plukklisten, la vanlig håndtering ta over
+            return false;
+        }
+        
         // Strekkode ikke funnet i mapping - blink rødt og vis feilmelding
         blinkBackground('red');
         showToast(`Ukjent strekkode: ${barcode}`, 'error');

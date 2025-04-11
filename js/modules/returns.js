@@ -225,16 +225,6 @@ async function startReturnCameraScanning() {
  * @param {number} quantity - Antall varer å returnere
  */
 export function handleReturnScan(barcode, quantity = 1) {
-    // VIKTIG: Fjern sjekken som blokkerer skanning når annen modul er aktiv
-    // Dette var hovedproblemet som forårsaket at skanninger ikke ble registrert
-    
-    // Original kode som blokkerte registrering:
-    // if (appState.currentModule !== 'returns') {
-    //     console.log('Ignorerer strekkodeskanning i retur-modulen fordi en annen modul er aktiv:', appState.currentModule);
-    //     return;
-    // }
-    
-    // Ny kode som logger men ikke blokkerer:
     if (appState.currentModule !== 'returns') {
         console.log('Merk: handleReturnScan kalles mens en annen modul er aktiv:', appState.currentModule);
         // Vi fortsetter likevel med funksjonen i tilfelle dette er et direkte kall
@@ -249,11 +239,8 @@ export function handleReturnScan(barcode, quantity = 1) {
         returnManualScanEl.value = '';
     }
     
-    // Bruk den forbedrede strekkodehåndtereren
-    // Hvis den returnerer true, har den allerede håndtert strekkoden
-    if (handleScannedBarcode(barcode, 'return', quantity)) {
-        return;
-    }
+    // FJERNET: Fjernet kall til handleScannedBarcode som validerer varenummer
+    // Dette er unødvendig for returmodulen
     
     // Sjekk om strekkoden finnes i barcode mapping
     let itemId = barcode;
@@ -271,6 +258,7 @@ export function handleReturnScan(barcode, quantity = 1) {
         showToast(`Vare "${itemId}" antall økt til ${appState.returnListItems[existingItemIndex].quantity}!`, 'success');
     } else {
         // Finn varen i plukk- eller mottaksliste for å få beskrivelse
+        // MEN IKKE KREV AT DEN FINNES DER
         let description = 'Returvare';
         let foundItem = appState.pickListItems.find(item => item.id === itemId);
         if (!foundItem) {
