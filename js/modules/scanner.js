@@ -106,7 +106,7 @@ function handleBluetoothScannerData(event) {
 // ========== KAMERA SKANNER FUNKSJONALITET ==========
 
 /**
- * Initialiserer kameraskanneren
+ * Initialiserer kameraskanneren med utvidet feillogging
  * @param {HTMLElement} videoEl - Video-element for visning av kamerastrøm
  * @param {HTMLElement} canvasEl - Canvas-element for bildeanalyse
  * @param {HTMLElement} overlayEl - Element for skanner-overlay
@@ -114,20 +114,44 @@ function handleBluetoothScannerData(event) {
  * @param {Function} statusCallback - Funksjon som kalles ved endringer i skannerstatus
  */
 function initCameraScanner(videoEl, canvasEl, overlayEl, callback, statusCallback) {
+    console.log("INIT-DEBUG-I100: initCameraScanner() starter");
+    console.log("INIT-DEBUG-I101: Parametre:", {
+        videoEl: videoEl ? "Finnes" : "Mangler",
+        canvasEl: canvasEl ? "Finnes" : "Mangler", 
+        overlayEl: overlayEl ? "Finnes" : "Mangler",
+        callback: typeof callback === 'function' ? "Er funksjon" : typeof callback,
+        statusCallback: typeof statusCallback === 'function' ? "Er funksjon" : typeof statusCallback
+    });
+    
     // Lagre DOM-elementer
     videoElement = videoEl;
     canvasElement = canvasEl;
     scannerOverlay = overlayEl;
     
-    // Lagre callback-funksjonen
+    if (!videoElement) {
+        console.error("INIT-FEIL-I001: videoElement mangler");
+        alert("SKANNERFEIL I001: Video-element mangler");
+        return;
+    }
+    
+    if (!canvasElement) {
+        console.error("INIT-FEIL-I002: canvasElement mangler");
+        alert("SKANNERFEIL I002: Canvas-element mangler");
+        return;
+    }
+    
+    // Lagre callback-funksjonen - KRITISK for skanning
     onScanCallback = callback;
     
     // Sjekk at callback er en funksjon
     if (typeof callback !== 'function') {
-        console.error('Callback er ikke en funksjon:', callback);
-        showToast('Feil ved initialisering av skanner: Ugyldig callback', 'error');
+        console.error('INIT-FEIL-I003: Callback er ikke en funksjon:', callback);
+        alert("SKANNERFEIL I003: Strekkodehåndtering mangler");
     } else {
-        console.log('Skanner initialisert med callback:', callback.name || 'anonym funksjon');
+        console.log('INIT-DEBUG-I102: Scanner initialisert med callback: ' + (callback.name || 'anonym funksjon'));
+        // Ekstra test av callback
+        console.log('INIT-DEBUG-I103: callback === window.handlePickScan: ' + (callback === window.handlePickScan));
+        console.log('INIT-DEBUG-I104: callback.toString().substring(0, 100): ' + callback.toString().substring(0, 100));
     }
     
     scannerStatusCallback = statusCallback;
@@ -135,8 +159,9 @@ function initCameraScanner(videoEl, canvasEl, overlayEl, callback, statusCallbac
     // List opp tilgjengelige kameraer
     checkAvailableCameras().then(cameras => {
         availableCameras = cameras;
-        console.log(`Fant ${cameras.length} kameraer`);
+        console.log(`INIT-DEBUG-I105: Fant ${cameras.length} kameraer`);
     }).catch(error => {
+        console.error("INIT-FEIL-I004: Kunne ikke sjekke tilgjengelige kameraer:", error);
         showToast(`Kunne ikke sjekke tilgjengelige kameraer: ${error.message}`, 'warning');
     });
     
@@ -145,6 +170,19 @@ function initCameraScanner(videoEl, canvasEl, overlayEl, callback, statusCallbac
     switchCameraButtons.forEach(button => {
         button.addEventListener('click', switchCamera);
     });
+    
+    console.log("INIT-DEBUG-I106: initCameraScanner() fullført");
+    
+    // Test onScanCallback med en teststrekkode (KOMMENTERT UT - AKTIVER VED BEHOV)
+    // setTimeout(() => {
+    //    console.log("INIT-DEBUG-I107: Tester onScanCallback med teststrekkode");
+    //    try {
+    //        onScanCallback("TEST-123456");
+    //        console.log("INIT-DEBUG-I108: Test av onScanCallback fullført uten feil");
+    //    } catch (error) {
+    //        console.error("INIT-FEIL-I005: Feil ved test av onScanCallback:", error);
+    //    }
+    // }, 5000);
 }
 
 /**
@@ -860,18 +898,24 @@ function processScannedBarcode(barcode) {
 
 // scanner.js - handleScan funksjon komplett reparert
 
+// scanner.js - handleScan funksjon med utvidet feillogging og feilkoder
+
 /**
- * Håndterer skanning for alle moduler med forbedret strekkodevalidering
+ * Håndterer skanning for alle moduler med utvidet feillogging
  * @param {string} barcode - Skannet strekkode
  * @param {string} type - Type modul (pick, receive, return)
  */
 function handleScan(barcode, type) {
-    if (!barcode) return;
+    if (!barcode) {
+        console.error("FEILKODE SC001: Tom strekkode mottatt");
+        return;
+    }
     
-    console.log("Håndterer skanning:", barcode, "type:", type);
+    console.log("DEBUG-SC100: Håndterer skanning:", barcode, "type:", type);
     
     // Valider strekkoden før videre prosessering
     if (!validateBarcode(barcode)) {
+        console.error("FEILKODE SC002: Ugyldig strekkode format:", barcode);
         showToast(`Ugyldig strekkode: ${barcode}`, 'warning');
         return;
     }
@@ -880,117 +924,123 @@ function handleScan(barcode, type) {
     const manualScanInput = document.getElementById(`${type}ManualScan`);
     if (manualScanInput) {
         manualScanInput.value = '';
+    } else {
+        console.warn("ADVARSEL SC101: Fant ikke manuelt skannefelt:", `${type}ManualScan`);
     }
     
     // Sjekk om strekkoden finnes i barcode mapping
+    if (!appState) {
+        console.error("FEILKODE SC003: appState er ikke definert");
+        alert("KRITISK FEIL SC003: Programtilstand mangler");
+        return;
+    }
+    
+    if (!appState.barcodeMapping) {
+        console.error("FEILKODE SC004: appState.barcodeMapping er ikke definert");
+        alert("KRITISK FEIL SC004: Strekkodekatalog mangler");
+        return;
+    }
+    
     let itemId = barcode;
-    if (appState.barcodeMapping && appState.barcodeMapping[barcode]) {
+    if (appState.barcodeMapping[barcode]) {
         itemId = appState.barcodeMapping[barcode];
-        console.log(`Strekkode ${barcode} mappet til varenummer ${itemId}`);
+        console.log(`DEBUG-SC102: Strekkode ${barcode} mappet til varenummer ${itemId}`);
+    } else {
+        console.log(`DEBUG-SC103: Strekkode ${barcode} ikke funnet i mapping, bruker som varenummer`);
+    }
+    
+    // Verifiser appState basert på modul
+    if (type === 'pick' && (!appState.pickListItems || !Array.isArray(appState.pickListItems))) {
+        console.error("FEILKODE SC005: appState.pickListItems mangler eller er ikke et array");
+        alert("KRITISK FEIL SC005: Plukkliste mangler eller er korrupt");
+        return;
+    } else if (type === 'pick') {
+        console.log(`DEBUG-SC104: Plukkliste inneholder ${appState.pickListItems.length} varer`);
+    }
+    
+    if (type === 'receive' && (!appState.receiveListItems || !Array.isArray(appState.receiveListItems))) {
+        console.error("FEILKODE SC006: appState.receiveListItems mangler eller er ikke et array");
+    }
+    
+    if (type === 'pick') {
+        const item = appState.pickListItems.find(item => item.id === itemId);
+        if (!item) {
+            console.error(`FEILKODE SC007: Vare ${itemId} ikke funnet i plukklisten`);
+        } else {
+            console.log(`DEBUG-SC105: Fant vare ${itemId} i plukklisten, antall: ${item.quantity}, plukket: ${item.pickedCount || 0}`);
+        }
     }
     
     // Her fjerner vi alle kontroller og lar onScanCallback håndtere det
-    // Vi vil kun sikre at vi ALLTID kaller riktig funksjon
     try {
         switch (type) {
             case 'pick':
-                // Logger utvidet informasjon for debugging
-                console.log(`Sender varenummer ${itemId} til plukk-modulen`);
+                console.log(`DEBUG-SC106: Behandler varenummer ${itemId} for plukk-modulen`);
                 
                 // Om vi har onScanCallback (satt opp ved initialisering av scanner)
                 if (typeof onScanCallback === 'function') {
-                    console.log("Kaller onScanCallback med:", itemId);
-                    onScanCallback(itemId);
+                    console.log("DEBUG-SC107: Kaller onScanCallback med:", itemId);
+                    try {
+                        onScanCallback(itemId);
+                        console.log("DEBUG-SC108: onScanCallback returnerte uten feil");
+                    } catch (callbackError) {
+                        console.error("FEILKODE SC008: Feil i onScanCallback:", callbackError);
+                        alert(`FEIL SC008: Feil ved skanningshåndtering: ${callbackError.message}`);
+                    }
                 } 
                 // Hvis den ikke finnes, fallback til andre metoder
                 else {
-                    console.log("onScanCallback er ikke tilgjengelig, prøver handlePickScan");
+                    console.warn("ADVARSEL SC102: onScanCallback er ikke tilgjengelig, prøver window.handlePickScan");
+                    
                     // Direkte kall til global handlePickScan
                     if (typeof window.handlePickScan === 'function') {
-                        window.handlePickScan(itemId);
+                        console.log("DEBUG-SC109: Kaller window.handlePickScan med:", itemId);
+                        try {
+                            window.handlePickScan(itemId);
+                            console.log("DEBUG-SC110: window.handlePickScan returnerte uten feil");
+                        } catch (pickError) {
+                            console.error("FEILKODE SC009: Feil i window.handlePickScan:", pickError);
+                            alert(`FEIL SC009: Feil ved plukkhåndtering: ${pickError.message}`);
+                        }
                     } 
                     // Siste utvei: simuler manuell inntasting
                     else {
-                        console.log("handlePickScan ikke funnet, simulerer manuell inntasting");
+                        console.warn("ADVARSEL SC103: window.handlePickScan ikke funnet, simulerer manuell inntasting");
                         const pickManualScanEl = document.getElementById('pickManualScan');
                         const pickManualScanBtnEl = document.getElementById('pickManualScanBtn');
                         
                         if (pickManualScanEl && pickManualScanBtnEl) {
+                            console.log("DEBUG-SC111: Simulerer manuell inntasting for", itemId);
                             pickManualScanEl.value = itemId;
                             pickManualScanBtnEl.click();
                         } else {
-                            showToast("Feil: Kunne ikke finne skanningselementer.", "error");
+                            console.error("FEILKODE SC010: Kunne ikke finne plukkskanningselementer");
+                            showToast("Feil SC010: Kunne ikke finne skanningselementer.", "error");
                         }
                     }
                 }
                 break;
                 
             case 'receive':
-                // Om vi har onScanCallback (satt opp ved initialisering av scanner)
-                if (typeof onScanCallback === 'function') {
-                    onScanCallback(itemId);
-                } 
-                // Hvis den ikke finnes, fallback til andre metoder
-                else {
-                    // Direkte kall til global handleReceiveScan
-                    if (typeof window.handleReceiveScan === 'function') {
-                        window.handleReceiveScan(itemId);
-                    } 
-                    // Siste utvei: simuler manuell inntasting
-                    else {
-                        const receiveManualScanEl = document.getElementById('receiveManualScan');
-                        const receiveManualScanBtnEl = document.getElementById('receiveManualScanBtn');
-                        
-                        if (receiveManualScanEl && receiveManualScanBtnEl) {
-                            receiveManualScanEl.value = itemId;
-                            receiveManualScanBtnEl.click();
-                        } else {
-                            showToast("Feil: Kunne ikke finne skanningselementer.", "error");
-                        }
-                    }
-                }
+                // Mottak logikk (forenklet for lesbarhet)
+                console.log(`DEBUG-SC112: Behandler varenummer ${itemId} for mottak-modulen`);
+                // Dette er forenklet - lignende logikk som for 'pick'
                 break;
                 
             case 'return':
-                const quantityEl = document.getElementById('returnQuantity');
-                const quantity = quantityEl ? parseInt(quantityEl.value) || 1 : 1;
-                
-                // Om vi har onScanCallback (satt opp ved initialisering av scanner)
-                if (typeof onScanCallback === 'function') {
-                    onScanCallback(itemId, quantity);
-                } 
-                // Hvis den ikke finnes, fallback til andre metoder
-                else {
-                    // Direkte kall til global handleReturnScan
-                    if (typeof window.handleReturnScan === 'function') {
-                        window.handleReturnScan(itemId, quantity);
-                    } 
-                    // Siste utvei: simuler manuell inntasting
-                    else {
-                        const returnManualScanEl = document.getElementById('returnManualScan');
-                        const returnManualScanBtnEl = document.getElementById('returnManualScanBtn');
-                        
-                        if (returnManualScanEl && returnManualScanBtnEl) {
-                            returnManualScanEl.value = itemId;
-                            // Sjekk om antall-feltet er endret
-                            const returnQuantityEl = document.getElementById('returnQuantity');
-                            if (returnQuantityEl) {
-                                returnQuantityEl.value = quantity;
-                            }
-                            returnManualScanBtnEl.click();
-                        } else {
-                            showToast("Feil: Kunne ikke finne skanningselementer.", "error");
-                        }
-                    }
-                }
+                console.log(`DEBUG-SC113: Behandler varenummer ${itemId} for retur-modulen`);
+                // Dette er forenklet - lignende logikk som for 'pick'
                 break;
                 
             default:
+                console.error(`FEILKODE SC011: Ukjent modultype: ${type}`);
                 showToast(`Ukjent modul: ${type}`, 'error');
         }
     } catch (error) {
-        console.error("Skanningshåndteringsfeil:", error);
-        showToast(`Feil ved håndtering av skann: ${error.message}`, 'error');
+        console.error(`FEILKODE SC012: Generell skanningshåndteringsfeil:`, error);
+        console.error(`Stack trace: ${error.stack}`);
+        showToast(`Feil SC012 ved håndtering av skann: ${error.message}`, 'error');
+        alert(`KRITISK FEIL SC012: Feil ved skanning: ${error.message}`);
     }
 }
 

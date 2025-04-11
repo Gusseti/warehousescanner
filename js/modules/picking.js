@@ -319,72 +319,105 @@ async function startPickCameraScanning() {
 }
 
 /**
- * Håndterer skanning for plukk
+ * Håndterer skanning for plukk med utvidet feillogging
  * @param {string} barcode - Skannet strekkode
  */
 function handlePickScan(barcode) {
-    if (!barcode) return;
+    console.log("PLUKKDEBUG-P100: handlePickScan() starter med strekkode:", barcode);
     
-    console.log('Håndterer strekkode i plukk-modulen:', barcode);
+    if (!barcode) {
+        console.error("PLUKKFEIL-P001: Tomt strekkodeargument til handlePickScan");
+        return;
+    }
     
     // Tøm input etter skanning
-    if (pickManualScanEl) pickManualScanEl.value = '';
+    if (pickManualScanEl) {
+        pickManualScanEl.value = '';
+    } else {
+        console.warn("PLUKKADVARSEL-P101: pickManualScanEl er ikke definert");
+    }
+    
+    // Sjekk appState
+    if (!appState) {
+        console.error("PLUKKFEIL-P002: appState mangler");
+        alert("KRITISK FEIL P002: Programtilstand mangler");
+        return;
+    }
+    
+    // Sjekk strekkodekatalog
+    if (!appState.barcodeMapping) {
+        console.error("PLUKKFEIL-P003: appState.barcodeMapping mangler");
+        alert("KRITISK FEIL P003: Strekkodekatalog mangler");
+        return;
+    }
+    
+    // Sjekk plukkliste
+    if (!appState.pickListItems || !Array.isArray(appState.pickListItems)) {
+        console.error("PLUKKFEIL-P004: appState.pickListItems mangler eller er ikke et array");
+        alert("KRITISK FEIL P004: Plukkliste mangler eller er korrupt");
+        return;
+    }
+    
+    console.log(`PLUKKDEBUG-P102: Plukkliste inneholder ${appState.pickListItems.length} varer`);
     
     // Sjekk om strekkoden finnes i barcode mapping
     let itemId = barcode;
     if (appState.barcodeMapping[barcode]) {
         itemId = appState.barcodeMapping[barcode];
-        console.log(`Strekkode ${barcode} mappet til varenummer ${itemId}`);
+        console.log(`PLUKKDEBUG-P103: Strekkode ${barcode} mappet til varenummer ${itemId}`);
+    } else {
+        console.log(`PLUKKDEBUG-P104: Strekkode ${barcode} ikke funnet i mapping, bruker som varenummer`);
     }
     
     // Finn varen i listen
     const item = appState.pickListItems.find(item => item.id === itemId);
     
     if (!item) {
-        // Varen finnes ikke i listen
+        console.error(`PLUKKFEIL-P005: Fant ikke vare "${itemId}" i plukklisten`);
         showToast(`Vare "${itemId}" finnes ikke i plukklisten!`, 'error');
         blinkBackground('red');
         playErrorSound();
         return;
     }
     
+    console.log(`PLUKKDEBUG-P105: Fant vare ${itemId} i plukklisten`);
+    console.log(`PLUKKDEBUG-P106: Detaljer for vare ${itemId}:`, JSON.stringify(item, null, 2));
+    
     // Initialisere tellefelt hvis det ikke eksisterer
     if (item.pickedCount === undefined) {
+        console.log(`PLUKKDEBUG-P107: Initialiserer pickedCount for ${itemId} til 0`);
         item.pickedCount = 0;
     }
     
-    // VIKTIG: STRENGERE SJEKK FOR MAKSIMALT ANTALL
-    // Sjekk om vi allerede har plukket maks antall før vi gjør noe som helst
+    // SJEKK FOR MAKSIMALT ANTALL
     if (item.pickedCount >= item.quantity) {
-        // Vis en tydelig feilmelding
+        console.error(`PLUKKFEIL-P006: Maksantall nådd for ${itemId}: ${item.pickedCount}/${item.quantity}`);
         showToast(`MAKS OPPNÅDD: ${item.pickedCount}/${item.quantity} enheter av "${itemId}" er allerede plukket!`, 'error');
-        
-        // Vis visuell indikasjon (rød bakgrunn)
         blinkBackground('red');
-        
-        // Spill feilalarm
         playErrorSound();
-        
-        return; // VIKTIG: Stopp funksjonen her!
+        return;
     }
     
     // Øk antallet plukket
     item.pickedCount++;
-    console.log(`Økte pickedCount til ${item.pickedCount} for vare ${itemId}`);
+    console.log(`PLUKKDEBUG-P108: Økte pickedCount til ${item.pickedCount} for vare ${itemId}`);
     
     // Merk varen som fullstendig plukket hvis alle enheter er skannet
     if (item.pickedCount >= item.quantity) {
+        console.log(`PLUKKDEBUG-P109: Vare ${itemId} er nå fullstendig plukket`);
         item.picked = true;
         item.pickedAt = new Date();
         
         // Legg til i listen over fullstendig plukkede varer
         if (!appState.pickedItems.includes(itemId)) {
             appState.pickedItems.push(itemId);
+            console.log(`PLUKKDEBUG-P110: La til ${itemId} i fullstendig plukkede varer`);
         }
         
         // Vis grønn bakgrunn
         blinkBackground('green');
     } else {
+        console.log(`PLUKKDEBUG-P111: Vare ${itemId} er delvis plukket: ${item.pickedCount}/${item.quantity}`);
         // Vis grønn bakgrunn for delvis plukking også
         blinkBackground('green');
     }
@@ -394,6 +427,7 @@ function handlePickScan(barcode) {
         id: itemId,
         timestamp: new Date()
     };
+    console.log(`PLUKKDEBUG-P112: Oppdaterte lastPickedItem til ${itemId}`);
     
     // Vis tilbakemelding til brukeren
     const remainingCount = item.quantity - item.pickedCount;
@@ -405,10 +439,25 @@ function handlePickScan(barcode) {
     }
 
     // Oppdater UI før lagring for umiddelbar tilbakemelding
-    updatePickingUI();
+    console.log(`PLUKKDEBUG-P113: Kaller updatePickingUI()`);
+    try {
+        updatePickingUI();
+    } catch (uiError) {
+        console.error(`PLUKKFEIL-P007: Feil ved oppdatering av UI:`, uiError);
+        alert(`UI-FEIL P007: Kunne ikke oppdatere visningen: ${uiError.message}`);
+    }
 
     // Lagre endringer
-    saveListsToStorage();
+    console.log(`PLUKKDEBUG-P114: Kaller saveListsToStorage()`);
+    try {
+        saveListsToStorage();
+        console.log(`PLUKKDEBUG-P115: Lagring fullført`);
+    } catch (storageError) {
+        console.error(`PLUKKFEIL-P008: Feil ved lagring av lister:`, storageError);
+        alert(`LAGRINGSFEIL P008: Kunne ikke lagre data: ${storageError.message}`);
+    }
+    
+    console.log(`PLUKKDEBUG-P116: handlePickScan() fullført for strekkode ${barcode} / vare ${itemId}`);
 }
 
 /**
