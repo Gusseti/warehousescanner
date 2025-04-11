@@ -850,8 +850,10 @@ export function exportWithFormat(items, type, format) {
 
 // Legg til i import-export.js
 
+// Legg til i import-export.js
+
 /**
- * Importerer data fra kvittering-PDF som inkluderer Palle-ID
+ * Importerer data fra kvittering-PDF fra Kvik følgeseddel
  * @param {File} file - PDF-fil
  * @returns {Promise} Løftebasert resultat av importen
  */
@@ -910,7 +912,7 @@ export async function importFromReceiptPDF(file) {
         }
         
         // Identifiser og behandle mottakslisten
-        const items = processReceiptLines(allTextLines);
+        const items = processKvikReceiptLines(allTextLines);
         
         if (items.length === 0) {
             throw new Error('Ingen varer funnet i PDF-en.');
@@ -931,6 +933,142 @@ export async function importFromReceiptPDF(file) {
         showToast('Feil ved import: ' + error.message, 'error');
         throw error;
     }
+}
+
+/**
+ * Prosesserer linjer fra Kvik følgeseddel-PDF
+ * @param {Array<string>} lines - Tekstlinjer fra PDF
+ * @returns {Array<Object>} Array med vareposter
+ */
+function processKvikReceiptLines(lines) {
+    const items = [];
+    let currentPalleId = null;
+    
+    // Finn kolonneoverskriftene
+    const headerIndex = lines.findIndex(line => 
+        line.includes('Palle id') && 
+        line.includes('Varenummer') && 
+        line.includes('Beskrivelse') && 
+        line.includes('Bestilt') && 
+        line.includes('Plukket')
+    );
+    
+    if (headerIndex === -1) {
+        console.warn('Fant ikke kolonneoverskrifter i Kvik følgeseddel');
+        return [];
+    }
+    
+    console.log(`Fant kolonneoverskrifter på linje ${headerIndex}`);
+    
+    // Behandle linjene etter overskriften
+    for (let i = headerIndex + 1; i < lines.length; i++) {
+        const line = lines[i].trim();
+        
+        // Skip tomme linjer
+        if (!line) continue;
+        
+        // Sjekk om dette er en 9-sifret palle-ID alene på linjen
+        if (/^\d{9}$/.test(line)) {
+            currentPalleId = line;
+            console.log(`Fant ny Palle ID: ${currentPalleId}`);
+            continue;
+        }
+        
+        // Sjekk om linjen starter med et varenummer-mønster
+        // Utvidet mønster for å dekke alle Kvik-varenummerformater
+        const productCodeMatch = line.match(/^(\d{3}-[A-Z0-9]+-?\d*|[A-Z]{2}\d{5}|[A-Z0-9]{2}\d{3,5}|BP\d{5}|HV\d{1,4}(-\d+)?)/);
+        
+        if (productCodeMatch) {
+            // Dette er starten på en produktlinje
+            const productId = productCodeMatch[1];
+            
+            // Sjekk om det er tall på slutten av linjen (bestilt, plukket, gjenstående)
+            const numbersMatch = line.match(/(\d+)\s+(\d+)\s+(\d+)$/);
+            
+            if (numbersMatch) {
+                // Alt er på én linje
+                const bestilt = parseInt(numbersMatch[1]);
+                const plukket = parseInt(numbersMatch[2]);
+                const gjenstaaende = parseInt(numbersMatch[3]);
+                
+                // Finn beskrivelsen (mellom varenummer og tallene)
+                const descriptionStart = productId.length;
+                const descriptionEnd = line.lastIndexOf(numbersMatch[0]);
+                const description = line.substring(descriptionStart, descriptionEnd).trim();
+                
+                items.push({
+                    id: productId,
+                    description: description,
+                    quantity: bestilt,
+                    weight: appState.itemWeights[productId] || appState.settings.defaultItemWeight,
+                    received: plukket === bestilt,
+                    receivedAt: plukket === bestilt ? new Date() : null,
+                    receivedCount: plukket,
+                    palleId: currentPalleId
+                });
+                
+                console.log(`Behandlet enkellinjeprodukt: ${productId}, Bestilt: ${bestilt}, Plukket: ${plukket}`);
+            } else {
+                // Beskrivelsen går over flere linjer, finn neste tall
+                let j = i + 1;
+                let combinedDescription = line.substring(productId.length).trim();
+                let bestilt = 0, plukket = 0, gjenstaaende = 0;
+                let foundNumbers = false;
+                
+                // Søk fremover etter tallene (bestilt, plukket, gjenstående)
+                while (j < Math.min(i + 10, lines.length) && !foundNumbers) {
+                    const nextLine = lines[j].trim();
+                    
+                    // Sjekk om dette er bare tallene
+                    const numbersOnlyMatch = nextLine.match(/^(\d+)\s+(\d+)\s+(\d+)$/);
+                    if (numbersOnlyMatch) {
+                        bestilt = parseInt(numbersOnlyMatch[1]);
+                        plukket = parseInt(numbersOnlyMatch[2]);
+                        gjenstaaende = parseInt(numbersOnlyMatch[3]);
+                        foundNumbers = true;
+                        
+                        // Hopp til etter denne linjen
+                        j = j + 1;
+                        break;
+                    }
+                    
+                    // Sjekk om neste linje begynner med et nytt varenummer eller er en ny palle-ID
+                    if (nextLine.match(/^(\d{3}-[A-Z0-9]+-?\d*|[A-Z]{2}\d{5}|[A-Z0-9]{2}\d{3,5}|BP\d{5}|HV\d{1,4}(-\d+)?)/) || 
+                        /^\d{9}$/.test(nextLine) ||
+                        nextLine.includes('Palle id') ||
+                        nextLine.includes('Side')) {
+                        // Ikke fortsett å bygge beskrivelsen
+                        break;
+                    }
+                    
+                    // Hvis ikke, legg til i beskrivelsen
+                    combinedDescription += " " + nextLine;
+                    j++;
+                }
+                
+                if (foundNumbers) {
+                    items.push({
+                        id: productId,
+                        description: combinedDescription,
+                        quantity: bestilt,
+                        weight: appState.itemWeights[productId] || appState.settings.defaultItemWeight,
+                        received: plukket === bestilt,
+                        receivedAt: plukket === bestilt ? new Date() : null,
+                        receivedCount: plukket,
+                        palleId: currentPalleId
+                    });
+                    
+                    console.log(`Behandlet flerlinjeprodukt: ${productId}, Bestilt: ${bestilt}, Plukket: ${plukket}`);
+                    
+                    // Hopp frem til etter tallene
+                    i = j - 1;
+                }
+            }
+        }
+    }
+    
+    console.log(`Ferdig med å behandle følgeseddel. Fant ${items.length} produkter.`);
+    return items;
 }
 
 /**
