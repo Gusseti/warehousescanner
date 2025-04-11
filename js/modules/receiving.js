@@ -4,8 +4,9 @@ import { showToast } from './utils.js';
 import { saveListsToStorage } from './storage.js';
 import { updateScannerStatus } from './ui.js';
 import { initCameraScanner, startCameraScanning, stopCameraScanning, connectToBluetoothScanner } from './scanner.js';
-import { importFromCSV, importFromJSON, importFromPDF, importFromReceiptPDF, exportList, exportWithFormat, exportToPDF } from './import-export.js';
 import { openWeightModal } from './weights.js';
+import { importFromCSV, importFromJSON, importFromPDF, importFromReceiptPDF, importKvikFollgeseddel, exportList, exportWithFormat, exportToPDF } from './import-export.js';
+
 
 // DOM elementer - Mottak
 let importReceiveFileEl;
