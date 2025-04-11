@@ -59,12 +59,17 @@ export function initPicking() {
     scannerPickOverlayEl = document.getElementById('scannerPickOverlay');
     closePickScannerEl = document.getElementById('closePickScanner');
     
+    // VIKTIG FIKS: Pass på at vi bruker riktig callback-funksjon
+    // Bind handlePickScan spesifikt til plukk-modulen
+    // Dette sikrer at den ikke blir overskrives fra andre moduler
+    const pickScanHandler = handlePickScan.bind(window);
+    
     // Initialiser kameraskanneren for plukk
     initCameraScanner(
         document.getElementById('videoPickScanner'), 
         document.getElementById('canvasPickScanner'), 
         document.getElementById('scannerPickOverlay'), 
-        handlePickScan,
+        pickScanHandler,  // Bruk den spesifikke handleren
         updateScannerStatus
     );
     
