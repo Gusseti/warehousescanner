@@ -333,13 +333,6 @@ function handlePickScan(barcode) {
     // Tøm input etter skanning
     if (pickManualScanEl) pickManualScanEl.value = '';
     
-    // Bruk den forbedrede strekkodehåndtereren for ukjente strekkoder/varer
-    // Hvis den returnerer true, har den allerede håndtert strekkoden
-    if (handleScannedBarcode(barcode, 'pick')) {
-        console.log('Strekkoden ble håndtert av barcode-handler');
-        return;
-    }
-    
     // Sjekk om strekkoden finnes i barcode mapping
     let itemId = barcode;
     if (appState.barcodeMapping[barcode]) {
@@ -351,7 +344,7 @@ function handlePickScan(barcode) {
     const item = appState.pickListItems.find(item => item.id === itemId);
     
     if (!item) {
-        // Varen finnes ikke i listen - bør allerede være håndtert av handleScannedBarcode
+        // Varen finnes ikke i listen
         blinkBackground('red');
         showToast(`Vare "${itemId}" finnes ikke i plukklisten!`, 'error');
         playErrorSound();
@@ -363,10 +356,11 @@ function handlePickScan(barcode) {
         item.pickedCount = 0;
     }
     
-    // Sjekk om vi har plukket alle enhetene av denne varen
+    // Sjekk om vi allerede har plukket maksimalt antall
     if (item.pickedCount >= item.quantity) {
-        blinkBackground('orange');
-        showToast(`Alle ${item.quantity} enheter av "${itemId}" er allerede plukket!`, 'warning');
+        blinkBackground('red');
+        showToast(`Du kan ikke plukke flere enn ${item.quantity} enheter av "${itemId}"!`, 'error');
+        playErrorSound();
         return;
     }
     
