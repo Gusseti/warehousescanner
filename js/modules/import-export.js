@@ -850,8 +850,6 @@ export function exportWithFormat(items, type, format) {
 
 // Legg til i import-export.js
 
-// Legg til i import-export.js
-
 /**
  * Importerer data fra kvittering-PDF fra Kvik følgeseddel
  * @param {File} file - PDF-fil

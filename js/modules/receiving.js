@@ -253,49 +253,24 @@ function handleReceiveFileImport(event) {
     
     // Håndter ulike filtyper
     if (file.type === 'application/pdf') {
-        // Sjekk filnavnet for å bestemme hvilken importmetode som skal brukes
-        if (file.name.toLowerCase().includes('kvik') || 
-            file.name.toLowerCase().includes('mottak') || 
-            file.name.toLowerCase().includes('følgeseddel')) {
-            
-            // Bruk den spesialiserte Kvik følgeseddel-importeren
-            importFromReceiptPDF(file)
-                .then(() => {
-                    updateReceivingUI();
-                    saveListsToStorage();
-                })
-                .catch(error => {
-                    // Hvis spesialisert import feiler, prøv standard PDF-import
-                    console.warn('Kvik følgeseddel-import feilet, prøver standard PDF-import:', error);
-                    importFromPDF(file, 'receive')
-                        .then(() => {
-                            updateReceivingUI();
-                            saveListsToStorage();
-                        })
-                        .catch(secondError => {
-                            showToast('Feil ved import av PDF: ' + secondError.message, 'error');
-                        });
-                });
-        } else {
-            // Bruk standard PDF-import
-            importFromPDF(file, 'receive')
-                .then(() => {
-                    updateReceivingUI();
-                    saveListsToStorage();
-                })
-                .catch(error => {
-                    // Hvis standard import feiler, prøv Kvik følgeseddel-import som fallback
-                    console.warn('Standard PDF-import feilet, prøver Kvik følgeseddel-import som fallback:', error);
-                    importFromReceiptPDF(file)
-                        .then(() => {
-                            updateReceivingUI();
-                            saveListsToStorage();
-                        })
-                        .catch(secondError => {
-                            showToast('Feil ved import av PDF: ' + secondError.message, 'error');
-                        });
-                });
-        }
+        // I mottak-modulen, forsøk alltid Kvik følgeseddel-import først
+        importFromReceiptPDF(file)
+            .then(() => {
+                updateReceivingUI();
+                saveListsToStorage();
+            })
+            .catch(error => {
+                // Hvis Kvik import feiler, prøv standard PDF-import
+                console.warn('Kvik følgeseddel-import feilet, prøver standard PDF-import:', error);
+                importFromPDF(file, 'receive')
+                    .then(() => {
+                        updateReceivingUI();
+                        saveListsToStorage();
+                    })
+                    .catch(secondError => {
+                        showToast('Feil ved import av PDF: ' + secondError.message, 'error');
+                    });
+            });
     } else {
         const reader = new FileReader();
         reader.onload = function(e) {
