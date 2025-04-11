@@ -700,7 +700,7 @@ function generateCSV(items, type) {
  * @returns {string} Tekst-innhold
  */
 function generateTXT(items, type, summary) {
-    let txt = `LAGERSTYRING - ${type.toUpperCase()}LISTE\n`;
+    let txt = `SnapScan - ${type.toUpperCase()}LISTE\n`;
     txt += `Eksportdato: ${new Date().toLocaleString('nb-NO')}\n\n`;
 
     txt += `SAMMENDRAG\n`;
@@ -744,7 +744,7 @@ function generateHTML(items, type, summary) {
     <html lang="no">
     <head>
         <meta charset="UTF-8">
-        <title>Lagerstyring - ${type.toUpperCase()}LISTE</title>
+        <title>SnapScan - ${type.toUpperCase()}LISTE</title>
         <style>
             body { font-family: Arial, sans-serif; max-width: 800px; margin: 0 auto; line-height: 1.6; }
             h1, h2 { color: #333; }
@@ -755,7 +755,7 @@ function generateHTML(items, type, summary) {
         </style>
     </head>
     <body>
-    <h1>Lagerstyring - ${type.toUpperCase()}LISTE</h1>
+    <h1>SnapScan - ${type.toUpperCase()}LISTE</h1>
         <p>Eksportdato: ${new Date().toLocaleString('nb-NO')}</p>
 
         <div class="summary">
