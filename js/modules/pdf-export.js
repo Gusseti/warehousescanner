@@ -326,9 +326,16 @@ function getTableHeaders(type) {
  */
 function formatTableData(items, type) {
     return items.map(item => {
+        // Begrens beskrivelseslengden for bedre lesbarhet
+        const maxDescLength = 60; // Juster dette etter behov
+        let description = item.description;
+        if (description && description.length > maxDescLength) {
+            description = description.substring(0, maxDescLength) + '...';
+        }
+        
         const row = [
             item.id,
-            item.description,
+            description || 'Ukjent beskrivelse',
         ];
         
         // Sett riktig antallsformat basert på type
@@ -378,8 +385,8 @@ function formatTableData(items, type) {
  * @returns {Array} Kolonnestørrelser
  */
 function calculateColumnWidths(headers, data, totalWidth) {
-    // Standard kolonnestørrelser som prosentandeler
-    const defaultWidths = [0.15, 0.4, 0.15, 0.15, 0.15];
+    // Standard kolonnestørrelser som prosentandeler - gi beskrivelseskolonnen mer plass
+    const defaultWidths = [0.15, 0.45, 0.12, 0.13, 0.15]; // Beskrivelse får 45% av bredden
     
     // Konverter til faktiske bredder
     return defaultWidths.map(width => totalWidth * width);

@@ -954,8 +954,7 @@ function processKvikReceiptLines(lines) {
     
     console.log("Dokumentet er gjenkjent som Kvik følgeseddel");
     
-    // Finn linjer som inneholder varenummer-mønster (f.eks. "000-BH3242" eller "263-L01680")
-    // og analyse antall og plukket informasjon
+    // Finn linjer som inneholder varenummer-mønster og analyse antall og plukket informasjon
     for (let i = 0; i < lines.length; i++) {
         const line = lines[i].trim();
         
@@ -993,7 +992,7 @@ function processKvikReceiptLines(lines) {
                 items.push({
                     id: productId,
                     description: description,
-                    quantity: bestilt,
+                    quantity: bestilt,  // Bruk 'bestilt' som antall
                     weight: appState.itemWeights[productId] || appState.settings.defaultItemWeight,
                     received: plukket === bestilt,
                     receivedAt: plukket === bestilt ? new Date() : null,
@@ -1051,7 +1050,7 @@ function processKvikReceiptLines(lines) {
                     items.push({
                         id: productId,
                         description: combinedDescription,
-                        quantity: bestilt,
+                        quantity: bestilt,  // Bruk 'bestilt' som antall
                         weight: appState.itemWeights[productId] || appState.settings.defaultItemWeight,
                         received: plukket === bestilt,
                         receivedAt: plukket === bestilt ? new Date() : null,
@@ -1071,7 +1070,7 @@ function processKvikReceiptLines(lines) {
                     items.push({
                         id: productId,
                         description: combinedDescription || "Ukjent beskrivelse",
-                        quantity: 1, // default-verdi
+                        quantity: 1,  // Default antall
                         weight: appState.itemWeights[productId] || appState.settings.defaultItemWeight,
                         received: false,
                         receivedAt: null,
