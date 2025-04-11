@@ -29,6 +29,8 @@ let switchCameraReturnEl;
  * Initialiserer retur-modulen
  */
 export function initReturns() {
+    console.log("Initialiserer retur-modul");
+    
     // Hent DOM-elementer
     connectScannerReturnEl = document.getElementById('connectScannerReturn');
     cameraScannerReturnEl = document.getElementById('cameraScannerReturn');
@@ -46,13 +48,21 @@ export function initReturns() {
     closeReturnScannerEl = document.getElementById('closeReturnScanner');
     switchCameraReturnEl = document.getElementById('switchCameraReturn');
     
-    // Initialiser kameraskanneren for retur
+    // VIKTIG FIX: Gjøre handleReturnScan tilgjengelig globalt
+    // Dette sikrer at funksjonen alltid er tilgjengelig for skanneren
+    if (typeof window.handleReturnScan !== 'function') {
+        window.handleReturnScan = handleReturnScan;
+        console.log("Registrerte window.handleReturnScan");
+    }
+    
+    // Initialiser kameraskanneren for retur med modulspesifikk callback
     initCameraScanner(
         videoReturnScannerEl, 
         canvasReturnScannerEl, 
         scannerReturnOverlayEl, 
         handleReturnScan,
-        updateScannerStatus
+        updateScannerStatus,
+        'return'  // Nytt parameter: modulnavn
     );
     
     // Legg til event listeners
@@ -60,6 +70,8 @@ export function initReturns() {
     
     // Oppdater UI basert på lagrede data
     updateReturnsUI();
+    
+    console.log("Retur-modul initialisert");
 }
 
 /**
@@ -213,15 +225,24 @@ async function startReturnCameraScanning() {
  * @param {number} quantity - Antall varer å returnere
  */
 export function handleReturnScan(barcode, quantity = 1) {
-    if (!barcode) return;
+    // VIKTIG: Fjern sjekken som blokkerer skanning når annen modul er aktiv
+    // Dette var hovedproblemet som forårsaket at skanninger ikke ble registrert
     
-    // Sjekk om vi faktisk er i retur-modulen
+    // Original kode som blokkerte registrering:
+    // if (appState.currentModule !== 'returns') {
+    //     console.log('Ignorerer strekkodeskanning i retur-modulen fordi en annen modul er aktiv:', appState.currentModule);
+    //     return;
+    // }
+    
+    // Ny kode som logger men ikke blokkerer:
     if (appState.currentModule !== 'returns') {
-        console.log('Ignorerer strekkodeskanning i retur-modulen fordi en annen modul er aktiv:', appState.currentModule);
-        return;
+        console.log('Merk: handleReturnScan kalles mens en annen modul er aktiv:', appState.currentModule);
+        // Vi fortsetter likevel med funksjonen i tilfelle dette er et direkte kall
     }
     
     console.log('Håndterer strekkode i retur-modulen:', barcode);
+    
+    if (!barcode) return;
     
     // Tøm input etter skanning
     if (returnManualScanEl) {

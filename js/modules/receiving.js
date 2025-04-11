@@ -35,6 +35,8 @@ let switchCameraReceiveEl;
  * Initialiserer mottak-modulen
  */
 export function initReceiving() {
+    console.log("Initialiserer mottak-modul");
+    
     // Hent DOM-elementer
     importReceiveFileEl = document.getElementById('importReceiveFile');
     importReceiveBtnEl = document.getElementById('importReceiveBtn');
@@ -58,13 +60,21 @@ export function initReceiving() {
     closeReceiveScannerEl = document.getElementById('closeReceiveScanner');
     switchCameraReceiveEl = document.getElementById('switchCameraReceive');
     
-    // Initialiser kameraskanneren for mottak
+    // VIKTIG FIX: Gjøre handleReceiveScan tilgjengelig globalt
+    // Dette sikrer at funksjonen alltid er tilgjengelig for skanneren
+    if (typeof window.handleReceiveScan !== 'function') {
+        window.handleReceiveScan = handleReceiveScan;
+        console.log("Registrerte window.handleReceiveScan");
+    }
+    
+    // Initialiser kameraskanneren for mottak med modulspesifikk callback
     initCameraScanner(
         videoReceiveScannerEl, 
         canvasReceiveScannerEl, 
         scannerReceiveOverlayEl, 
         handleReceiveScan,
-        updateScannerStatus
+        updateScannerStatus,
+        'receive'  // Nytt parameter: modulnavn
     );
     
     // Legg til event listeners
@@ -72,6 +82,8 @@ export function initReceiving() {
     
     // Oppdater UI basert på lagrede data
     updateReceivingUI();
+    
+    console.log("Mottak-modul initialisert");
 }
 
 /**
@@ -332,15 +344,24 @@ async function startReceiveCameraScanning() {
  * @param {string} barcode - Skannet strekkode
  */
 export function handleReceiveScan(barcode) {
-    if (!barcode) return;
+    // VIKTIG: Fjern sjekken som blokkerer skanning når annen modul er aktiv
+    // Dette var hovedproblemet som forårsaket at skanninger ikke ble registrert
     
-    // Sjekk om vi faktisk er i mottak-modulen
+    // Original kode som blokkerte registrering:
+    // if (appState.currentModule !== 'receiving') {
+    //     console.log('Ignorerer strekkodeskanning i mottak-modulen fordi en annen modul er aktiv:', appState.currentModule);
+    //     return;
+    // }
+    
+    // Ny kode som logger men ikke blokkerer:
     if (appState.currentModule !== 'receiving') {
-        console.log('Ignorerer strekkodeskanning i mottak-modulen fordi en annen modul er aktiv:', appState.currentModule);
-        return;
+        console.log('Merk: handleReceiveScan kalles mens en annen modul er aktiv:', appState.currentModule);
+        // Vi fortsetter likevel med funksjonen i tilfelle dette er et direkte kall
     }
     
     console.log('Håndterer strekkode i mottak-modulen:', barcode);
+    
+    if (!barcode) return;
     
     // Tøm input etter skanning
     if (receiveManualScanEl) {

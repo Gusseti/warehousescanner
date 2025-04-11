@@ -37,6 +37,8 @@ window.updatePickingUI = updatePickingUI;
  * Initialiserer plukk-modulen
  */
 export function initPicking() {
+    console.log("Initialiserer plukk-modul");
+    
     // Hent DOM-elementer
     importPickFileEl = document.getElementById('importPickFile');
     importPickBtnEl = document.getElementById('importPickBtn');
@@ -59,18 +61,22 @@ export function initPicking() {
     scannerPickOverlayEl = document.getElementById('scannerPickOverlay');
     closePickScannerEl = document.getElementById('closePickScanner');
     
-    // VIKTIG FIKS: Pass på at vi bruker riktig callback-funksjon
-    // Bind handlePickScan spesifikt til plukk-modulen
-    // Dette sikrer at den ikke blir overskrives fra andre moduler
-    const pickScanHandler = handlePickScan.bind(window);
+    // VIKTIG FIX: Gjøre handlePickScan tilgjengelig globalt
+    // Dette sikrer at funksjonen alltid er tilgjengelig for skanneren
+    if (typeof window.handlePickScan !== 'function') {
+        window.handlePickScan = handlePickScan;
+        console.log("Registrerte window.handlePickScan");
+    }
     
     // Initialiser kameraskanneren for plukk
+    // VIKTIG: Bruk 'pick' som modunavn for å registrere modulspesifikk callback
     initCameraScanner(
         document.getElementById('videoPickScanner'), 
         document.getElementById('canvasPickScanner'), 
         document.getElementById('scannerPickOverlay'), 
-        pickScanHandler,  // Bruk den spesifikke handleren
-        updateScannerStatus
+        handlePickScan,  // Send handlePickScan som callback
+        updateScannerStatus,
+        'pick'  // Nytt parameter: modulnavn
     );
     
     // Legg til event listeners
@@ -78,6 +84,8 @@ export function initPicking() {
     
     // Oppdater UI basert på lagrede data
     updatePickingUI();
+    
+    console.log("Plukk-modul initialisert");
 }
 
 /**
