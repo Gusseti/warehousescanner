@@ -344,10 +344,9 @@ function handlePickScan(barcode) {
     const item = appState.pickListItems.find(item => item.id === itemId);
     
     if (!item) {
+        alert("Vare finnes ikke i plukklisten");
         // Varen finnes ikke i listen
-        blinkBackground('red');
         showToast(`Vare "${itemId}" finnes ikke i plukklisten!`, 'error');
-        playErrorSound();
         return;
     }
     
@@ -356,13 +355,18 @@ function handlePickScan(barcode) {
         item.pickedCount = 0;
     }
     
-    // Sjekk om vi har plukket maksimalt antall
+    // VIKTIG: Sjekk om vi har plukket maksimalt antall
+    console.log(`Sjekk maksantall: pickedCount=${item.pickedCount}, quantity=${item.quantity}`);
     if (item.pickedCount >= item.quantity) {
-        // Få skjermen til å blinke rødt
-        blinkBackground('red');
-        playErrorSound();
-        showToast(`Du kan ikke plukke flere enn ${item.quantity} enheter av "${itemId}"!`, 'error');
-        return;
+        alert(`MAKS OPPNÅDD: Du kan ikke plukke flere enn ${item.quantity} enheter av "${itemId}"!`);
+        // Vis en veldig tydelig melding
+        document.body.style.backgroundColor = 'red';
+        setTimeout(() => {
+            document.body.style.backgroundColor = '';
+        }, 1000);
+        
+        showToast(`Maks oppnådd! Kan ikke plukke flere enn ${item.quantity} enheter av "${itemId}"`, 'error');
+        return; // VIKTIG: Stopper funksjonen her
     }
     
     // Øk antallet plukket
@@ -379,11 +383,17 @@ function handlePickScan(barcode) {
             appState.pickedItems.push(itemId);
         }
         
-        // Blink grønt ved fullført vare
-        blinkBackground('green');
+        // Vis grønn bakgrunn
+        document.body.style.backgroundColor = 'green';
+        setTimeout(() => {
+            document.body.style.backgroundColor = '';
+        }, 500);
     } else {
-        // Blink grønt også for delvis plukking
-        blinkBackground('green');
+        // Vis grønn bakgrunn for delvis plukking også
+        document.body.style.backgroundColor = 'green';
+        setTimeout(() => {
+            document.body.style.backgroundColor = '';
+        }, 500);
     }
     
     // Lagre sist plukket vare for angrefunksjonalitet
