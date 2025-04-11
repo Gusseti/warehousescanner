@@ -587,6 +587,7 @@ export function blinkBackground(color) {
         overlay.style.backgroundColor = 'transparent';
     }, 500);
 }
+
 /**
  * Håndterer prosesserte bilder fra Quagga
  * @param {Object} result - Prosesseringsresultat fra Quagga

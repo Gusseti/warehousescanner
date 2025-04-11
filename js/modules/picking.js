@@ -356,11 +356,12 @@ function handlePickScan(barcode) {
         item.pickedCount = 0;
     }
     
-    // Sjekk om vi allerede har plukket maksimalt antall
+    // Sjekk om vi har plukket maksimalt antall
     if (item.pickedCount >= item.quantity) {
+        // Få skjermen til å blinke rødt
         blinkBackground('red');
-        showToast(`Du kan ikke plukke flere enn ${item.quantity} enheter av "${itemId}"!`, 'error');
         playErrorSound();
+        showToast(`Du kan ikke plukke flere enn ${item.quantity} enheter av "${itemId}"!`, 'error');
         return;
     }
     
@@ -379,6 +380,9 @@ function handlePickScan(barcode) {
         }
         
         // Blink grønt ved fullført vare
+        blinkBackground('green');
+    } else {
+        // Blink grønt også for delvis plukking
         blinkBackground('green');
     }
     
