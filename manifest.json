@@ -1,6 +1,6 @@
 {
-    "name": "Lagerstyring PWA",
-    "short_name": "Lagerstyring",
+    "name": "SnapScan",
+    "short_name": "SnapScan",
     "start_url": "./index.html",
     "display": "standalone",
     "background_color": "#2196f3",

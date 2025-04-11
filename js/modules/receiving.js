@@ -501,7 +501,7 @@ function exportReceiveList(format = 'pdf') {
             // Bruk den nye PDF-eksportfunksjonen
             exportToPDF(appState.receiveListItems, 'mottak', {
                 title: 'Mottaksliste',
-                subtitle: 'Eksportert fra Lagerstyring PWA',
+                subtitle: 'Eksportert fra SnapScan',
                 exportDate: new Date(),
                 showStatus: true
             });

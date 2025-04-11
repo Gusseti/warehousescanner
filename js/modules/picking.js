@@ -528,7 +528,7 @@ function exportPickList(format = 'pdf') {
             // Bruk den nye PDF-eksportfunksjonen
             exportToPDF(appState.pickListItems, 'plukk', {
                 title: 'Plukkliste',
-                subtitle: 'Eksportert fra Lagerstyring PWA',
+                subtitle: 'Eksportert fra SnapScan',
                 exportDate: new Date(),
                 showStatus: true
             });

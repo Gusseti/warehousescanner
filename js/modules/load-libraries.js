@@ -224,7 +224,7 @@ export async function generatePDF(items, type, options = {}) {
     // Legg til bunntekst med generert-info
     doc.setFontSize(7);
     doc.setTextColor(150);
-    doc.text('Generert med Lagerstyring PWA', margin, pageHeight - margin);
+    doc.text('Generert med SnapScan', margin, pageHeight - margin);
     
     // Returner PDF som blob
     const pdfBlob = doc.output('blob');
