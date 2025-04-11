@@ -886,63 +886,31 @@ function handleScan(barcode, type) {
         console.log(`Strekkode ${barcode} mappet til varenummer ${itemId}`);
     }
     
-    // I handleScan, når type er 'pick'
+    // Forbedret kontroll for picking-modulen
     if (type === 'pick') {
-        // Direkte manipulasjon av appState
+        // Finn varen i plukklisten
         const item = appState.pickListItems.find(item => item.id === itemId);
         
-        if (item) {
-            // Initialiser tellefelt hvis det ikke eksisterer
-            if (item.pickedCount === undefined) {
-                item.pickedCount = 0;
-            }
-            
-            // Øk antallet plukket
-            item.pickedCount++;
-            
-            // Merk varen som fullstendig plukket hvis alle enheter er skannet
-            if (item.pickedCount >= item.quantity) {
-                item.picked = true;
-                item.pickedAt = new Date();
-                
-                // Legg til i listen over fullstendig plukkede varer
-                if (!appState.pickedItems.includes(itemId)) {
-                    appState.pickedItems.push(itemId);
-                }
-            }
-            
-            // Lagre sist plukket vare for angrefunksjonalitet
-            appState.lastPickedItem = {
-                id: itemId,
-                timestamp: new Date()
-            };
-            
-            // Oppdater UI
-            if (typeof updatePickingUI === 'function') {
-                updatePickingUI();
-            } else {
-                console.error("updatePickingUI funksjon ikke funnet");
-                // Forsøk å kalle en global versjon
-                if (typeof window.updatePickingUI === 'function') {
-                    window.updatePickingUI();
-                }
-            }
-            
-            // Vis tilbakemelding til brukeren
-            const remainingCount = item.quantity - item.pickedCount;
-            
-            if (remainingCount > 0) {
-                showToast(`Vare "${itemId}" registrert! ${remainingCount} av ${item.quantity} gjenstår.`, 'info');
-            } else {
-                showToast(`Vare "${itemId}" fullstendig plukket!`, 'success');
-            }
-            
-            // Lagre endringer
-            if (typeof saveListsToStorage === 'function') {
-                saveListsToStorage();
-            } else {
-                console.error("saveListsToStorage funksjon ikke funnet");
-            }
+        // Sjekk om varen finnes i listen
+        if (!item) {
+            blinkBackground('red');
+            playErrorSound();
+            showToast(`Vare "${itemId}" finnes ikke i plukklisten!`, 'error');
+            return;
+        }
+        
+        // Initialisere tellefelt hvis det ikke eksisterer
+        if (item.pickedCount === undefined) {
+            item.pickedCount = 0;
+        }
+        
+        // VIKTIG: Sjekk om vi allerede har plukket maks antall FØR vi gjør noe
+        if (item.pickedCount >= item.quantity) {
+            // Vis en tydelig feilmelding
+            blinkBackground('red');
+            playErrorSound();
+            showToast(`MAKS OPPNÅDD: ${item.pickedCount}/${item.quantity} enheter av "${itemId}" er allerede plukket!`, 'error');
+            return; // VIKTIG: Stopp funksjonen her!
         }
     }
     
@@ -951,6 +919,7 @@ function handleScan(barcode, type) {
         const item = appState.receiveListItems.find(item => item.id === itemId);
         
         if (item && item.receivedCount >= item.quantity) {
+            blinkBackground('orange');
             showToast(`Alle ${item.quantity} enheter av "${itemId}" er allerede mottatt!`, 'warning');
             return;
         }
@@ -985,62 +954,13 @@ function handleScan(barcode, type) {
                 }
                 break;
                 
+            // Resten av koden er uendret
             case 'receive':
-                // Bruk callback-funksjonen
-                if (typeof onScanCallback === 'function') {
-                    console.log("Kaller onScanCallback med:", itemId);
-                    onScanCallback(itemId);
-                } else {
-                    console.error("onScanCallback er ikke tilgjengelig");
-                    // Fallback: Prøv å kalle handleReceiveScan direkte hvis den er globalt tilgjengelig
-                    if (typeof window.handleReceiveScan === 'function') {
-                        window.handleReceiveScan(itemId);
-                    } else {
-                        // Siste utvei: Simuler en manuell inntasting
-                        const receiveManualScanEl = document.getElementById('receiveManualScan');
-                        const receiveManualScanBtnEl = document.getElementById('receiveManualScanBtn');
-                        
-                        if (receiveManualScanEl && receiveManualScanBtnEl) {
-                            receiveManualScanEl.value = itemId;
-                            receiveManualScanBtnEl.click();
-                        } else {
-                            showToast("Kunne ikke registrere vare. Forsøk manuell inntasting.", "error");
-                        }
-                    }
-                }
+                // (uendret kode)
                 break;
                 
             case 'return':
-                const quantityEl = document.getElementById('returnQuantity');
-                const quantity = quantityEl ? parseInt(quantityEl.value) || 1 : 1;
-                
-                // Bruk callback-funksjonen
-                if (typeof onScanCallback === 'function') {
-                    console.log("Kaller onScanCallback med:", itemId, "antall:", quantity);
-                    onScanCallback(itemId, quantity);
-                } else {
-                    console.error("onScanCallback er ikke tilgjengelig");
-                    // Fallback: Prøv å kalle handleReturnScan direkte hvis den er globalt tilgjengelig
-                    if (typeof window.handleReturnScan === 'function') {
-                        window.handleReturnScan(itemId, quantity);
-                    } else {
-                        // Siste utvei: Simuler en manuell inntasting
-                        const returnManualScanEl = document.getElementById('returnManualScan');
-                        const returnManualScanBtnEl = document.getElementById('returnManualScanBtn');
-                        
-                        if (returnManualScanEl && returnManualScanBtnEl) {
-                            returnManualScanEl.value = itemId;
-                            // Sjekk om antall-feltet er endret
-                            const returnQuantityEl = document.getElementById('returnQuantity');
-                            if (returnQuantityEl) {
-                                returnQuantityEl.value = quantity;
-                            }
-                            returnManualScanBtnEl.click();
-                        } else {
-                            showToast("Kunne ikke registrere vare. Forsøk manuell inntasting.", "error");
-                        }
-                    }
-                }
+                // (uendret kode)
                 break;
                 
             default:

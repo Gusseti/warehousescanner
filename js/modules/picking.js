@@ -3,11 +3,10 @@ import { appState } from '../app.js';
 import { showToast } from './utils.js';
 import { saveListsToStorage } from './storage.js';
 import { updateScannerStatus } from './ui.js';
-import { initCameraScanner, startCameraScanning, stopCameraScanning, connectToBluetoothScanner } from './scanner.js';
+import { initCameraScanner, startCameraScanning, stopCameraScanning, connectToBluetoothScanner, blinkBackground, playErrorSound } from './scanner.js';
 import { importFromCSV, importFromJSON, importFromPDF, exportList, exportWithFormat, exportToPDF } from './import-export.js';
 import { openWeightModal } from './weights.js';
 import { handleScannedBarcode } from './barcode-handler.js';
-import { blinkBackground, playErrorSound } from './scanner.js';
 
 // DOM elementer - Plukk
 let importPickFileEl;
@@ -319,8 +318,6 @@ async function startPickCameraScanning() {
     }
 }
 
-// picking.js - Forbedret håndtering av skanning for plukklisten
-
 /**
  * Håndterer skanning for plukk
  * @param {string} barcode - Skannet strekkode
@@ -344,9 +341,10 @@ function handlePickScan(barcode) {
     const item = appState.pickListItems.find(item => item.id === itemId);
     
     if (!item) {
-        alert("Vare finnes ikke i plukklisten");
         // Varen finnes ikke i listen
         showToast(`Vare "${itemId}" finnes ikke i plukklisten!`, 'error');
+        blinkBackground('red');
+        playErrorSound();
         return;
     }
     
@@ -355,18 +353,19 @@ function handlePickScan(barcode) {
         item.pickedCount = 0;
     }
     
-    // VIKTIG: Sjekk om vi har plukket maksimalt antall
-    console.log(`Sjekk maksantall: pickedCount=${item.pickedCount}, quantity=${item.quantity}`);
+    // VIKTIG: STRENGERE SJEKK FOR MAKSIMALT ANTALL
+    // Sjekk om vi allerede har plukket maks antall før vi gjør noe som helst
     if (item.pickedCount >= item.quantity) {
-        alert(`MAKS OPPNÅDD: Du kan ikke plukke flere enn ${item.quantity} enheter av "${itemId}"!`);
-        // Vis en veldig tydelig melding
-        document.body.style.backgroundColor = 'red';
-        setTimeout(() => {
-            document.body.style.backgroundColor = '';
-        }, 1000);
+        // Vis en tydelig feilmelding
+        showToast(`MAKS OPPNÅDD: ${item.pickedCount}/${item.quantity} enheter av "${itemId}" er allerede plukket!`, 'error');
         
-        showToast(`Maks oppnådd! Kan ikke plukke flere enn ${item.quantity} enheter av "${itemId}"`, 'error');
-        return; // VIKTIG: Stopper funksjonen her
+        // Vis visuell indikasjon (rød bakgrunn)
+        blinkBackground('red');
+        
+        // Spill feilalarm
+        playErrorSound();
+        
+        return; // VIKTIG: Stopp funksjonen her!
     }
     
     // Øk antallet plukket
@@ -384,16 +383,10 @@ function handlePickScan(barcode) {
         }
         
         // Vis grønn bakgrunn
-        document.body.style.backgroundColor = 'green';
-        setTimeout(() => {
-            document.body.style.backgroundColor = '';
-        }, 500);
+        blinkBackground('green');
     } else {
         // Vis grønn bakgrunn for delvis plukking også
-        document.body.style.backgroundColor = 'green';
-        setTimeout(() => {
-            document.body.style.backgroundColor = '';
-        }, 500);
+        blinkBackground('green');
     }
     
     // Lagre sist plukket vare for angrefunksjonalitet
@@ -411,6 +404,7 @@ function handlePickScan(barcode) {
         showToast(`Vare "${itemId}" fullstendig plukket!`, 'success');
     }
 
+    // Oppdater UI før lagring for umiddelbar tilbakemelding
     updatePickingUI();
 
     // Lagre endringer
