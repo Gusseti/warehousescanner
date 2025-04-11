@@ -857,6 +857,7 @@ function processScannedBarcode(barcode) {
         handleScan(barcode, 'return');
     }
 }
+
 /**
  * Håndterer skanning for alle moduler med forbedret strekkodevalidering
  * @param {string} barcode - Skannet strekkode
@@ -886,7 +887,9 @@ function handleScan(barcode, type) {
         console.log(`Strekkode ${barcode} mappet til varenummer ${itemId}`);
     }
     
-    // Forbedret kontroll for picking-modulen
+    // Forbedret kontroll for picking-modulen 
+    // Vi har flyttet kontrollene til handlePickScan
+    // Dette holder vi enkelt her for å ikke duplisere kontrollen
     if (type === 'pick') {
         // Finn varen i plukklisten
         const item = appState.pickListItems.find(item => item.id === itemId);
@@ -899,19 +902,7 @@ function handleScan(barcode, type) {
             return;
         }
         
-        // Initialisere tellefelt hvis det ikke eksisterer
-        if (item.pickedCount === undefined) {
-            item.pickedCount = 0;
-        }
-        
-        // VIKTIG: Sjekk om vi allerede har plukket maks antall FØR vi gjør noe
-        if (item.pickedCount >= item.quantity) {
-            // Vis en tydelig feilmelding
-            blinkBackground('red');
-            playErrorSound();
-            showToast(`MAKS OPPNÅDD: ${item.pickedCount}/${item.quantity} enheter av "${itemId}" er allerede plukket!`, 'error');
-            return; // VIKTIG: Stopp funksjonen her!
-        }
+        // La selve håndteringen skje i handlePickScan for å unngå duplikat-logikk
     }
     
     // Tilsvarende sjekk for mottak
