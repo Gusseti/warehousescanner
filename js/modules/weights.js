@@ -1,29 +1,36 @@
-// weights.js - Håndtering av vekter
+// weights.js - Refaktorert modul for vekthåndtering
 import { appState } from '../app.js';
 import { saveItemWeights } from './storage.js';
-import { updatePickingUI } from './picking.js';
-import { updateReceivingUI } from './receiving.js';
-import { updateReturnsUI } from './returns.js';
+import { showToast } from './utils.js';
 
 // DOM-elementer for vektmodal
-let weightModalEl;
-let weightModalItemIdEl;
-let itemWeightEl;
-let saveWeightBtnEl;
-let cancelWeightBtnEl;
-let closeWeightModalEl;
+const elements = {
+    modal: null,
+    itemIdSpan: null,
+    weightInput: null,
+    saveButton: null,
+    cancelButton: null,
+    closeButton: null
+};
+
+// Callback som kalles etter vektoppdatering
+let onWeightUpdateCallback = null;
 
 /**
  * Initialiserer vektmodulen
+ * @param {Function} callback - Callback som kalles når vekter oppdateres
  */
-export function initWeights() {
+export function initWeights(callback) {
     // Hent DOM-elementer
-    weightModalEl = document.getElementById('weightModal');
-    weightModalItemIdEl = document.getElementById('weightModalItemId');
-    itemWeightEl = document.getElementById('itemWeight');
-    saveWeightBtnEl = document.getElementById('saveWeightBtn');
-    cancelWeightBtnEl = document.getElementById('cancelWeightBtn');
-    closeWeightModalEl = document.getElementById('closeWeightModal');
+    elements.modal = document.getElementById('weightModal');
+    elements.itemIdSpan = document.getElementById('weightModalItemId');
+    elements.weightInput = document.getElementById('itemWeight');
+    elements.saveButton = document.getElementById('saveWeightBtn');
+    elements.cancelButton = document.getElementById('cancelWeightBtn');
+    elements.closeButton = document.getElementById('closeWeightModal');
+    
+    // Lagre callback
+    onWeightUpdateCallback = callback;
     
     // Legg til event listeners
     setupWeightEventListeners();
@@ -33,16 +40,20 @@ export function initWeights() {
  * Setter opp event listeners for vektmodal
  */
 function setupWeightEventListeners() {
-    saveWeightBtnEl.addEventListener('click', function() {
-        saveItemWeight();
-    });
+    if (!elements.modal) {
+        console.error('Vektmodal ikke funnet i DOM');
+        return;
+    }
     
-    cancelWeightBtnEl.addEventListener('click', function() {
-        closeWeightModal();
-    });
+    elements.saveButton.addEventListener('click', saveItemWeight);
+    elements.cancelButton.addEventListener('click', closeWeightModal);
+    elements.closeButton.addEventListener('click', closeWeightModal);
     
-    closeWeightModalEl.addEventListener('click', function() {
-        closeWeightModal();
+    // Legg til event for å lagre ved Enter
+    elements.weightInput.addEventListener('keypress', function(e) {
+        if (e.key === 'Enter') {
+            saveItemWeight();
+        }
     });
 }
 
@@ -51,24 +62,42 @@ function setupWeightEventListeners() {
  * @param {string} itemId - Varenummer
  */
 export function openWeightModal(itemId) {
-    weightModalItemIdEl.textContent = itemId;
-    itemWeightEl.value = appState.itemWeights[itemId] || appState.settings.defaultItemWeight;
-    weightModalEl.style.display = 'block';
+    if (!elements.modal) {
+        console.error('Vektmodal ikke funnet i DOM');
+        return;
+    }
+    
+    elements.itemIdSpan.textContent = itemId;
+    elements.weightInput.value = appState.itemWeights[itemId] || appState.settings.defaultItemWeight;
+    elements.modal.style.display = 'block';
+    
+    // Sett fokus på input
+    setTimeout(() => {
+        elements.weightInput.focus();
+        elements.weightInput.select();
+    }, 100);
 }
 
 /**
  * Lukker vektmodal
  */
-function closeWeightModal() {
-    weightModalEl.style.display = 'none';
+export function closeWeightModal() {
+    if (!elements.modal) return;
+    elements.modal.style.display = 'none';
 }
 
 /**
  * Lagrer vekt for en vare
  */
 function saveItemWeight() {
-    const itemId = weightModalItemIdEl.textContent;
-    const weight = parseFloat(itemWeightEl.value) || appState.settings.defaultItemWeight;
+    const itemId = elements.itemIdSpan.textContent;
+    const weight = parseFloat(elements.weightInput.value) || appState.settings.defaultItemWeight;
+    
+    // Valider verdien - sørg for at den er et positivt tall
+    if (weight <= 0) {
+        showToast('Vekt må være et positivt tall.', 'error');
+        return;
+    }
     
     // Lagre vekten
     appState.itemWeights[itemId] = weight;
@@ -79,6 +108,9 @@ function saveItemWeight() {
     
     // Lukk modalen
     closeWeightModal();
+    
+    // Vis bekreftelse
+    showToast(`Vekt for "${itemId}" satt til ${weight} ${appState.settings.weightUnit}`, 'success');
 }
 
 /**
@@ -88,13 +120,9 @@ export function updateAllWeights() {
     // Oppdater vekter for varelinjer i plukk, mottak og retur
     updateItemWeights();
     
-    // Oppdater UI basert på gjeldende modul
-    if (appState.currentModule === 'picking') {
-        updatePickingUI();
-    } else if (appState.currentModule === 'receiving') {
-        updateReceivingUI();
-    } else if (appState.currentModule === 'returns') {
-        updateReturnsUI();
+    // Kall callback hvis den er registrert
+    if (typeof onWeightUpdateCallback === 'function') {
+        onWeightUpdateCallback();
     }
 }
 
@@ -116,4 +144,99 @@ function updateItemWeights() {
     appState.returnListItems.forEach(item => {
         item.weight = appState.itemWeights[item.id] || appState.settings.defaultItemWeight;
     });
+}
+
+/**
+ * Beregner totalvekt for en liste
+ * @param {Array} items - Liste med varer
+ * @param {string} countProperty - Navn på property som inneholder antall (f.eks. 'pickedCount')
+ * @returns {number} Total vekt i kg
+ */
+export function calculateTotalWeight(items, countProperty = null) {
+    if (!items || !Array.isArray(items) || items.length === 0) {
+        return 0;
+    }
+    
+    return items.reduce((total, item) => {
+        const weight = parseFloat(item.weight) || appState.settings.defaultItemWeight;
+        
+        if (countProperty && item[countProperty] !== undefined) {
+            // Bruk spesifisert property (f.eks. pickedCount eller receivedCount)
+            return total + (weight * item[countProperty]);
+        } else if (item.quantity !== undefined) {
+            // Ellers bruk quantity
+            return total + (weight * item.quantity);
+        } else {
+            // Fallback til 1 hvis ingen av dem finnes
+            return total + weight;
+        }
+    }, 0).toFixed(2);
+}
+
+/**
+ * Eksporterer vektdata til JSON
+ * @returns {Blob} JSON blob med vektdata
+ */
+export function exportWeightData() {
+    const data = JSON.stringify(appState.itemWeights, null, 2);
+    return new Blob([data], { type: 'application/json' });
+}
+
+/**
+ * Importerer vektdata fra JSON
+ * @param {string} jsonData - JSON-strengen med vektdata
+ * @returns {boolean} Om importen var vellykket
+ */
+export function importWeightData(jsonData) {
+    try {
+        const data = JSON.parse(jsonData);
+        
+        if (typeof data !== 'object' || data === null) {
+            throw new Error('Ugyldig dataformat. Forventet objekt.');
+        }
+        
+        // Merg med eksisterende vekter
+        appState.itemWeights = { ...appState.itemWeights, ...data };
+        
+        // Lagre til localStorage
+        saveItemWeights();
+        
+        // Oppdater vekter i alle moduler
+        updateAllWeights();
+        
+        return true;
+    } catch (error) {
+        console.error('Feil ved import av vektdata:', error);
+        showToast('Kunne ikke importere vektdata. Ugyldig format.', 'error');
+        return false;
+    }
+}
+
+/**
+ * Oppdaterer vektformat basert på valgt enhet
+ * @param {string} unit - Enheten (kg, g)
+ */
+export function updateWeightUnit(unit) {
+    if (unit === appState.settings.weightUnit) {
+        return; // Ingen endring
+    }
+    
+    const conversionFactor = unit === 'g' ? 1000 : 0.001;
+    
+    // Konverter alle vekter
+    for (const itemId in appState.itemWeights) {
+        const currentWeight = appState.itemWeights[itemId];
+        appState.itemWeights[itemId] = currentWeight * conversionFactor;
+    }
+    
+    // Oppdater standardvekt
+    appState.settings.defaultItemWeight = appState.settings.defaultItemWeight * conversionFactor;
+    
+    // Oppdater vektenhet
+    appState.settings.weightUnit = unit;
+    
+    // Oppdater vekter i alle moduler
+    updateAllWeights();
+    
+    showToast(`Vektenhet endret til ${unit}`, 'success');
 }

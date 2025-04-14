@@ -1,35 +1,71 @@
-// scanner.js - Forbedret versjon med synlige feilmeldinger for brukeren
-
-// State variabler
-let bluetoothDevice = null;
-let isBluetoothConnected = false;
-let cameraStream = null;
-let isScanning = false;
-let currentCameraIndex = 0;
-let availableCameras = [];
-let lastScannedCode = '';
-let scanCooldown = false;
-
+// scanner.js - Konsolidert skanner-funksjonalitet
 import { appState } from '../app.js';
 import { showToast } from './utils.js';
 
-// DOM-elementer
-let videoElement = null;
-let canvasElement = null;
-let scannerOverlay = null;
+// Globale state variabler
+let state = {
+    bluetoothDevice: null,
+    isBluetoothConnected: false,
+    cameraStream: null,
+    isScanning: false,
+    currentCameraIndex: 0,
+    availableCameras: [],
+    lastScannedCode: '',
+    scanCooldown: false,
+    videoElement: null,
+    canvasElement: null,
+    scannerOverlay: null
+};
 
-let moduleCallbacks = {
+// Registrer callbacks for hver modul
+const moduleCallbacks = {
     pick: null,
     receive: null,
     return: null
 };
 
-// Callback-funksjon for å håndtere skannede strekkoder
-let onScanCallback = null;
+// Callback for skannerstatus
 let scannerStatusCallback = null;
 
-// ========== BLUETOOTH SKANNER FUNKSJONALITET ==========
-
+/**
+ * Initialiserer kameraskanneren
+ * @param {HTMLElement} videoEl - Video-element for visning av kamerastrøm
+ * @param {HTMLElement} canvasEl - Canvas-element for bildeanalyse
+ * @param {HTMLElement} overlayEl - Element for skanner-overlay
+ * @param {Function} callback - Funksjon som kalles når en strekkode er skannet
+ * @param {Function} statusCallback - Funksjon som kalles ved endringer i skannerstatus
+ * @param {string} module - Modulnavn for å registrere modulspesifikk callback
+ */
+export function initCameraScanner(videoEl, canvasEl, overlayEl, callback, statusCallback, module) {
+    console.log(`Initialiserer kameraskanner for modul: ${module}`);
+    
+    // Lagre DOM-elementer
+    state.videoElement = videoEl;
+    state.canvasElement = canvasEl;
+    state.scannerOverlay = overlayEl;
+    
+    // Registrer modulspesifikk callback hvis modul er angitt
+    if (module && callback) {
+        registerModuleCallback(module, callback);
+    }
+    
+    // Lagre status callback
+    scannerStatusCallback = statusCallback;
+    
+    // List opp tilgjengelige kameraer
+    checkAvailableCameras().then(cameras => {
+        state.availableCameras = cameras;
+        console.log(`Fant ${cameras.length} kameraer`);
+    }).catch(error => {
+        showToast(`Kunne ikke sjekke tilgjengelige kameraer: ${error.message}`, 'warning');
+    });
+    
+    // Sett opp event listeners for bytt-kamera-knapper
+    const switchCameraButtons = document.querySelectorAll('.scanner-switch-btn');
+    switchCameraButtons.forEach(button => {
+        button.addEventListener('click', switchCamera);
+    });
+}
 
 /**
  * Registrerer en callback-funksjon for en spesifikk modul
@@ -50,23 +86,22 @@ function registerModuleCallback(module, callback) {
  * Kobler til en Bluetooth-skanner
  * @returns {Promise} Løftebasert resultat av tilkoblingsforsøket
  */
-async function connectToBluetoothScanner() {
+export async function connectToBluetoothScanner() {
     if (!navigator.bluetooth) {
         showToast('Bluetooth støttes ikke i denne nettleseren. Vennligst bruk Chrome eller Edge.', 'error');
         throw new Error('Bluetooth støttes ikke i denne nettleseren.');
     }
     
     try {
-        bluetoothDevice = await navigator.bluetooth.requestDevice({
-            // Filtrer etter enheter som støtter serieport-profil eller HID
+        state.bluetoothDevice = await navigator.bluetooth.requestDevice({
             acceptAllDevices: true, 
             optionalServices: ['battery_service', '0000ffe0-0000-1000-8000-00805f9b34fb']
         });
         
-        bluetoothDevice.addEventListener('gattserverdisconnected', onBluetoothDisconnected);
+        state.bluetoothDevice.addEventListener('gattserverdisconnected', onBluetoothDisconnected);
         
-        const server = await bluetoothDevice.gatt.connect();
-        isBluetoothConnected = true;
+        const server = await state.bluetoothDevice.gatt.connect();
+        state.isBluetoothConnected = true;
         
         try {
             const service = await server.getPrimaryService('0000ffe0-0000-1000-8000-00805f9b34fb');
@@ -78,16 +113,19 @@ async function connectToBluetoothScanner() {
             
             // Informer om statusendring
             if (scannerStatusCallback) {
-                scannerStatusCallback(true, { deviceName: bluetoothDevice.name || 'Ukjent enhet', type: 'bluetooth' });
+                scannerStatusCallback(true, { 
+                    deviceName: state.bluetoothDevice.name || 'Ukjent enhet', 
+                    type: 'bluetooth' 
+                });
             }
             
             return {
                 success: true,
-                deviceName: bluetoothDevice.name || 'Ukjent enhet'
+                deviceName: state.bluetoothDevice.name || 'Ukjent enhet'
             };
         } catch (error) {
             showToast(`Kunne ikke koble til skanner-tjeneste: ${error.message}`, 'error');
-            isBluetoothConnected = false;
+            state.isBluetoothConnected = false;
             throw new Error('Kunne ikke koble til skanner-tjeneste. Sjekk at skanneren er på og støtter Bluetooth LE.');
         }
         
@@ -101,7 +139,7 @@ async function connectToBluetoothScanner() {
  * Håndterer frakobling av Bluetooth-skanner
  */
 function onBluetoothDisconnected() {
-    isBluetoothConnected = false;
+    state.isBluetoothConnected = false;
     
     // Informer om statusendring
     if (scannerStatusCallback) {
@@ -125,59 +163,17 @@ function handleBluetoothScannerData(event) {
     }
 }
 
-// ========== KAMERA SKANNER FUNKSJONALITET ==========
-
-/**
- * Initialiserer kameraskanneren
- * @param {HTMLElement} videoEl - Video-element for visning av kamerastrøm
- * @param {HTMLElement} canvasEl - Canvas-element for bildeanalyse
- * @param {HTMLElement} overlayEl - Element for skanner-overlay
- * @param {Function} callback - Funksjon som kalles når en strekkode er skannet
- * @param {Function} statusCallback - Funksjon som kalles ved endringer i skannerstatus
- * @param {string} module - Modulnavn for å registrere modulspesifikk callback
- */
-function initCameraScanner(videoEl, canvasEl, overlayEl, callback, statusCallback, module) {
-    console.log(`Initialiserer kameraskanner for modul: ${module}`);
-    
-    // Lagre DOM-elementer
-    videoElement = videoEl;
-    canvasElement = canvasEl;
-    scannerOverlay = overlayEl;
-    
-    // Registrer modulspesifikk callback hvis modul er angitt
-    if (module && callback) {
-        registerModuleCallback(module, callback);
-    }
-    
-    // Lagre status callback
-    scannerStatusCallback = statusCallback;
-    
-    // List opp tilgjengelige kameraer
-    checkAvailableCameras().then(cameras => {
-        availableCameras = cameras;
-        console.log(`Fant ${cameras.length} kameraer`);
-    }).catch(error => {
-        showToast(`Kunne ikke sjekke tilgjengelige kameraer: ${error.message}`, 'warning');
-    });
-    
-    // Sett opp event listeners for bytt-kamera-knapper
-    const switchCameraButtons = document.querySelectorAll('.scanner-switch-btn');
-    switchCameraButtons.forEach(button => {
-        button.addEventListener('click', switchCamera);
-    });
-}
-
 /**
  * Starter kameraskanning
  * @param {string} cameraId - ID til kamera som skal brukes (valgfritt)
  * @param {Object} options - Ekstra alternativer for kameraoppsett
  * @returns {Promise} Løftebasert resultat av oppstartforsøket
  */
-async function startCameraScanning(cameraId = null, options = {}) {
+export async function startCameraScanning(cameraId = null, options = {}) {
     showToast('Starter kamera...', 'info');
     
     // Stopp eventuelle aktive skannere
-    if (isScanning) {
+    if (state.isScanning) {
         stopCameraScanning();
         await new Promise(resolve => setTimeout(resolve, 300));
     }
@@ -197,15 +193,15 @@ async function startCameraScanning(cameraId = null, options = {}) {
         const canvasId = `canvas${modulePrefix}Scanner`;
         
         const container = document.getElementById(containerId);
-        videoElement = document.getElementById(videoId);
-        canvasElement = document.getElementById(canvasId);
+        state.videoElement = document.getElementById(videoId);
+        state.canvasElement = document.getElementById(canvasId);
         
         // Vis feilmelding og avbryt hvis elementer mangler
-        if (!container || !videoElement || !canvasElement) {
+        if (!container || !state.videoElement || !state.canvasElement) {
             const missingElements = [];
             if (!container) missingElements.push(`Container (${containerId})`);
-            if (!videoElement) missingElements.push(`Video (${videoId})`);
-            if (!canvasElement) missingElements.push(`Canvas (${canvasId})`);
+            if (!state.videoElement) missingElements.push(`Video (${videoId})`);
+            if (!state.canvasElement) missingElements.push(`Canvas (${canvasId})`);
             
             const errorMsg = `Kamera-elementer mangler: ${missingElements.join(', ')}`;
             showToast(errorMsg, 'error');
@@ -216,25 +212,25 @@ async function startCameraScanning(cameraId = null, options = {}) {
         container.style.display = 'block';
         
         // Stopp eventuelle eksisterende videostrømmer
-        if (videoElement.srcObject) {
+        if (state.videoElement.srcObject) {
             try {
-                videoElement.srcObject.getTracks().forEach(track => track.stop());
+                state.videoElement.srcObject.getTracks().forEach(track => track.stop());
             } catch (e) {
                 showToast(`Advarsel: ${e.message}`, 'warning');
             }
-            videoElement.srcObject = null;
+            state.videoElement.srcObject = null;
         }
         
         // Sett viktige attributter for iOS-kompatibilitet
-        videoElement.setAttribute('autoplay', '');
-        videoElement.setAttribute('playsinline', '');
-        videoElement.setAttribute('muted', '');
-        videoElement.muted = true;
+        state.videoElement.setAttribute('autoplay', '');
+        state.videoElement.setAttribute('playsinline', '');
+        state.videoElement.setAttribute('muted', '');
+        state.videoElement.muted = true;
         
         // Sjekk for iOS-enhet
         const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
         if (isIOS) {
-            videoElement.setAttribute('webkit-playsinline', '');
+            state.videoElement.setAttribute('webkit-playsinline', '');
         }
         
         // Konfigurer kamerainnstillinger
@@ -262,7 +258,7 @@ async function startCameraScanning(cameraId = null, options = {}) {
         // Start kameraet
         try {
             const stream = await navigator.mediaDevices.getUserMedia(constraints);
-            cameraStream = stream;
+            state.cameraStream = stream;
             
             // Logg kamerainformasjon
             const videoTrack = stream.getVideoTracks()[0];
@@ -271,25 +267,25 @@ async function startCameraScanning(cameraId = null, options = {}) {
             }
             
             // Tilkoble video til strøm
-            videoElement.srcObject = stream;
+            state.videoElement.srcObject = stream;
             
             // Forsøk å starte avspillingen manuelt
             try {
-                await videoElement.play();
+                await state.videoElement.play();
             } catch (e) {
                 showToast(`Kunne ikke starte video: ${e.message}. Prøv å klikke på skjermen.`, 'warning');
             }
             
             // Sett opp canvas
-            canvasElement.width = 640;
-            canvasElement.height = 480;
-            canvasElement.style.position = 'absolute';
-            canvasElement.style.top = '0';
-            canvasElement.style.left = '0';
-            canvasElement.style.width = '100%';
-            canvasElement.style.height = '100%';
-            canvasElement.style.zIndex = '2';
-            canvasElement.style.backgroundColor = 'transparent';
+            state.canvasElement.width = 640;
+            state.canvasElement.height = 480;
+            state.canvasElement.style.position = 'absolute';
+            state.canvasElement.style.top = '0';
+            state.canvasElement.style.left = '0';
+            state.canvasElement.style.width = '100%';
+            state.canvasElement.style.height = '100%';
+            state.canvasElement.style.zIndex = '2';
+            state.canvasElement.style.backgroundColor = 'transparent';
             
             // Last Quagga2 hvis nødvendig
             if (typeof Quagga === 'undefined') {
@@ -302,7 +298,7 @@ async function startCameraScanning(cameraId = null, options = {}) {
                 inputStream: {
                     name: "Live",
                     type: "LiveStream",
-                    target: videoElement,
+                    target: state.videoElement,
                     constraints: {
                         width: { min: 640 },
                         height: { min: 480 }
@@ -340,7 +336,7 @@ async function startCameraScanning(cameraId = null, options = {}) {
                 
                 try {
                     Quagga.start();
-                    isScanning = true;
+                    state.isScanning = true;
                     
                     // Sett opp event handlers for Quagga2
                     Quagga.onDetected((result) => {
@@ -395,8 +391,8 @@ async function startCameraScanning(cameraId = null, options = {}) {
 /**
  * Stopper kameraskanning
  */
-function stopCameraScanning() {
-    if (!isScanning) {
+export function stopCameraScanning() {
+    if (!state.isScanning) {
         return;
     }
     
@@ -410,9 +406,9 @@ function stopCameraScanning() {
     }
     
     // Stopp kamerastrøm
-    if (cameraStream) {
+    if (state.cameraStream) {
         try {
-            cameraStream.getTracks().forEach(track => {
+            state.cameraStream.getTracks().forEach(track => {
                 if (track.readyState === 'live') {
                     track.stop();
                 }
@@ -420,16 +416,16 @@ function stopCameraScanning() {
         } catch (e) {
             showToast(`Advarsel ved stopping av kamera: ${e.message}`, 'warning');
         }
-        cameraStream = null;
+        state.cameraStream = null;
     }
     
     // Tilbakestill video-elementet
-    if (videoElement) {
+    if (state.videoElement) {
         try {
-            videoElement.srcObject = null;
-            videoElement.onloadedmetadata = null;
-            videoElement.onloadeddata = null;
-            videoElement.oncanplay = null;
+            state.videoElement.srcObject = null;
+            state.videoElement.onloadedmetadata = null;
+            state.videoElement.onloadeddata = null;
+            state.videoElement.oncanplay = null;
         } catch (e) {
             // Ignorer feil her
         }
@@ -453,7 +449,7 @@ function stopCameraScanning() {
         // Ignorer feil her
     }
     
-    isScanning = false;
+    state.isScanning = false;
     
     // Informer om statusendring
     if (scannerStatusCallback) {
@@ -467,7 +463,7 @@ function stopCameraScanning() {
 async function switchCamera() {
     showToast('Bytter kamera...', 'info');
     
-    if (isScanning) {
+    if (state.isScanning) {
         // Stopp nåværende skanning
         stopCameraScanning();
         
@@ -477,11 +473,11 @@ async function switchCamera() {
         // For iOS-enheter
         if (/iPad|iPhone|iPod/.test(navigator.userAgent)) {
             // Hvis vi allerede bruker environment, bytt til user, og omvendt
-            const currentFacingMode = currentCameraIndex === 0 ? "user" : "environment";
+            const currentFacingMode = state.currentCameraIndex === 0 ? "user" : "environment";
             const newFacingMode = currentFacingMode === "user" ? "environment" : "user";
             
             // Oppdater gjeldende kameraindeks
-            currentCameraIndex = currentCameraIndex === 0 ? 1 : 0;
+            state.currentCameraIndex = state.currentCameraIndex === 0 ? 1 : 0;
             
             // Start skanning med spesifikk facingMode for iOS
             try {
@@ -497,16 +493,16 @@ async function switchCamera() {
         }
         
         // For andre enheter, bruk den originale logikken
-        if (availableCameras.length === 0) {
-            availableCameras = await checkAvailableCameras();
+        if (state.availableCameras.length === 0) {
+            state.availableCameras = await checkAvailableCameras();
         }
         
         // Gå til neste kamera i listen
-        if (availableCameras.length > 1) {
-            currentCameraIndex = (currentCameraIndex + 1) % availableCameras.length;
+        if (state.availableCameras.length > 1) {
+            state.currentCameraIndex = (state.currentCameraIndex + 1) % state.availableCameras.length;
             
-            const camera = availableCameras[currentCameraIndex];
-            showToast(`Bytter til kamera: ${camera.label || 'Kamera ' + (currentCameraIndex + 1)}`, 'info');
+            const camera = state.availableCameras[state.currentCameraIndex];
+            showToast(`Bytter til kamera: ${camera.label || 'Kamera ' + (state.currentCameraIndex + 1)}`, 'info');
             
             // Start skanning med nytt kamera
             startCameraScanning(camera.deviceId);
@@ -525,27 +521,27 @@ async function switchCamera() {
  * @param {Object} result - Skanningsresultat-objekt fra Quagga
  */
 function handleCameraScanResult(result) {
-    if (scanCooldown) return; // Ignorer skann i cooldown-perioden
+    if (state.scanCooldown) return; // Ignorer skann i cooldown-perioden
     
     if (result && result.codeResult && result.codeResult.code) {
         const barcode = result.codeResult.code;
         
         // Sjekk om dette er samme strekkode som nettopp ble skannet
-        if (barcode === lastScannedCode) {
+        if (barcode === state.lastScannedCode) {
             return; // Ignorer dupliserte skann
         }
         
         // Valider at dette er en strekkode og ikke bare et tall
         if (validateBarcode(barcode)) {
             // Oppdater sist skannede strekkode
-            lastScannedCode = barcode;
+            state.lastScannedCode = barcode;
             
             // Spill lyd for å indikere at strekkode er funnet
             playSuccessSound();
             
             // Marker strekkoden på canvas
-            if (canvasElement && result.box) {
-                const ctx = canvasElement.getContext('2d');
+            if (state.canvasElement && result.box) {
+                const ctx = state.canvasElement.getContext('2d');
                 drawSuccessBox(ctx, result.box);
             }
             
@@ -564,11 +560,11 @@ function handleCameraScanResult(result) {
             processScannedBarcode(barcode);
             
             // Sett cooldown for å unngå gjentatte skanninger
-            scanCooldown = true;
+            state.scanCooldown = true;
             
             // Start skanning igjen etter cooldown
             setTimeout(() => {
-                scanCooldown = false;
+                state.scanCooldown = false;
             }, 1000); // 1 sekund cooldown mellom skanninger
         }
     }
@@ -598,79 +594,14 @@ export function blinkBackground(color) {
     
     // Sett farge med litt gjennomsiktighet
     overlay.style.backgroundColor = color === 'red' ? 'rgba(255, 0, 0, 0.3)' : 
-                                   color === 'green' ? 'rgba(0, 255, 0, 0.3)' : 
-                                   color === 'orange' ? 'rgba(255, 165, 0, 0.3)' : 
-                                   'rgba(0, 0, 0, 0.2)';
+                                    color === 'green' ? 'rgba(0, 255, 0, 0.3)' : 
+                                    color === 'orange' ? 'rgba(255, 165, 0, 0.3)' : 
+                                    'rgba(0, 0, 0, 0.2)';
     
     // Fjern etter kort tid
     setTimeout(() => {
         overlay.style.backgroundColor = 'transparent';
     }, 500);
-}
-
-/**
- * Håndterer prosesserte bilder fra Quagga
- * @param {Object} result - Prosesseringsresultat fra Quagga
- */
-function handleProcessedResult(result) {
-    if (!canvasElement || !result) return;
-    
-    try {
-        const ctx = canvasElement.getContext('2d');
-        
-        // Tøm canvas
-        ctx.clearRect(0, 0, canvasElement.width, canvasElement.height);
-        
-        // Tegn deteksjonsområde hvis funnet
-        if (result.boxes) {
-            result.boxes.filter(box => box !== result.box).forEach(box => {
-                ctx.strokeStyle = 'rgba(0, 255, 0, 0.5)';
-                ctx.lineWidth = 2;
-                ctx.beginPath();
-                ctx.moveTo(box[0][0], box[0][1]);
-                box.forEach((p, i) => {
-                    if (i !== 0) ctx.lineTo(p[0], p[1]);
-                });
-                ctx.lineTo(box[0][0], box[0][1]);
-                ctx.stroke();
-            });
-        }
-        
-        // Tegn den mest sannsynlige strekkoden med rød
-        if (result.box) {
-            ctx.strokeStyle = 'rgba(255, 0, 0, 0.8)';
-            ctx.lineWidth = 2;
-            ctx.beginPath();
-            ctx.moveTo(result.box[0][0], result.box[0][1]);
-            result.box.forEach((p, i) => {
-                if (i !== 0) ctx.lineTo(p[0], p[1]);
-            });
-            ctx.lineTo(result.box[0][0], result.box[0][1]);
-            ctx.stroke();
-        }
-        
-        // Hvis vi har en strekkoderesultat, vis det
-        if (result.codeResult && result.codeResult.code) {
-            // Tegn bakgrunn for tekstboksen
-            const text = result.codeResult.code;
-            ctx.font = '16px Arial';
-            const textWidth = ctx.measureText(text).width;
-            
-            // Posisjon for teksten (under strekkodeboksen)
-            const textX = result.box ? (result.box[0][0] + result.box[2][0]) / 2 - textWidth / 2 : 10;
-            const textY = result.box ? result.box[2][1] + 30 : 30;
-            
-            // Tegn bakgrunn for teksten
-            ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
-            ctx.fillRect(textX - 5, textY - 16, textWidth + 10, 22);
-            
-            // Tegn teksten
-            ctx.fillStyle = 'white';
-            ctx.fillText(text, textX, textY);
-        }
-    } catch (error) {
-        // Feil ved tegning ignoreres, for å ikke forstyrre skanningen
-    }
 }
 
 /**
@@ -707,6 +638,42 @@ export function playSuccessSound() {
 }
 
 /**
+ * Spiller en lyd for å gi tilbakemelding ved feil
+ */
+export function playErrorSound() {
+    try {
+        const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        const oscillator = audioContext.createOscillator();
+        const gainNode = audioContext.createGain();
+        
+        oscillator.type = 'sawtooth';
+        oscillator.frequency.value = 220; // Lavere frekvens for feilmeldinger
+        gainNode.gain.value = 0.1;
+        
+        oscillator.connect(gainNode);
+        gainNode.connect(audioContext.destination);
+        
+        oscillator.start();
+        
+        // Spill en "ned" lyd for å indikere feil
+        oscillator.frequency.exponentialRampToValueAtTime(110, audioContext.currentTime + 0.2);
+        
+        setTimeout(() => {
+            oscillator.stop();
+        }, 300);
+    } catch (error) {
+        // Fallback til å vibrere enheten hvis tilgjengelig
+        try {
+            if (navigator.vibrate) {
+                navigator.vibrate([100, 50, 100]); // Mønster for feil
+            }
+        } catch (e) {
+            // Ignorer feil her
+        }
+    }
+}
+
+/**
  * Tegner en suksess-boks rundt en identifisert strekkode
  * @param {CanvasRenderingContext2D} ctx - Canvas-kontekst
  * @param {Array} box - Koordinater for strekkoden
@@ -715,7 +682,7 @@ function drawSuccessBox(ctx, box) {
     try {
         if (!ctx || !box || box.length < 4) return;
         
-        ctx.clearRect(0, 0, canvasElement.width, canvasElement.height);
+        ctx.clearRect(0, 0, state.canvasElement.width, state.canvasElement.height);
         
         // Tegn fylt grønn boks med gjennomskinnelighet
         ctx.fillStyle = 'rgba(76, 175, 80, 0.3)';
@@ -857,11 +824,12 @@ function validateBarcode(barcode) {
     // Hvis strekkoden har et kjent format, anta at den er gyldig
     return isEAN8 || isUPCA || isCode128 || isInternalCode;
 }
+
 /**
  * Sentralisert funksjon for håndtering av skannede strekkoder
  * @param {string} barcode - Skannede strekkode
  */
-function processScannedBarcode(barcode) {
+export function processScannedBarcode(barcode) {
     console.log("PROSESS-DEBUG-P100: processScannedBarcode starter med", barcode);
     
     // Sjekk hvilken modul som er aktiv
@@ -915,10 +883,6 @@ function getModuleType(moduleName) {
         default: return moduleName;
     }
 }
-
-// scanner.js - handleScan funksjon komplett reparert
-
-// scanner.js - handleScan funksjon med utvidet feillogging og feilkoder
 
 /**
  * Håndterer skanning for alle moduler med forbedret strekkodevalidering
@@ -1048,58 +1012,9 @@ function simulateManualScan(type, itemId, quantity = 1) {
     }
 }
 
-/**
- * Spiller en lyd for å gi tilbakemelding ved feil
- */
-export function playErrorSound() {
-    try {
-        const audioContext = new (window.AudioContext || window.webkitAudioContext)();
-        const oscillator = audioContext.createOscillator();
-        const gainNode = audioContext.createGain();
-        
-        oscillator.type = 'sawtooth';
-        oscillator.frequency.value = 220; // Lavere frekvens for feilmeldinger
-        gainNode.gain.value = 0.1;
-        
-        oscillator.connect(gainNode);
-        gainNode.connect(audioContext.destination);
-        
-        oscillator.start();
-        
-        // Spill en "ned" lyd for å indikere feil
-        oscillator.frequency.exponentialRampToValueAtTime(110, audioContext.currentTime + 0.2);
-        
-        setTimeout(() => {
-            oscillator.stop();
-        }, 300);
-    } catch (error) {
-        // Fallback til å vibrere enheten hvis tilgjengelig
-        try {
-            if (navigator.vibrate) {
-                navigator.vibrate([100, 50, 100]); // Mønster for feil
-            }
-        } catch (e) {
-            // Ignorer feil her
-        }
-    }
-}
-// Gjør debug-informasjon tilgjengelig globalt
-window.scannerDebug = {
-    isScanning,
-    availableCameras,
-    currentCameraIndex,
-    cameraStream,
-    validateBarcode
-};
-
 // Eksporter funksjoner
 export {
-    connectToBluetoothScanner,
-    initCameraScanner,
-    startCameraScanning,   // Sørg for at denne er med
-    stopCameraScanning,
-    switchCamera,
-    isBluetoothConnected,
-    isScanning,
-    processScannedBarcode
+    getModuleType,
+    validateBarcode,
+    state as scannerState
 };

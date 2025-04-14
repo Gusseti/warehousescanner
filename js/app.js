@@ -1,84 +1,96 @@
-// app.js - Improved main application file with enhanced error handling
-import { initUi, showMainMenu, showModule } from './modules/ui.js';
+// app.js - Refaktorert hovedapplikasjonsfil med modulær struktur
+import { initUi, showMainMenu, showModule, updateScannerStatus } from './modules/ui.js';
 import { loadSettings, saveSettings, loadItemWeights, loadBarcodeMappingFromStorage, loadListsFromStorage } from './modules/storage.js';
-import { initPicking } from './modules/picking.js';
-import { initReceiving } from './modules/receiving.js';
-import { initReturns } from './modules/returns.js';
-import { initSettings } from './modules/settings.js';
+import { initWeights, updateAllWeights } from './modules/weights.js';
 import { showToast } from './modules/utils.js';
-import { initWeights } from './modules/weights.js';
+import { initCameraScanner, connectToBluetoothScanner } from './modules/scanner.js';
+import { 
+    createPickingRenderer, 
+    createReceivingRenderer, 
+    createReturnsRenderer 
+} from './modules/list-renderer.js';
 
-// App state with default values for safety
+// Applikasjonstilstand med standardverdier
 export let appState = {
-    // Module view
+    // Modulvisning
     currentModule: null,
     
-    // Pick model
+    // Plukk-modell
     pickListItems: [],
     pickedItems: [],
     lastPickedItem: null,
     
-    // Receive model
+    // Mottaksmodell
     receiveListItems: [],
     receivedItems: [],
     lastReceivedItem: null,
     
-    // Return model
+    // Returmodell
     returnListItems: [],
     
-    // Barcode mapping
+    // Strekkode-mapping
     barcodeMapping: {}, 
     
-    // Settings with fallback defaults
+    // Innstillinger med standardverdier
     settings: {
         weightUnit: 'kg',
         defaultItemWeight: 1.0
     },
     
-    // Item weights
+    // Varevekter
     itemWeights: {}
 };
 
-// Initialize the application when DOM is loaded
+// Moduler for rendering
+const renderers = {
+    pick: null,
+    receive: null,
+    return: null
+};
+
+// Initialiserer applikasjonen når DOM er lastet
 document.addEventListener('DOMContentLoaded', initializeApp);
 
-// Register service worker with improved error handling
+// Registrerer serviceworker med forbedret feilhåndtering
 if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
         navigator.serviceWorker.register('./service-worker.js')
             .then(registration => {
-                console.log('Service Worker registered:', registration);
+                console.log('Service Worker registrert:', registration);
             })
             .catch(error => {
-                console.log('Service Worker registration failed:', error);
-                // Continue app initialization anyway - service worker is not critical
+                console.log('Service Worker registrering feilet:', error);
+                // Fortsett app-initialisering uansett - serviceworker er ikke kritisk
             });
     });
 } else {
-    console.log('Service Worker API not supported in this browser');
+    console.log('Service Worker API støttes ikke i denne nettleseren');
 }
 
 /**
- * Initialize the application with retry logic and error handling
+ * Initialiserer applikasjonen med gjenprøving og feilhåndtering
  */
 async function initializeApp() {
     try {
-        console.log('Initializing application...');
+        console.log('Initialiserer applikasjon...');
         
-        // Add global error handler for unexpected errors
+        // Legg til global feilhåndterer for uventede feil
         window.onerror = function(message, source, lineno, colno, error) {
-            console.error('Global error handler caught:', { message, source, lineno, colno, error });
+            console.error('Global feilhåndterer fanget:', { message, source, lineno, colno, error });
             showToast('En uventet feil oppstod. Se konsollen for detaljer.', 'error');
-            return false; // Let the default handler run as well
+            return false; // La standard feilhåndterer også kjøre
         };
         
-        // Load stored data with error handling
+        // Last lagrede data med feilhåndtering
         await loadStoredData();
         
-        // Initialize UI and modules
+        // Initialiser UI og moduler
         await initModules();
         
-        // Retrieve stored module and display it, or show main menu
+        // Initialiser renderers
+        initializeRenderers();
+        
+        // Hent lagret modul og vis den, eller vis hovedmenyen
         const storedModule = localStorage.getItem('currentModule');
         if (storedModule) {
             showModule(storedModule);
@@ -86,131 +98,248 @@ async function initializeApp() {
             showMainMenu();
         }
         
-        console.log('Application initialized successfully');
+        console.log('Applikasjon initialisert');
         
-        // Add refresh button handler for debug mode
-        const forceRefreshBtn = document.getElementById('forceRefreshBtn');
-        if (forceRefreshBtn) {
-            forceRefreshBtn.addEventListener('click', forceRefresh);
-        }
+        // Legg til oppdateringsknapp-handler for feilsøkingsmodus
+        setupForceRefreshButton();
     } catch (error) {
-        console.error('Error during application initialization:', error);
+        console.error('Feil under applikasjonsinitialisering:', error);
         showToast('Det oppstod en feil ved oppstart av applikasjonen. Vi vil prøve igjen.', 'error');
         
-        // Add retry logic
+        // Legg til gjenprøvingslogikk
         setTimeout(() => {
-            console.log('Retrying application initialization...');
+            console.log('Prøver applikasjonsinitialisering på nytt...');
             window.location.reload();
-        }, 3000); // Retry after 3 seconds
+        }, 3000); // Prøv igjen etter 3 sekunder
     }
 }
 
 /**
- * Load all stored data with error handling
+ * Laster alle lagrede data med feilhåndtering
  */
 async function loadStoredData() {
     try {
-        // Load barcode mapping
-        await safeOperation(loadBarcodeMappingFromStorage, 'barcode mapping');
+        // Last strekkode-mapping
+        await safeOperation(loadBarcodeMappingFromStorage, 'strekkode-mapping');
         
-        // Load settings
-        await safeOperation(loadSettings, 'settings');
+        // Last innstillinger
+        await safeOperation(loadSettings, 'innstillinger');
         
-        // Load item weights
-        await safeOperation(loadItemWeights, 'item weights');
+        // Last varevekter
+        await safeOperation(loadItemWeights, 'varevekter');
         
-        // Load lists
-        await safeOperation(loadListsFromStorage, 'lists');
+        // Last lister
+        await safeOperation(loadListsFromStorage, 'lister');
         
-        console.log('All stored data loaded successfully');
+        console.log('Alle lagrede data lastet');
     } catch (error) {
-        console.error('Error loading stored data:', error);
-        throw new Error('Failed to load stored data: ' + error.message);
+        console.error('Feil ved lasting av lagrede data:', error);
+        throw new Error('Kunne ikke laste lagrede data: ' + error.message);
     }
 }
 
 /**
- * Initialize all modules with error handling
+ * Initialiserer alle moduler med feilhåndtering
  */
 async function initModules() {
     try {
-        // Initialize UI handling first
+        // Initialiser UI-håndtering først
         await safeOperation(initUi, 'UI');
         
-        // Initialize functional modules
-        await safeOperation(initPicking, 'picking module');
-        await safeOperation(initReceiving, 'receiving module');
-        await safeOperation(initReturns, 'returns module');
-        await safeOperation(initSettings, 'settings module');
-        await safeOperation(initWeights, 'weights module');
+        // Initialiser viktige moduler
+        await safeOperation(() => initWeights(updateAllUIRenderers), 'weight-modul');
         
-        console.log('All modules initialized successfully');
+        // Initialiser skanner-moduler
+        initializeScanners();
+        
+        console.log('Alle moduler initialisert');
     } catch (error) {
-        console.error('Error initializing modules:', error);
-        throw new Error('Failed to initialize modules: ' + error.message);
+        console.error('Feil ved initialisering av moduler:', error);
+        throw new Error('Kunne ikke initialisere moduler: ' + error.message);
     }
 }
 
 /**
- * Safe operation wrapper with error handling
- * @param {Function} operation - Operation to perform
- * @param {string} name - Name of the operation for logging
- * @returns {Promise} Result of the operation
+ * Initialiserer renderers for alle moduler
+ */
+function initializeRenderers() {
+    // Opprett renderers for hver modul
+    renderers.pick = createPickingRenderer('pickList', item => {
+        console.log('Plukk-vare klikket:', item);
+        // Implementer klikk-handling her om nødvendig
+    });
+    
+    renderers.receive = createReceivingRenderer('receiveList', item => {
+        console.log('Mottaks-vare klikket:', item);
+        // Implementer klikk-handling her om nødvendig
+    });
+    
+    renderers.return = createReturnsRenderer('returnList', item => {
+        console.log('Retur-vare klikket:', item);
+        // Implementer klikk-handling her om nødvendig
+    });
+}
+
+/**
+ * Oppdaterer alle UI-renderers
+ */
+function updateAllUIRenderers() {
+    // Oppdater alle renderers
+    if (renderers.pick) renderers.pick.render();
+    if (renderers.receive) renderers.receive.render();
+    if (renderers.return) renderers.return.render();
+}
+
+/**
+ * Initialiserer kamera og bluetooth skannere
+ */
+function initializeScanners() {
+    // Finn alle kamera-elementer
+    const cameraModules = [
+        {
+            video: document.getElementById('videoPickScanner'),
+            canvas: document.getElementById('canvasPickScanner'),
+            overlay: document.getElementById('scannerPickOverlay'),
+            module: 'pick'
+        },
+        {
+            video: document.getElementById('videoReceiveScanner'),
+            canvas: document.getElementById('canvasReceiveScanner'),
+            overlay: document.getElementById('scannerReceiveOverlay'),
+            module: 'receive'
+        },
+        {
+            video: document.getElementById('videoReturnScanner'),
+            canvas: document.getElementById('canvasReturnScanner'),
+            overlay: document.getElementById('scannerReturnOverlay'),
+            module: 'return'
+        }
+    ];
+    
+    // Initialiser hver kameraskanner
+    cameraModules.forEach(module => {
+        if (module.video && module.canvas && module.overlay) {
+            initCameraScanner(
+                module.video,
+                module.canvas,
+                module.overlay,
+                window[`handle${capitalizeFirstLetter(module.module)}Scan`],
+                updateScannerStatus,
+                module.module
+            );
+        }
+    });
+    
+    // Sett opp event handlers for bluetooth-skanner-knapper
+    setupBluetoothButtons();
+}
+
+/**
+ * Setter opp knapper for bluetooth-tilkobling
+ */
+function setupBluetoothButtons() {
+    const bluetoothButtons = [
+        { id: 'connectScannerPick', module: 'pick' },
+        { id: 'connectScannerReceive', module: 'receive' },
+        { id: 'connectScannerReturn', module: 'return' }
+    ];
+    
+    bluetoothButtons.forEach(button => {
+        const element = document.getElementById(button.id);
+        if (element) {
+            element.addEventListener('click', async () => {
+                try {
+                    showToast('Kobler til Bluetooth-skanner...', 'info');
+                    await connectToBluetoothScanner();
+                } catch (error) {
+                    showToast(error.message, 'error');
+                }
+            });
+        }
+    });
+}
+
+/**
+ * Sikker operasjon-wrapper med feilhåndtering
+ * @param {Function} operation - Operasjon som skal utføres
+ * @param {string} name - Navn på operasjonen for logging
+ * @returns {Promise} Resultat av operasjonen
  */
 async function safeOperation(operation, name) {
     try {
         const result = operation();
-        // If the operation returns a promise, await it
+        // Hvis operasjonen returnerer et promise, vent på det
         if (result && typeof result.then === 'function') {
             return await result;
         }
         return result;
     } catch (error) {
-        console.error(`Error in ${name} operation:`, error);
-        // Continue execution, just log the error
+        console.error(`Feil i ${name}-operasjon:`, error);
+        // Fortsett utførelse, bare logg feilen
         return null;
     }
 }
 
 /**
- * Force refresh the application
+ * Setter opp Force Refresh-knappen
+ */
+function setupForceRefreshButton() {
+    const forceRefreshBtn = document.getElementById('forceRefreshBtn');
+    if (forceRefreshBtn) {
+        forceRefreshBtn.addEventListener('click', forceRefresh);
+    }
+}
+
+/**
+ * Tvinger en full oppdatering av applikasjonen
  */
 function forceRefresh() {
-    // Show loading status
+    // Vis lastestatus
     const refreshBtn = document.getElementById('forceRefreshBtn');
     if (refreshBtn) {
         refreshBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16" style="margin-right: 5px; animation: spin 1s linear infinite;"><path d="M8 3a5 5 0 1 0 4.546 2.914.5.5 0 0 1 .908-.417A6 6 0 1 1 8 2v1z"/><path d="M8 4.466V.534a.25.25 0 0 1 .41-.192l2.36 1.966c.12.1.12.284 0 .384L8.41 4.658A.25.25 0 0 1 8 4.466z"/></svg> Laster...';
     }
     
-    // Unregister service worker
+    // Avregistrer service worker
     if ('serviceWorker' in navigator) {
         navigator.serviceWorker.getRegistrations().then(function(registrations) {
             for (let registration of registrations) {
                 registration.unregister();
-                console.log('Service Worker unregistered');
+                console.log('Service Worker avregistrert');
             }
         });
     }
     
-    // Clear caches
+    // Tøm caches
     if ('caches' in window) {
         caches.keys().then(function(names) {
             for (let name of names) {
                 caches.delete(name);
-                console.log('Cache deleted:', name);
+                console.log('Cache slettet:', name);
             }
         });
     }
     
-    // Wait a bit for caches and service workers to be deleted
+    // Vent litt for at caches og service workers skal slettes
     setTimeout(function() {
-        // Force a full refresh with timestamp to bypass browser cache
+        // Tving en full oppdatering med tidsstempel for å omgå nettleserens cache
         window.location.href = window.location.href.split('?')[0] + '?refresh=' + new Date().getTime();
     }, 1500);
 }
 
-// Export functions for use in other modules
+/**
+ * Hjelpefunksjon for å gjøre første bokstav stor
+ * @param {string} str - Strengen som skal endres
+ * @returns {string} Strengen med stor første bokstav
+ */
+function capitalizeFirstLetter(str) {
+    return str.charAt(0).toUpperCase() + str.slice(1);
+}
+
+// Eksporter nyttige funksjoner
 export {
     initializeApp,
-    safeOperation
+    updateAllUIRenderers,
+    renderers,
+    capitalizeFirstLetter
 };
