@@ -4,7 +4,7 @@ import { showToast } from './utils.js';
 import { saveListsToStorage } from './storage.js';
 import { updateScannerStatus } from './ui.js';
 import { initCameraScanner, startCameraScanning, stopCameraScanning, connectToBluetoothScanner, blinkBackground, playErrorSound } from './scanner.js';
-import { importFromCSV, importFromJSON, importFromPDF, exportList, exportWithFormat, exportToPDF } from './import-export.js';
+import { importFromCSV, importFromJSON, importFromPDF, exportList, exportWithFormat} from './import-export.js';
 import { openWeightModal } from './weights.js';
 import { handleScannedBarcode } from './barcode-handler.js';
 
