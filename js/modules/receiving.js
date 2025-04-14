@@ -496,6 +496,22 @@ function exportReceiveList(format = 'pdf') {
         return;
     }
     
+    // Sjekk om alle varer er mottatt
+    const unfinishedItems = appState.receiveListItems.filter(item => !item.received);
+    
+    if (unfinishedItems.length > 0) {
+        // Beregn totalt antall umottatte varer og antall som mangler
+        const totalUnreceived = unfinishedItems.reduce((sum, item) => {
+            const remaining = item.quantity - (item.receivedCount || 0);
+            return sum + remaining;
+        }, 0);
+        
+        // Vis bekreftelsesdialog
+        if (!confirm(`Advarsel: ${unfinishedItems.length} varelinjer (totalt ${totalUnreceived} enheter) er ikke ferdig mottatt.\n\nVil du eksportere likevel?`)) {
+            return; // Brukeren valgte å avbryte
+        }
+    }
+    
     try {
         if (format.toLowerCase() === 'pdf') {
             // Bruk den nye PDF-eksportfunksjonen

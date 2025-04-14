@@ -961,6 +961,17 @@ function processKvikReceiptLines(lines) {
         // Skip tomme linjer
         if (!line) continue;
         
+        // FORBEDRING 1: Hopp over linjer med bankinformasjon
+        if (line.includes('NDEANOKK') || 
+            line.includes('NO3960210700601') || 
+            line.includes('kontonummer') || 
+            line.includes('Følgeseddel') ||
+            line.includes('referanse Eksternt') ||
+            line.includes('info@kvik.com')) {
+            console.log("Hopper over bankinfo-linje:", line);
+            continue;
+        }
+        
         // Sjekk om dette er en 9-sifret palle-ID alene på linjen
         if (/^\d{9}$/.test(line)) {
             currentPalleId = line;
@@ -968,12 +979,20 @@ function processKvikReceiptLines(lines) {
             continue;
         }
         
+        // FORBEDRING 2: Mer spesifikk sjekk for produktkoder
         // Sjekk om linjen starter med et varenummer-mønster
         const productCodeMatch = line.match(/^(\d{3}-[A-Z0-9]+-?\d*|[A-Z]{2}\d{5}|[A-Z0-9]{2}\d{3,5}|BP\d{5}|HV\d{1,4}(-\d+)?)/);
         
         if (productCodeMatch) {
             // Dette er starten på en produktlinje
             const productId = productCodeMatch[1];
+            
+            // FORBEDRING 3: Sjekk om dette faktisk er et produktnavn, ikke en overskrift eller annen info
+            // Ved å sjekke om det finnes minst ett tegn etter produktkoden
+            if (line.length <= productId.length + 1) {
+                console.log(`Ignorerer kort produktkode-lignende tekst: ${line}`);
+                continue;
+            }
             
             // Sjekk om det er 3 tall på slutten av linjen (bestilt, plukket, gjenstående)
             const numbersMatch = line.match(/(\d+)\s+(\d+)\s+(\d+)$/);
@@ -994,9 +1013,9 @@ function processKvikReceiptLines(lines) {
                     description: description,
                     quantity: bestilt,  // Bruk 'bestilt' som antall
                     weight: appState.itemWeights[productId] || appState.settings.defaultItemWeight,
-                    received: plukket === bestilt,
-                    receivedAt: plukket === bestilt ? new Date() : null,
-                    receivedCount: plukket,
+                    received: false,    // ENDRING: Sett til false ved import
+                    receivedAt: null,   // ENDRING: Sett til null ved import
+                    receivedCount: 0,   // ENDRING: Start alltid med 0 for antall mottatt
                     palleId: currentPalleId
                 });
                 
@@ -1052,9 +1071,9 @@ function processKvikReceiptLines(lines) {
                         description: combinedDescription,
                         quantity: bestilt,  // Bruk 'bestilt' som antall
                         weight: appState.itemWeights[productId] || appState.settings.defaultItemWeight,
-                        received: plukket === bestilt,
-                        receivedAt: plukket === bestilt ? new Date() : null,
-                        receivedCount: plukket,
+                        received: false,   // ENDRING: Sett til false ved import
+                        receivedAt: null,  // ENDRING: Sett til null ved import
+                        receivedCount: 0,  // ENDRING: Start alltid med 0 for antall mottatt
                         palleId: currentPalleId
                     });
                     
