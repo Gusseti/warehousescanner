@@ -362,6 +362,7 @@
                                 <th>Varenr.</th>
                                 <th>Beskrivelse</th>
                                 <th>Antall</th>
+                                <th>Tilstand</th>
                                 <th>Vekt (kg)</th>
                                 <th>Handlinger</th>
                             </tr>
@@ -386,6 +387,15 @@
                 
                 <div class="form-group">
                     <input type="number" id="returnQuantity" class="form-control" value="1" min="1" placeholder="Antall">
+                </div>
+                
+                <!-- NY: Tilstandsvelger -->
+                <div class="form-group">
+                    <select id="returnItemCondition" class="form-control">
+                        <option value="uåpnet">Uåpnet</option>
+                        <option value="åpnet">Åpnet</option>
+                        <option value="skadet">Skadet</option>
+                    </select>
                 </div>
                 
                 <div class="btn-group">
@@ -448,7 +458,7 @@
                 </div>
                 
                 <div class="form-group">
-                    <button id="clearBarcodeData" class="btn btn-warning">
+                    <button id="clearAllBarcodeData" class="btn btn-warning">
                         <i class="fas fa-trash"></i> Tøm strekkodedata
                     </button>
                 </div>
@@ -485,7 +495,31 @@
             </div>
         </div>
     </div>
-    
+
+    <!-- Condition Change Modal -->
+    <div id="conditionModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 class="modal-title">Endre tilstand for <span id="conditionModalItemId"></span></h2>
+                <span class="close" id="closeConditionModal">&times;</span>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label for="itemCondition">Velg tilstand</label>
+                    <select id="itemCondition" class="form-control">
+                        <option value="uåpnet">Uåpnet</option>
+                        <option value="åpnet">Åpnet</option>
+                        <option value="skadet">Skadet</option>
+                    </select>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button id="saveConditionBtn" class="btn btn-success">Lagre</button>
+                <button id="cancelConditionBtn" class="btn btn-danger">Avbryt</button>
+            </div>
+        </div>
+    </div>
+
     <div id="toast" class="toast"></div>
     
     <!-- Test kamera for debugging -->

@@ -669,6 +669,14 @@ function generateCSV(items, type) {
     // Legg til type-spesifikke kolonner
     if (type === 'plukk') headers.push('Plukket');
     if (type === 'mottak') headers.push('Mottatt');
+    if (type === 'retur') headers.push('Tilstand'); // Ny kolonne for retur
+
+    // Legg til CSS-klasser for tilstandsfarger
+    const conditionColors = {
+        'uåpnet': 'background-color: rgba(76, 175, 80, 0.1);', // Grønn
+        'åpnet': 'background-color: rgba(255, 193, 7, 0.1);', // Gul
+        'skadet': 'background-color: rgba(244, 67, 54, 0.1);'  // Rød
+    };
 
     // Start CSV med headers
     let csv = headers.join(';') + '\n';
@@ -685,6 +693,14 @@ function generateCSV(items, type) {
         // Legg til type-spesifikke verdier
         if (type === 'plukk') row.push(item.picked ? 'Ja' : 'Nei');
         if (type === 'mottak') row.push(item.received ? 'Ja' : 'Nei');
+        if (type === 'retur') {
+            const condition = item.condition || 'uåpnet';
+            row.push(condition);
+
+            // Legg til farge for tilstand
+            const colorStyle = conditionColors[condition] || '';
+            row.push(colorStyle);
+        }
 
         csv += row.join(';') + '\n';
     });
@@ -725,6 +741,9 @@ function generateTXT(items, type, summary) {
         if (type === 'mottak') {
             txt += `  Mottatt: ${item.received ? 'Ja' : 'Nei'}\n`;
         }
+        if (type === 'retur') {
+            txt += `  Tilstand: ${item.condition || 'uåpnet'}\n`;  // Legg til tilstand for returvarer
+        }
         txt += '\n';
     });
 
@@ -752,6 +771,10 @@ function generateHTML(items, type, summary) {
             th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
             th { background-color: #f2f2f2; }
             .summary { background-color: #f9f9f9; padding: 15px; border-radius: 5px; }
+            /* Tilstand-fargekoding */
+            .unopened { background-color: rgba(76, 175, 80, 0.1); }
+            .opened { background-color: rgba(255, 193, 7, 0.1); }
+            .damaged { background-color: rgba(244, 67, 54, 0.1); }
         </style>
     </head>
     <body>
@@ -775,19 +798,30 @@ function generateHTML(items, type, summary) {
                     <th>Vekt (pr. enhet)</th>
                     ${type === 'plukk' ? '<th>Plukket</th>' : ''}
                     ${type === 'mottak' ? '<th>Mottatt</th>' : ''}
+                    ${type === 'retur' ? '<th>Tilstand</th>' : ''}
                 </tr>
             </thead>
             <tbody>
-                ${items.map(item => `
-                    <tr>
+                ${items.map(item => {
+                    // Bestem CSS-klasse basert på tilstand hvis dette er en returliste
+                    let rowClass = '';
+                    if (type === 'retur' && item.condition) {
+                        if (item.condition === 'uåpnet') rowClass = 'unopened';
+                        else if (item.condition === 'åpnet') rowClass = 'opened';
+                        else if (item.condition === 'skadet') rowClass = 'damaged';
+                    }
+                    
+                    return `
+                    <tr class="${rowClass}">
                         <td>${item.id}</td>
                         <td>${item.description}</td>
                         <td>${item.quantity || 1}</td>
                         <td>${(item.weight || 0).toFixed(2)} kg</td>
                         ${type === 'plukk' ? `<td>${item.picked ? 'Ja' : 'Nei'}</td>` : ''}
                         ${type === 'mottak' ? `<td>${item.received ? 'Ja' : 'Nei'}</td>` : ''}
+                        ${type === 'retur' ? `<td>${item.condition || 'uåpnet'}</td>` : ''}
                     </tr>
-                `).join('')}
+                `}).join('')}
             </tbody>
         </table>
     </body>

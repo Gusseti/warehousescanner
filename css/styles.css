@@ -417,6 +417,19 @@ tr.picked, tr.received, tr.returned {
     background-color: rgba(255, 152, 0, 0.1);
 }
 
+/* Fargekoding for varer i ulike tilstander */
+.item-unopened {
+    background-color: rgba(76, 175, 80, 0.1); /* Lysegrønn for uåpnede varer */
+}
+
+.item-opened {
+    background-color: rgba(255, 193, 7, 0.1); /* Lysgul for åpnede varer */
+}
+
+.item-damaged {
+    background-color: rgba(244, 67, 54, 0.1); /* Lysrød for skadede varer */
+}
+
 /* Responsive */
 @media (max-width: 768px) {
     .btn-group {

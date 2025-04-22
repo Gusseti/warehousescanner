@@ -24,6 +24,18 @@ let canvasReturnScannerEl;
 let scannerReturnOverlayEl;
 let closeReturnScannerEl;
 let switchCameraReturnEl;
+let returnItemConditionEl; // Ny referanse til tilstandsvelgeren
+
+/**
+ * Globale variabler for tilstandsmodalen
+ */
+let conditionModalEl;
+let closeConditionModalEl;
+let itemConditionEl;
+let saveConditionBtnEl;
+let cancelConditionBtnEl;
+let conditionModalItemIdEl;
+let currentEditItemIndex = -1; // Holder styr på hvilket element som redigeres
 
 /**
  * Initialiserer retur-modulen
@@ -47,6 +59,15 @@ export function initReturns() {
     scannerReturnOverlayEl = document.getElementById('scannerReturnOverlay');
     closeReturnScannerEl = document.getElementById('closeReturnScanner');
     switchCameraReturnEl = document.getElementById('switchCameraReturn');
+    returnItemConditionEl = document.getElementById('returnItemCondition'); // Ny: Hent tilstandsvelgeren
+    
+    // Hent referanser til tilstandsmodalen
+    conditionModalEl = document.getElementById('conditionModal');
+    closeConditionModalEl = document.getElementById('closeConditionModal');
+    itemConditionEl = document.getElementById('itemCondition');
+    saveConditionBtnEl = document.getElementById('saveConditionBtn');
+    cancelConditionBtnEl = document.getElementById('cancelConditionBtn');
+    conditionModalItemIdEl = document.getElementById('conditionModalItemId');
     
     // VIKTIG FIX: Gjøre handleReturnScan tilgjengelig globalt
     // Dette sikrer at funksjonen alltid er tilgjengelig for skanneren
@@ -118,6 +139,19 @@ function setupReturnsEventListeners() {
     clearReturnListEl.addEventListener('click', function() {
         clearReturnList();
     });
+    
+    // Tilstandsmodal event listeners
+    if (closeConditionModalEl) {
+        closeConditionModalEl.addEventListener('click', closeConditionModal);
+    }
+    
+    if (saveConditionBtnEl) {
+        saveConditionBtnEl.addEventListener('click', saveCondition);
+    }
+    
+    if (cancelConditionBtnEl) {
+        cancelConditionBtnEl.addEventListener('click', closeConditionModal);
+    }
 }
 
 /**
@@ -148,16 +182,31 @@ export function updateReturnsUI() {
         const tr = document.createElement('tr');
         tr.classList.add('returned');
         
+        // Fargekoding basert på tilstand
+        if (item.condition) {
+            if (item.condition === 'uåpnet') {
+                tr.classList.add('item-unopened');
+            } else if (item.condition === 'åpnet') {
+                tr.classList.add('item-opened');
+            } else if (item.condition === 'skadet') {
+                tr.classList.add('item-damaged');
+            }
+        }
+        
         // Legg til vekt
         totalWeight += item.quantity * (item.weight || 0);
         
         // Beregn totalvekt for denne spesifikke varen
         const itemTotalWeight = (item.weight || 0) * item.quantity;
         
+        // Vis tilstand i tabellen med en klikkbar lenke
+        const conditionText = item.condition || 'uåpnet';
+        
         tr.innerHTML = `
             <td>${item.id}</td>
             <td>${item.description}</td>
             <td>${item.quantity}</td>
+            <td class="condition-cell" data-index="${index}">${conditionText} <i class="fas fa-edit" style="font-size: 0.8em; margin-left: 5px; color: #777;"></i></td>
             <td>${itemTotalWeight.toFixed(2)} ${appState.settings.weightUnit}</td>
             <td>
                 <button class="btn btn-danger remove-return-item" data-index="${index}">
@@ -181,6 +230,18 @@ export function updateReturnsUI() {
             const index = parseInt(this.getAttribute('data-index'));
             removeReturnItem(index);
         });
+    });
+    
+    // Legg til event listeners for tilstandsceller
+    const conditionCells = document.querySelectorAll('.condition-cell');
+    conditionCells.forEach(cell => {
+        cell.addEventListener('click', function() {
+            const index = parseInt(this.getAttribute('data-index'));
+            openConditionModal(index);
+        });
+        
+        // Legg til visuell indikasjon at cellen er klikkbar
+        cell.style.cursor = 'pointer';
     });
     
     // Oppdater totalvekt
@@ -221,9 +282,8 @@ async function startReturnCameraScanning() {
 
 /**
  * Oppdatert handleReturnScan funksjon for returns.js
- * Legg til denne koden i returns.js
  */
-export function handleReturnScan(barcode, quantity = 1, damageType = 'unopened') {
+export function handleReturnScan(barcode, quantity = 1) {
     if (appState.currentModule !== 'returns') {
         console.log('Merk: handleReturnScan kalles mens en annen modul er aktiv:', appState.currentModule);
     }
@@ -239,49 +299,87 @@ export function handleReturnScan(barcode, quantity = 1, damageType = 'unopened')
     
     // Sjekk om strekkoden finnes i barcode mapping
     let itemId = barcode;
-    if (appState.barcodeMapping[barcode]) {
-        itemId = appState.barcodeMapping[barcode];
-        console.log(`Strekkode ${barcode} mappet til varenummer ${itemId}`);
+    let description = 'Ukjent vare';
+    
+    // Prøv å finne varenummeret og beskrivelsen fra barcodeMapping
+    let barcodeData = appState.barcodeMapping[barcode];
+    console.log('Søker først etter strekkode:', barcode, 'Resultat:', barcodeData);
+    
+    // STEG 1: Sjekk om det er en strekkode (EAN)
+    if (barcodeData) {
+        // Hvis strekkoden finnes direkte i barcodeMapping
+        if (typeof barcodeData === 'object' && barcodeData !== null) {
+            // Objektet inneholder både id og beskrivelse
+            itemId = barcodeData.id || barcode;
+            description = barcodeData.description || 'Ukjent vare';
+            console.log('Fant strekkode. ID:', itemId, 'Beskrivelse:', description);
+        } else if (typeof barcodeData === 'string') {
+            // Barcoden er bare en streng (varenummer)
+            itemId = barcodeData;
+            console.log('Fant strekkode som peker til varenummer:', itemId);
+            
+            // Se om vi kan finne mer data om denne varen
+            for (const [ean, data] of Object.entries(appState.barcodeMapping)) {
+                if (typeof data === 'object' && data !== null && data.id === itemId && data.description) {
+                    description = data.description;
+                    console.log('Fant beskrivelse fra annen oppføring:', description);
+                    break;
+                }
+            }
+        }
+    } 
+    // STEG 2: Hvis ikke funnet, sjekk om det er et varenummer
+    else {
+        console.log('Fant ikke strekkode. Prøver å søke etter varenummer...');
+        // Sjekk om det som ble skannet er et varenummer (ikke strekkode)
+        let foundProduct = false;
+        
+        // Søk gjennom alle produkter for å finne et med matchende ID
+        for (const [ean, data] of Object.entries(appState.barcodeMapping)) {
+            if (typeof data === 'object' && data !== null && data.id === barcode) {
+                // Vi fant et produkt med dette varenummeret
+                itemId = barcode;  // Behold varenummeret
+                description = data.description || 'Ukjent vare';
+                foundProduct = true;
+                console.log('Fant varenummer direkte:', itemId, 'Beskrivelse:', description);
+                break;
+            }
+        }
+        
+        if (!foundProduct) {
+            console.log('Fant ikke varenummer. Bruker skannet verdi som varenummer.');
+        }
     }
     
-    // Hent valgt skadetype
-    const damageTypeSelect = document.getElementById('returnDamageType');
-    const selectedDamageType = damageTypeSelect ? damageTypeSelect.value : damageType;
+    // Hent den valgte tilstanden fra dropdown
+    const condition = returnItemConditionEl ? returnItemConditionEl.value : 'uåpnet';
     
-    // Sjekk om varen allerede er i returlisten
-    const existingItemIndex = appState.returnListItems.findIndex(item => 
-        item.id === itemId && item.damageType === selectedDamageType
+    // Vi lagrer hver kombinasjon av varenummer+tilstand som separate enheter
+    // Dette er en nøkkel som kombinerer varenummer og tilstand
+    const itemKey = `${itemId}-${condition}`;
+    
+    // Sjekk om denne spesifikke varenummer+tilstand kombinasjonen allerede finnes
+    const existingItemIndex = appState.returnListItems.findIndex(
+        item => item.id === itemId && item.condition === condition
     );
     
     if (existingItemIndex !== -1) {
-        // Øk antallet hvis varen allerede er i listen med samme skadetype
+        // Øk antallet hvis varen allerede er i listen (med samme tilstand)
         appState.returnListItems[existingItemIndex].quantity += quantity;
-        showToast(`Vare "${itemId}" (${getDamageTypeText(selectedDamageType)}) antall økt til ${appState.returnListItems[existingItemIndex].quantity}!`, 'success');
+        showToast(`Vare "${itemId}" (${condition}) antall økt til ${appState.returnListItems[existingItemIndex].quantity}!`, 'success');
     } else {
-        // Finn varen i plukk- eller mottaksliste for å få beskrivelse
-        // MEN IKKE KREV AT DEN FINNES DER
-        let description = 'Returvare';
-        let foundItem = appState.pickListItems.find(item => item.id === itemId);
-        if (!foundItem) {
-            foundItem = appState.receiveListItems.find(item => item.id === itemId);
-        }
-        
-        if (foundItem) {
-            description = foundItem.description;
-        }
-        
-        // Legg til ny vare i returlisten
+        // Legg til ny vare i returlisten med tilstand
         const newItem = {
             id: itemId,
             description: description,
+            condition: condition, // Legg til tilstand
             quantity: quantity,
-            damageType: selectedDamageType,
+            weight: appState.itemWeights[itemId] || appState.settings.defaultItemWeight,
             returnedAt: new Date()
         };
         
         appState.returnListItems.push(newItem);
-        
-        showToast(`Vare "${itemId}" (${getDamageTypeText(selectedDamageType)}) lagt til som retur!`, 'success');
+        showToast(`Vare "${itemId}" (${condition}) lagt til som retur!`, 'success');
     }
     
     // Oppdater UI
@@ -289,20 +387,6 @@ export function handleReturnScan(barcode, quantity = 1, damageType = 'unopened')
     
     // Lagre endringer
     saveListsToStorage();
-}
-
-/**
- * Hjelper-funksjon for å få lesbar tekst for skadetype
- * @param {string} damageType - Skadetype-kode
- * @returns {string} Lesbar tekst
- */
-function getDamageTypeText(damageType) {
-    switch (damageType) {
-        case 'unopened': return 'Uåpnet';
-        case 'opened': return 'Åpnet';
-        case 'damaged': return 'Skadet';
-        default: return damageType;
-    }
 }
 
 /**
@@ -364,6 +448,93 @@ function clearReturnList() {
     
     updateReturnsUI();
     showToast('Returliste tømt!', 'warning');
+    
+    // Lagre endringer
+    saveListsToStorage();
+}
+
+/**
+ * Åpner tilstandsmodalen for en vare
+ * @param {number} index - Indeks til varen i returnListItems
+ */
+function openConditionModal(index) {
+    if (index < 0 || index >= appState.returnListItems.length) {
+        console.error('Ugyldig indeks for vare:', index);
+        return;
+    }
+    
+    const item = appState.returnListItems[index];
+    currentEditItemIndex = index;
+    
+    // Vis item-ID i modalen
+    if (conditionModalItemIdEl) {
+        conditionModalItemIdEl.textContent = `${item.id} (${item.description})`;
+    }
+    
+    // Sett nåværende tilstand i select-boksen
+    if (itemConditionEl) {
+        itemConditionEl.value = item.condition || 'uåpnet';
+    }
+    
+    // Vis modalen
+    if (conditionModalEl) {
+        conditionModalEl.style.display = 'block';
+    }
+}
+
+/**
+ * Lukker tilstandsmodalen uten å lagre
+ */
+function closeConditionModal() {
+    if (conditionModalEl) {
+        conditionModalEl.style.display = 'none';
+    }
+    currentEditItemIndex = -1;
+}
+
+/**
+ * Lagrer den nye tilstanden og oppdaterer varen
+ */
+function saveCondition() {
+    if (currentEditItemIndex < 0 || currentEditItemIndex >= appState.returnListItems.length) {
+        closeConditionModal();
+        return;
+    }
+    
+    const item = appState.returnListItems[currentEditItemIndex];
+    const newCondition = itemConditionEl ? itemConditionEl.value : 'uåpnet';
+    
+    // Hvis tilstanden ikke har endret seg, bare lukk modalen
+    if (item.condition === newCondition) {
+        closeConditionModal();
+        return;
+    }
+    
+    // Sjekk om det finnes en annen vare med samme id og ny tilstand
+    const existingItemIndex = appState.returnListItems.findIndex(
+        (existingItem, idx) => idx !== currentEditItemIndex && 
+                              existingItem.id === item.id && 
+                              existingItem.condition === newCondition
+    );
+    
+    if (existingItemIndex !== -1) {
+        // Det finnes allerede en annen vare med samme id og samme tilstand som vi vil endre til
+        // Flytt antallet til den eksisterende varen og fjern den nåværende
+        appState.returnListItems[existingItemIndex].quantity += item.quantity;
+        appState.returnListItems.splice(currentEditItemIndex, 1);
+        
+        showToast(`Vare "${item.id}" flyttet til eksisterende oppføring med tilstand "${newCondition}"!`, 'success');
+    } else {
+        // Bare oppdater tilstanden på den nåværende varen
+        item.condition = newCondition;
+        showToast(`Tilstand for vare "${item.id}" endret til "${newCondition}"!`, 'success');
+    }
+    
+    // Lukk modalen
+    closeConditionModal();
+    
+    // Oppdater UI
+    updateReturnsUI();
     
     // Lagre endringer
     saveListsToStorage();
