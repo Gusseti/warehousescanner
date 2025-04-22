@@ -131,9 +131,21 @@ function updateDropdownContent(dropdownContainer, searchText, module) {
     ];
     
     // 2. Legg til varer fra strekkode-mappingen
+    const barcodeItems = [];
     if (appState.barcodeMapping) {
-        for (const [barcode, itemId] of Object.entries(appState.barcodeMapping)) {
+        for (const [barcode, itemData] of Object.entries(appState.barcodeMapping)) {
             // Sjekk om varen allerede finnes i allItems
+            let itemId, description;
+            
+            // Støtter både gammelt format (bare varenr) og nytt format (objekt med id og description)
+            if (typeof itemData === 'object' && itemData !== null) {
+                itemId = itemData.id;
+                description = itemData.description || `Strekkode: ${barcode}`;
+            } else {
+                itemId = itemData;
+                description = `Strekkode: ${barcode}`;
+            }
+            
             const existingItem = allItems.find(item => item.id === itemId);
             
             if (existingItem) {
@@ -142,22 +154,30 @@ function updateDropdownContent(dropdownContainer, searchText, module) {
                     existingItem.barcodes = [];
                 }
                 existingItem.barcodes.push(barcode);
+                
+                // Oppdater beskrivelse hvis den mangler
+                if (!existingItem.description && description) {
+                    existingItem.description = description;
+                }
             } else {
                 // Opprett en ny vare basert på strekkode-informasjon
-                allItems.push({
+                barcodeItems.push({
                     id: itemId,
-                    description: `Strekkode: ${barcode}`,
+                    description: description,
                     barcodes: [barcode]
                 });
             }
         }
     }
     
+    // Kombiner alle varer
+    const combinedItems = [...allItems, ...barcodeItems];
+    
     // Fjern duplikater basert på varenummer
     const uniqueItems = [];
     const itemIds = new Set();
     
-    allItems.forEach(item => {
+    combinedItems.forEach(item => {
         if (item && item.id && !itemIds.has(item.id)) {
             itemIds.add(item.id);
             uniqueItems.push(item);
@@ -167,9 +187,11 @@ function updateDropdownContent(dropdownContainer, searchText, module) {
     // Filtrer basert på søketekst
     if (search) {
         items = uniqueItems.filter(item => 
+            // Søk i varenummer
             item.id.toLowerCase().includes(search) || 
+            // Søk i beskrivelse
             (item.description && item.description.toLowerCase().includes(search)) || 
-            // Søk også i strekkoder
+            // Søk i strekkoder
             (item.barcodes && item.barcodes.some(barcode => 
                 barcode.toLowerCase().includes(search)
             ))
@@ -181,9 +203,15 @@ function updateDropdownContent(dropdownContainer, searchText, module) {
     // Sorter etter relevans - varer som starter med søketeksten kommer først
     if (search) {
         items.sort((a, b) => {
+            // Prioriter eksakte treff på varenummer
+            const aExactId = a.id.toLowerCase() === search ? -2 : 0;
+            const bExactId = b.id.toLowerCase() === search ? -2 : 0;
+            
+            // Deretter prioriter varer som starter med søketeksten
             const aStartsWithId = a.id.toLowerCase().startsWith(search) ? -1 : 0;
             const bStartsWithId = b.id.toLowerCase().startsWith(search) ? -1 : 0;
-            return aStartsWithId - bStartsWithId;
+            
+            return (aExactId + aStartsWithId) - (bExactId + bStartsWithId);
         });
     }
     

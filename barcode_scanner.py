@@ -1,15 +1,28 @@
+import csv
 import json
-import re
 import os
 
-def convert_barcodes_to_json():
-    # Ask for input file
-    input_file = input("barcodes_ny.txt")
+def convert_csv_to_barcode_json(input_file="Regneark uten navn - Ark 1.csv", output_file="barcodes.json"):
+    """
+    Converts CSV file with product information to a barcode JSON mapping file.
     
-    # Set output file name with .json extension
-    output_file = os.path.splitext(input_file)[0] + ".json"
+    Expected CSV format:
+    Varenr.,Beskrivelse,GTIN
     
-    # Dictionary to store barcode mappings
+    Output JSON format:
+    {
+        "barcode1": {
+            "id": "product_id1",
+            "description": "Product description 1"
+        },
+        "barcode2": {
+            "id": "product_id2",
+            "description": "Product description 2"
+        },
+        ...
+    }
+    """
+    # Dictionary to store barcode mappings (GTIN -> {id, description})
     barcode_mapping = {}
     
     # Check if file exists
@@ -20,32 +33,39 @@ def convert_barcodes_to_json():
     # Read the input file
     try:
         with open(input_file, 'r', encoding='utf-8') as f:
-            # Skip header if it exists (Items No. GTIN)
-            lines = f.readlines()
-            if lines and ("Items No." in lines[0] or "GTIN" in lines[0]):
-                lines = lines[1:]
+            # Create CSV reader
+            csv_reader = csv.reader(f)
             
-            # Process each line
-            for line in lines:
-                # Skip empty lines
-                if not line.strip():
-                    continue
-                    
-                # Strip whitespace and split by tab or multiple spaces
-                parts = re.split(r'\t+|\s{2,}', line.strip())
-                
-                # Check if we have at least 2 parts
-                if len(parts) >= 2:
-                    item_no = parts[0].strip()
-                    barcode = parts[1].strip()
+            # Skip header row
+            header = next(csv_reader)
+            
+            # Find column indices
+            try:
+                varenr_idx = header.index("Varenr.")
+                beskrivelse_idx = header.index("Beskrivelse")
+                gtin_idx = header.index("GTIN")
+            except ValueError:
+                print("Error: CSV file must contain 'Varenr.', 'Beskrivelse', and 'GTIN' columns")
+                return None
+            
+            # Process each row
+            for row in csv_reader:
+                if len(row) > max(varenr_idx, beskrivelse_idx, gtin_idx):
+                    varenr = row[varenr_idx].strip()
+                    beskrivelse = row[beskrivelse_idx].strip()
+                    gtin = row[gtin_idx].strip()
                     
                     # Add to dictionary if both values are present
-                    if item_no and barcode:
-                        barcode_mapping[barcode] = item_no
+                    if varenr and gtin and gtin != "0":
+                        # Convert GTIN to string to ensure it's a valid JSON key
+                        barcode_mapping[str(gtin)] = {
+                            "id": varenr,
+                            "description": beskrivelse
+                        }
         
         # Write to JSON file
         with open(output_file, 'w', encoding='utf-8') as f:
-            json.dump(barcode_mapping, f, indent=4)
+            json.dump(barcode_mapping, f, indent=4, ensure_ascii=False)
         
         print(f"Converted {len(barcode_mapping)} barcodes to JSON in {output_file}")
         return barcode_mapping
@@ -55,4 +75,4 @@ def convert_barcodes_to_json():
         return None
 
 if __name__ == "__main__":
-    convert_barcodes_to_json()
+    convert_csv_to_barcode_json()

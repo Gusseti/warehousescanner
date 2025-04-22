@@ -933,6 +933,8 @@ export async function importFromReceiptPDF(file) {
     }
 }
 
+// Oppdatert funksjon for processKvikReceiptLines i import-export.js
+
 /**
  * Prosesserer linjer fra Kvik følgeseddel-PDF
  * @param {Array<string>} lines - Tekstlinjer fra PDF
@@ -955,9 +957,23 @@ function processKvikReceiptLines(lines) {
         
         console.log("Dokumentet er gjenkjent som Kvik følgeseddel");
         
+        // Find tabellhode for å identifisere kolonnene
+        let tableHeaderIndex = -1;
+        for (let i = 0; i < lines.length; i++) {
+            if (lines[i].includes('Varenummer') && 
+                lines[i].includes('Beskrivelse') && 
+                lines[i].includes('Bestilt') && 
+                lines[i].includes('Plukket')) {
+                tableHeaderIndex = i;
+                break;
+            }
+        }
+        
+        if (tableHeaderIndex === -1) {
+            console.warn('Kunne ikke finne tabellhode i Kvik følgeseddel');
+        }
+        
         // Finn rader som er vareposter i tabellformat
-        // Typisk format: "Varenummer   Beskrivelse   Bestilt   Plukket   Gjenstående"
-        let tableHeaderFound = false;
         let currentPalleId = null;
         
         for (let i = 0; i < lines.length; i++) {
@@ -973,7 +989,7 @@ function processKvikReceiptLines(lines) {
                 continue;
             }
             
-            // Hop over linjer med bank/kontoinformasjon
+            // Hop over linjer med bank/kontoinformasjon og andre metadata
             if (line.includes('NDEANOKK') || 
                 line.includes('NO3960210700601') || 
                 line.includes('kontonummer') || 
@@ -984,28 +1000,14 @@ function processKvikReceiptLines(lines) {
                 line.includes('Telefonnr') ||
                 line.includes('Organisasjonsnr') ||
                 line.includes('Bank:') ||
-                line.includes('E-post:')) {
-                continue;
-            }
-            
-            // Hopp over tabellhoder og metadata
-            if (line.includes('Varenummer') && line.includes('Beskrivelse') && 
-                (line.includes('Bestilt') || line.includes('Plukket'))) {
-                tableHeaderFound = true;
-                continue;
-            }
-            
-            // Hopp over sidetall og palle-lister
-            if (line.match(/^Side \d+\/\d+$/) || 
-                line.match(/^Paller:/) || 
-                line.match(/^EUR\s/) || 
-                line.match(/^KKP\s/) || 
-                line.match(/^SKP\s/)) {
+                line.includes('E-post:') ||
+                line.includes('Side') ||
+                line.includes('Varenummer') ||
+                line.includes('Paller:')) {
                 continue;
             }
             
             // Identifiser produktlinjer basert på et produktkode-mønster
-            // Vi ser etter spesifikke formater som vi vet forekommer i Kvik-følgesedler
             const productPatterns = [
                 /^\d{3}-[A-Z][A-Z0-9]+-\d+/, // 000-XX-000 format
                 /^\d{3}-[A-Z][A-Z0-9]+/,     // 000-XX format
@@ -1023,7 +1025,6 @@ function processKvikReceiptLines(lines) {
                 /^SB\d{5}/,                 // SB00000 format
                 /^\d{3}-[A-Z]/,             // 000-X format
                 /^\d{3}-[TDKOU]/,           // 000-T format
-                /^\d{6}/,                   // 000000 format
                 /^[A-Z]{1,3}\d{4,5}/        // XX0000 format
             ];
             
@@ -1039,7 +1040,7 @@ function processKvikReceiptLines(lines) {
             
             // Hvis vi fant en produkt-ID
             if (productId) {
-                // Skip spesielle linjer som viser samlesummer for paller
+                // Skip spesielle linjer
                 if (line.includes('Paller:') || /^\d{9}, \d{9}/.test(line)) {
                     continue;
                 }
@@ -1049,116 +1050,104 @@ function processKvikReceiptLines(lines) {
                     continue;
                 }
                 
-                // Unngå duplikater av samme produkt-ID
-                if (seenProductIds.has(productId)) {
+                // Unngå duplikater av samme produkt-ID, men tillat samme vare på forskjellige paller
+                const productKey = `${productId}-${currentPalleId || 'default'}`;
+                if (seenProductIds.has(productKey)) {
                     continue;
                 }
                 
-                // Vi antar at det er en full produktlinje
-                // Hent ut de viktige dataene
+                // VIKTIG ENDRING: Forbedret søk etter antall i linjen
                 let bestilt = 1; // Standard antall hvis ikke spesifisert
                 let beskrivelse = '';
                 
                 // Fjern produkt-ID fra starten av linjen
                 let remainingLine = line.substring(productId.length).trim();
                 
-                // Sjekk om vi har tall på slutten av linjen - dette er mest sannsynlig "Bestilt Plukket Gjenstående"
+                // Søk etter antall og status-tall på slutten av linjen
+                // Typisk format: "Beskrivelse  3  3  0" (bestilt, plukket, gjenstående)
                 const numberPattern = /(\d+)\s+(\d+)\s+(\d+)$/;
                 const numbersMatch = remainingLine.match(numberPattern);
                 
                 if (numbersMatch) {
-                    // Vi fant alle tre tallene
+                    // VIKTIG: Korrekt utpakking av tallene
                     bestilt = parseInt(numbersMatch[1], 10);
                     const plukket = parseInt(numbersMatch[2], 10);
                     const gjenstaaende = parseInt(numbersMatch[3], 10);
                     
+                    // Verifiser at tallene gir mening (bestilt = plukket + gjenstående)
+                    if (bestilt !== plukket + gjenstaaende) {
+                        console.warn(`Misforhold i tall for ${productId}: Bestilt=${bestilt}, Plukket=${plukket}, Gjenstående=${gjenstaaende}`);
+                    }
+                    
                     // Beskrivelsen er alt mellom produkt-ID og tallene
                     const endOfDescIndex = remainingLine.lastIndexOf(numbersMatch[0]);
                     beskrivelse = remainingLine.substring(0, endOfDescIndex).trim();
-                    
-                    // Hvis beskrivelsen er veldig kort (under 3 tegn), forsøk å finne en bedre beskrivelse
-                    if (beskrivelse.length < 3) {
-                        // Forsøk å kombinere med neste linje hvis mulig
-                        if (i + 1 < lines.length) {
-                            const nextLine = lines[i + 1].trim();
-                            // Sjekk at neste linje ikke er et nytt produkt
-                            let isNextLineProduct = false;
-                            for (const pattern of productPatterns) {
-                                if (pattern.test(nextLine)) {
-                                    isNextLineProduct = true;
-                                    break;
-                                }
-                            }
-                            
-                            if (!isNextLineProduct && !nextLine.match(numberPattern)) {
-                                beskrivelse = nextLine;
-                                i++; // Hopp over neste linje siden vi har brukt den
-                            }
-                        }
-                    }
                 } else {
-                    // Ingen tall på slutten - enten enkeltlinjeformat eller splittet over flere linjer
-                    // Først, sjekk om det er enkeltlinjeformat med bare ett tall
+                    // Alternativ metode for å finne antall
+                    // Søk etter tall på slutten av linjen eller i neste linje
                     const singleNumberMatch = remainingLine.match(/(\d+)$/);
                     if (singleNumberMatch) {
                         bestilt = parseInt(singleNumberMatch[1], 10);
                         beskrivelse = remainingLine.substring(0, remainingLine.lastIndexOf(singleNumberMatch[0])).trim();
                     } else {
-                        // Ingen tall - bruk hele resten som beskrivelse
-                        beskrivelse = remainingLine;
-                        
-                        // Sjekk neste linje for tall
+                        // Hvis ingen tall på denne linjen, prøv neste linje
                         if (i + 1 < lines.length) {
                             const nextLine = lines[i + 1].trim();
-                            const nextLineNumbers = nextLine.match(/^(\d+)$/);
-                            if (nextLineNumbers) {
-                                bestilt = parseInt(nextLineNumbers[1], 10);
+                            // Søk etter tall på neste linje
+                            const nextLineNumberMatch = nextLine.match(/^(\d+)$/);
+                            if (nextLineNumberMatch) {
+                                bestilt = parseInt(nextLineNumberMatch[1], 10);
                                 i++; // Hopp over neste linje
                             }
                         }
+                        
+                        // Bruk resten av linjen som beskrivelse
+                        beskrivelse = remainingLine;
                     }
                 }
                 
-                // Hvis beskrivelsen fortsatt er tom eller for kort, finn en bedre beskrivelse
-                // fra følgeseddelen ved å lete etter dette produktet andre steder i dokumentet
-                if (beskrivelse.length < 3) {
-                    for (const otherLine of lines) {
-                        if (otherLine.includes(productId) && otherLine !== line) {
-                            // Fjern produktkode
-                            const otherDesc = otherLine.substring(otherLine.indexOf(productId) + productId.length).trim();
-                            // Fjern tall
-                            const cleanedDesc = otherDesc.replace(/\d+\s+\d+\s+\d+$/, '').trim();
-                            if (cleanedDesc.length > beskrivelse.length) {
-                                beskrivelse = cleanedDesc;
+                // Hvis beskrivelsen fortsatt er tom, forsøk å finne en i nærliggende linjer
+                if (!beskrivelse || beskrivelse.length < 3) {
+                    // Søk i neste linje
+                    if (i + 1 < lines.length) {
+                        const nextLine = lines[i + 1].trim();
+                        // Sjekk at neste linje ikke er et nytt produkt
+                        if (!nextLine.match(/^\d{3}-[A-Z]/) && !nextLine.match(/^[A-Z]{2}\d{5}/)) {
+                            beskrivelse = nextLine;
+                            i++; // Hopp over neste linje
+                        }
+                    }
+                }
+                
+                // Hvis beskrivelsen fortsatt er tom, søk i hele dokumentet
+                if (!beskrivelse || beskrivelse.length < 3) {
+                    for (let j = 0; j < lines.length; j++) {
+                        if (j !== i && lines[j].includes(productId)) {
+                            const otherDesc = lines[j].substring(lines[j].indexOf(productId) + productId.length).trim();
+                            if (otherDesc.length > beskrivelse.length) {
+                                beskrivelse = otherDesc.replace(/\d+\s+\d+\s+\d+$/, '').trim();
+                                break;
                             }
                         }
                     }
                 }
                 
-                // Opprett varen og legg til i listen
+                // Fallback til produktID hvis ingen beskrivelse er funnet
+                if (!beskrivelse || beskrivelse.length < 3) {
+                    beskrivelse = `Vare ${productId}`;
+                }
+                
+                // Trim long descriptions to avoid UI issues
+                if (beskrivelse.length > 100) {
+                    beskrivelse = beskrivelse.substring(0, 97) + '...';
+                }
+                
+                // Opprett varen og legg til i listen med korrekt antall
                 if (productId && bestilt > 0) {
-                    // Rens beskrivelsen - fjern prefiks med bindestrek som ofte er der
-                    if (beskrivelse.startsWith('-')) {
-                        const parts = beskrivelse.split(' ');
-                        if (parts.length > 1 && parts[0].includes('-') && parts[0].length <= 10) {
-                            beskrivelse = parts.slice(1).join(' ');
-                        }
-                    }
-                    
-                    // Sikre at vi har en vettig beskrivelse
-                    if (beskrivelse.length < 3) {
-                        beskrivelse = `Vare ${productId}`;
-                    }
-                    
-                    // Trim long descriptions to avoid UI issues
-                    if (beskrivelse.length > 100) {
-                        beskrivelse = beskrivelse.substring(0, 97) + '...';
-                    }
-                    
                     items.push({
                         id: productId,
                         description: beskrivelse,
-                        quantity: bestilt,
+                        quantity: bestilt, // VIKTIG: Her bruker vi det korrekte antallet
                         weight: appState.itemWeights[productId] || appState.settings.defaultItemWeight,
                         received: false,
                         receivedAt: null,
@@ -1166,7 +1155,7 @@ function processKvikReceiptLines(lines) {
                         palleId: currentPalleId
                     });
                     
-                    seenProductIds.add(productId);
+                    seenProductIds.add(productKey);
                     console.log(`Importert produkt: ${productId}, Beskrivelse: ${beskrivelse}, Antall: ${bestilt}`);
                 }
             }
