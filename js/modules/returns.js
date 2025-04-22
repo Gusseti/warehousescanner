@@ -220,14 +220,12 @@ async function startReturnCameraScanning() {
 }
 
 /**
- * Håndterer skanning for retur
- * @param {string} barcode - Skannet strekkode
- * @param {number} quantity - Antall varer å returnere
+ * Oppdatert handleReturnScan funksjon for returns.js
+ * Legg til denne koden i returns.js
  */
-export function handleReturnScan(barcode, quantity = 1) {
+export function handleReturnScan(barcode, quantity = 1, damageType = 'unopened') {
     if (appState.currentModule !== 'returns') {
         console.log('Merk: handleReturnScan kalles mens en annen modul er aktiv:', appState.currentModule);
-        // Vi fortsetter likevel med funksjonen i tilfelle dette er et direkte kall
     }
     
     console.log('Håndterer strekkode i retur-modulen:', barcode);
@@ -239,9 +237,6 @@ export function handleReturnScan(barcode, quantity = 1) {
         returnManualScanEl.value = '';
     }
     
-    // FJERNET: Fjernet kall til handleScannedBarcode som validerer varenummer
-    // Dette er unødvendig for returmodulen
-    
     // Sjekk om strekkoden finnes i barcode mapping
     let itemId = barcode;
     if (appState.barcodeMapping[barcode]) {
@@ -249,13 +244,19 @@ export function handleReturnScan(barcode, quantity = 1) {
         console.log(`Strekkode ${barcode} mappet til varenummer ${itemId}`);
     }
     
+    // Hent valgt skadetype
+    const damageTypeSelect = document.getElementById('returnDamageType');
+    const selectedDamageType = damageTypeSelect ? damageTypeSelect.value : damageType;
+    
     // Sjekk om varen allerede er i returlisten
-    const existingItemIndex = appState.returnListItems.findIndex(item => item.id === itemId);
+    const existingItemIndex = appState.returnListItems.findIndex(item => 
+        item.id === itemId && item.damageType === selectedDamageType
+    );
     
     if (existingItemIndex !== -1) {
-        // Øk antallet hvis varen allerede er i listen
+        // Øk antallet hvis varen allerede er i listen med samme skadetype
         appState.returnListItems[existingItemIndex].quantity += quantity;
-        showToast(`Vare "${itemId}" antall økt til ${appState.returnListItems[existingItemIndex].quantity}!`, 'success');
+        showToast(`Vare "${itemId}" (${getDamageTypeText(selectedDamageType)}) antall økt til ${appState.returnListItems[existingItemIndex].quantity}!`, 'success');
     } else {
         // Finn varen i plukk- eller mottaksliste for å få beskrivelse
         // MEN IKKE KREV AT DEN FINNES DER
@@ -274,18 +275,13 @@ export function handleReturnScan(barcode, quantity = 1) {
             id: itemId,
             description: description,
             quantity: quantity,
-            weight: appState.itemWeights[itemId] || appState.settings.defaultItemWeight,
+            damageType: selectedDamageType,
             returnedAt: new Date()
         };
         
         appState.returnListItems.push(newItem);
         
-        // Åpne vektmodal for å angi vekt hvis vekten ikke er satt
-        if (!appState.itemWeights[itemId]) {
-            openWeightModal(itemId);
-        }
-        
-        showToast(`Vare "${itemId}" lagt til som retur!`, 'success');
+        showToast(`Vare "${itemId}" (${getDamageTypeText(selectedDamageType)}) lagt til som retur!`, 'success');
     }
     
     // Oppdater UI
@@ -293,6 +289,20 @@ export function handleReturnScan(barcode, quantity = 1) {
     
     // Lagre endringer
     saveListsToStorage();
+}
+
+/**
+ * Hjelper-funksjon for å få lesbar tekst for skadetype
+ * @param {string} damageType - Skadetype-kode
+ * @returns {string} Lesbar tekst
+ */
+function getDamageTypeText(damageType) {
+    switch (damageType) {
+        case 'unopened': return 'Uåpnet';
+        case 'opened': return 'Åpnet';
+        case 'damaged': return 'Skadet';
+        default: return damageType;
+    }
 }
 
 /**

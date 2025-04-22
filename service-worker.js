@@ -1,11 +1,12 @@
 // Navn på cache
-const CACHE_NAME = 'lager-pwa-v3';
+const CACHE_NAME = 'lager-pwa-v4';
 
 // Filer som skal caches
 const urlsToCache = [
   './',
   './index.html',
   './css/styles.css',
+  './css/dropdown-search.css', // Ny CSS-fil
   './js/app.js',
   './manifest.json',
   './js/modules/ui.js',
@@ -19,6 +20,7 @@ const urlsToCache = [
   './js/modules/settings.js',
   './js/modules/import-export.js',
   './js/modules/pdf-export.js',
+  './js/modules/dropdown-search.js', // Ny JS-fil
   'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.7.107/pdf.min.js',
   'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.7.107/pdf.worker.min.js',
   'https://cdnjs.cloudflare.com/ajax/libs/quagga/0.12.1/quagga.min.js',

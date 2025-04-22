@@ -1,4 +1,4 @@
-// app.js - Improved main application file with enhanced error handling
+// app.js - Opdatert applikasjonsfilmed integrering av dropdown-søk
 import { initUi, showMainMenu, showModule } from './modules/ui.js';
 import { loadSettings, saveSettings, loadItemWeights, loadBarcodeMappingFromStorage, loadListsFromStorage } from './modules/storage.js';
 import { initPicking } from './modules/picking.js';
@@ -7,6 +7,7 @@ import { initReturns } from './modules/returns.js';
 import { initSettings } from './modules/settings.js';
 import { showToast } from './modules/utils.js';
 import { initWeights } from './modules/weights.js';
+import { initDropdownSearch } from './modules/dropdown-search.js'; // Import for ny dropdown-funksjonalitet
 
 // App state with default values for safety
 export let appState = {
@@ -78,6 +79,12 @@ async function initializeApp() {
         // Initialize UI and modules
         await initModules();
         
+        // Initialize the dropdown search functionality
+        initDropdownSearch();
+        
+        // Load dropdown search CSS
+        loadDropdownSearchCSS();
+        
         // Retrieve stored module and display it, or show main menu
         const storedModule = localStorage.getItem('currentModule');
         if (storedModule) {
@@ -103,6 +110,16 @@ async function initializeApp() {
             window.location.reload();
         }, 3000); // Retry after 3 seconds
     }
+}
+
+/**
+ * Laster inn dropdown search CSS
+ */
+function loadDropdownSearchCSS() {
+    const link = document.createElement('link');
+    link.rel = 'stylesheet';
+    link.href = 'css/dropdown-search.css';
+    document.head.appendChild(link);
 }
 
 /**
