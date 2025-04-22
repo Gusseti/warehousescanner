@@ -15,6 +15,7 @@ let clearBarcodeDataEl;
 let resetBarcodeDataEl; // Ny knapp for å tilbakestille til innebygde strekkoder
 let clearAllDataEl;
 let featuresSupportInfoEl;
+let themeToggleEl; // Dark mode toggle knapp
 
 /**
  * Initialiserer innstillinger-modulen
@@ -30,12 +31,16 @@ export function initSettings() {
     resetBarcodeDataEl = document.getElementById('resetBarcodeData'); // Ny referanse
     clearAllDataEl = document.getElementById('clearAllData');
     featuresSupportInfoEl = document.getElementById('featuresSupportInfo');
+    themeToggleEl = document.getElementById('themeToggle');
     
     // Oppdater UI med lagrede innstillinger
     updateSettingsUI();
     
     // Legg til event listeners
     setupSettingsEventListeners();
+    
+    // Initialiser dark mode
+    initDarkMode();
 }
 
 /**
@@ -88,6 +93,13 @@ function setupSettingsEventListeners() {
             }
         }
     });
+    
+    // Dark Mode Toggle
+    if (themeToggleEl) {
+        themeToggleEl.addEventListener('change', function() {
+            toggleDarkMode(this.checked);
+        });
+    }
 }
 
 /**
@@ -102,6 +114,11 @@ function updateSettingsUI() {
     // Sett standard varevekt
     if (defaultItemWeightEl) {
         defaultItemWeightEl.value = appState.settings.defaultItemWeight;
+    }
+    
+    // Sett dark mode toggle hvis dark mode er aktiv
+    if (themeToggleEl && appState.settings.darkMode) {
+        themeToggleEl.checked = true;
     }
     
     // Vis strekkodeinfo
@@ -132,7 +149,8 @@ function updateSettingsUI() {
             'Kamera': isFeatureSupported('camera'),
             'PDF': isFeatureSupported('pdf'),
             'Service Worker': isFeatureSupported('serviceWorker'),
-            'Lokal lagring': isFeatureSupported('localStorageAvailable')
+            'Lokal lagring': isFeatureSupported('localStorageAvailable'),
+            'Dark Mode': true
         };
         
         let featureHtml = '<h3>Funksjonsstøtte</h3><ul>';
@@ -187,4 +205,65 @@ function handleBarcodeFileImport(event) {
     
     // Reset file input
     event.target.value = '';
+}
+
+/**
+ * Initialiserer dark mode basert på lagrede innstillinger eller systempreferanser
+ */
+function initDarkMode() {
+    // Sjekk om vi har en lagret innstilling eller bruk systempreferanser
+    if (appState.settings.darkMode === undefined) {
+        // Sjekk om systemet foretrekker mørkt tema
+        const prefersDarkMode = window.matchMedia('(prefers-color-scheme: dark)').matches;
+        appState.settings.darkMode = prefersDarkMode;
+        saveSettings();
+    }
+    
+    // Aktiver dark mode hvis innstillingen er på
+    if (appState.settings.darkMode) {
+        document.body.classList.add('dark-mode');
+        if (themeToggleEl) themeToggleEl.checked = true;
+        updateThemeColor('#121212'); // Oppdater theme-color meta tag
+    }
+    
+    // Lytter for systemendringer
+    window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', e => {
+        if (appState.settings.darkMode === undefined) {
+            toggleDarkMode(e.matches);
+        }
+    });
+}
+
+/**
+ * Slår dark mode av/på
+ * @param {boolean} enable - Om dark mode skal slås på
+ */
+export function toggleDarkMode(enable) {
+    // Oppdater body class
+    if (enable) {
+        document.body.classList.add('dark-mode');
+        updateThemeColor('#121212');
+    } else {
+        document.body.classList.remove('dark-mode');
+        updateThemeColor('#2196f3');
+    }
+    
+    // Lagre innstillingen
+    appState.settings.darkMode = enable;
+    saveSettings();
+    
+    // Vis en melding til brukeren
+    showToast(`Mørkt tema ${enable ? 'aktivert' : 'deaktivert'}`, 'success');
+}
+
+/**
+ * Oppdaterer theme-color meta tag for browser UI
+ * @param {string} color - CSS fargeverdi
+ */
+function updateThemeColor(color) {
+    // Oppdater meta tag for theme-color (for mobil nettleser-UI)
+    let metaThemeColor = document.querySelector('meta[name="theme-color"]');
+    if (metaThemeColor) {
+        metaThemeColor.setAttribute('content', color);
+    }
 }

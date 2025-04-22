@@ -5,13 +5,23 @@
     position: relative;
 }
 
+/* Dropdown Search komponent */
+.dropdown-search {
+    position: relative;
+    width: 100%;
+}
+
 /* Search input styling */
 .search-input {
     width: 100%;
     padding: 0.5rem;
-    border: 1px solid #ddd;
+    border: 1px solid var(--border-color);
     border-radius: 4px;
     font-size: 1rem;
+    outline: none;
+    background-color: var(--bg-card);
+    color: var(--text);
+    transition: border-color 0.3s;
 }
 
 .search-input:focus {
@@ -28,21 +38,23 @@
     width: 100%;
     max-height: 300px;
     overflow-y: auto;
-    background-color: white;
-    border: 1px solid #ddd;
+    background-color: var(--bg-card);
+    border: 1px solid var(--border-color);
     border-radius: 0 0 4px 4px;
-    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-    z-index: 1000;
+    box-shadow: 0 4px 8px var(--shadow-color);
+    z-index: 100;
+    display: none;
 }
 
 /* Dropdown items */
 .dropdown-item {
     padding: 0.75rem;
     cursor: pointer;
-    border-bottom: 1px solid #f5f5f5;
+    border-bottom: 1px solid var(--border-color);
     display: flex;
     justify-content: space-between;
     align-items: center;
+    transition: background-color 0.2s;
 }
 
 .dropdown-item:last-child {
@@ -50,7 +62,7 @@
 }
 
 .dropdown-item:hover, .dropdown-item.active {
-    background-color: #f5f5f5;
+    background-color: var(--gray-light);
 }
 
 .dropdown-item.in-current-list {
@@ -73,7 +85,7 @@
 }
 
 .item-description {
-    color: #666;
+    color: var(--gray);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -82,7 +94,7 @@
 
 .item-barcodes {
     font-size: 0.8rem;
-    color: #888;
+    color: var(--gray);
     padding-left: 1rem;
     max-width: 40%;
     text-align: right;
@@ -95,7 +107,7 @@
 .dropdown-no-results {
     padding: 1rem;
     text-align: center;
-    color: #666;
+    color: var(--gray);
     font-style: italic;
 }
 

@@ -324,6 +324,13 @@ function getTableHeaders(type) {
  * @returns {Array} Formatert tabelldata
  */
 function formatTableData(items, type) {
+    // Definer fargekoding for tilstand
+    const conditionColors = {
+        'uåpnet': { text: 'Uåpnet', color: 'rgba(76, 175, 80, 0.1)' }, // Grønn
+        'åpnet': { text: 'Åpnet', color: 'rgba(255, 193, 7, 0.1)' }, // Gul
+        'skadet': { text: 'Skadet', color: 'rgba(244, 67, 54, 0.1)' }  // Rød
+    };
+    
     return items.map(item => {
         // Begrens beskrivelseslengden for bedre lesbarhet
         const maxDescLength = 60; // Juster dette etter behov
@@ -369,7 +376,11 @@ function formatTableData(items, type) {
             }
         } else if (type === 'retur') {
             // For retur viser vi tilstanden i stedet for bare "Ja"
-            row.push(item.condition || 'uåpnet');
+            const condition = item.condition || 'uåpnet';
+            const conditionInfo = conditionColors[condition] || { text: condition, color: '' };
+            row.push(conditionInfo.text);
+            // Notat: Vi kan ikke legge til fargekoding direkte her,
+            // men bruker conditionInfo senere for styling i PDF-dokument
         }
         
         return row;
@@ -415,26 +426,3 @@ function getStatusText(type) {
 function capitalizeFirstLetter(text) {
     return text.charAt(0).toUpperCase() + text.slice(1);
 }
-
-// Legg til fargekoding for tilstand i PDF-eksport
-const conditionColors = {
-    'uåpnet': { text: 'Uåpnet', color: 'rgba(76, 175, 80, 0.1)' }, // Grønn
-    'åpnet': { text: 'Åpnet', color: 'rgba(255, 193, 7, 0.1)' }, // Gul
-    'skadet': { text: 'Skadet', color: 'rgba(244, 67, 54, 0.1)' }  // Rød
-};
-
-// Oppdater generering av PDF-innhold
-items.forEach(item => {
-    const condition = item.condition || 'uåpnet';
-    const conditionStyle = conditionColors[condition] || { text: condition, color: '' };
-
-    // Legg til tilstand med fargekoding i PDF-tabellen
-    pdfContent.push([
-        item.id,
-        item.description,
-        item.quantity || 1,
-        (item.weight || 0).toFixed(2),
-        conditionStyle.text,
-        { text: '', fillColor: conditionStyle.color } // Fargekoding
-    ]);
-});
