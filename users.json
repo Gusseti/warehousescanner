@@ -7,6 +7,14 @@
       "password": "123",
       "role": "admin",
       "created": "2025-04-23T12:00:00.000Z"
-    }
+    },
+    {
+        "id": 2,
+        "name": "Gustav",
+        "email": "gustav@stadven.no",
+        "password": "123",
+        "role": "admin",
+        "created": "2025-04-23T12:00:00.000Z"
+      }
   ]
 }
