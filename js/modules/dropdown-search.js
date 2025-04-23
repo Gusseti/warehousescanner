@@ -14,135 +14,295 @@ export function initDropdownSearch() {
         { id: 'returnManualScan', module: 'returns' }
     ];
     
+    let setupCount = 0;
+    
     inputFields.forEach(field => {
         const inputElement = document.getElementById(field.id);
         if (inputElement) {
             console.log(`Setter opp dropdown for ${field.id}`);
-            setupDropdownForInput(inputElement, field.module);
+            setupItemSearch(inputElement, field.module);
+            setupCount++;
         } else {
             console.warn(`Input-element ${field.id} ble ikke funnet`);
         }
     });
     
+    console.log(`Dropdown-søk initialisert for ${setupCount} felt`);
+    
     // Legg til global lytter for å lukke alle dropdowns når man klikker utenfor
     document.addEventListener('click', function(e) {
-        const dropdowns = document.querySelectorAll('.search-dropdown');
+        const dropdowns = document.querySelectorAll('.item-search-results');
         dropdowns.forEach(dropdown => {
+            // Lukk dropdown hvis klikket var utenfor både dropdown og input
             if (!dropdown.contains(e.target) && 
-                !e.target.classList.contains('search-input')) {
+                !e.target.classList.contains('item-search-input')) {
                 dropdown.style.display = 'none';
             }
         });
     });
     
-    console.log('Dropdown-søk initialisert');
+    // Hvis ingen elementer ble satt opp, prøv igjen om litt
+    if (setupCount === 0) {
+        console.log('Ingen inputfelt funnet. Prøver igjen om 500ms...');
+        setTimeout(initDropdownSearch, 500);
+        return;
+    }
+    
+    console.log('Dropdown-søk initialisering fullført');
 }
 
 /**
- * Setter opp dropdown for et inputfelt
+ * Setter opp søk med dropdown for et inputfelt
  * @param {HTMLElement} inputElement - Input-elementet
  * @param {string} module - Modulnavnet (picking, receiving, returns)
  */
-function setupDropdownForInput(inputElement, module) {
-    // Opprett container for dropdown
-    const dropdownContainer = document.createElement('div');
-    dropdownContainer.className = 'dropdown-container';
-    inputElement.parentNode.insertBefore(dropdownContainer, inputElement.nextSibling);
-    
-    // Opprett dropdown-listen
-    const dropdownList = document.createElement('ul');
-    dropdownList.className = 'dropdown-list';
-    dropdownList.style.display = 'none';
-    dropdownContainer.appendChild(dropdownList);
-    
-    // Legg til input event for å vise matchende varer
-    inputElement.addEventListener('input', function() {
-        const searchTerm = this.value.trim().toLowerCase();
-        if (searchTerm.length < 2) {
-            dropdownList.style.display = 'none';
-            return;
-        }
+function setupItemSearch(inputElement, module) {
+    try {
+        // Fjern eventuell eksisterende oppsett først
+        cleanupExistingSearch(inputElement);
         
-        // Finn matchende varer basert på modulen
-        let items = [];
-        if (module === 'picking') {
-            items = appState.pickListItems;
-        } else if (module === 'receiving') {
-            items = appState.receiveListItems;
-        } else if (module === 'returns') {
-            // For retur, bruk mappingen av strekkoder
-            items = Object.keys(appState.barcodeMapping).map(code => {
-                return {
-                    code: code,
-                    description: appState.barcodeMapping[code]
-                };
+        // Opprett ny søkecontainer
+        const searchContainer = document.createElement('div');
+        searchContainer.className = 'item-search-container';
+        
+        // Plasser søkecontaineren der inputfeltet var
+        const parentNode = inputElement.parentNode;
+        parentNode.insertBefore(searchContainer, inputElement);
+        
+        // Flytt inputfeltet inn i søkecontaineren
+        searchContainer.appendChild(inputElement);
+        
+        // Legg til søkeikon
+        const searchIcon = document.createElement('i');
+        searchIcon.className = 'fas fa-search item-search-icon';
+        searchContainer.appendChild(searchIcon);
+        
+        // Legg til klasser og attributter på inputfeltet
+        inputElement.className = 'item-search-input';
+        inputElement.setAttribute('placeholder', 'Søk vare (nr, navn, strekkode)...');
+        inputElement.setAttribute('autocomplete', 'off');
+        
+        // Opprett dropdown-resultatliste
+        const resultsContainer = document.createElement('div');
+        resultsContainer.className = 'item-search-results';
+        searchContainer.appendChild(resultsContainer);
+        
+        // Håndter input events
+        inputElement.addEventListener('input', function() {
+            const searchText = this.value.trim();
+            // Vis resultater allerede fra første tegn
+            if (searchText.length >= 1) {
+                updateSearchResults(resultsContainer, searchText, module);
+                resultsContainer.style.display = 'block';
+                
+                // Sikre at dropdown holder seg innenfor vinduet
+                ensureVisibleInViewport(resultsContainer);
+            } else {
+                resultsContainer.style.display = 'none';
+            }
+        });
+        
+        // Også kjør et testforsøk på å vise dropdown når vi setter opp feltet
+        const testEvent = new Event('input', { bubbles: true });
+        inputElement.dispatchEvent(testEvent);
+        
+        // Vis resultater når feltet får fokus
+        inputElement.addEventListener('focus', function() {
+            const searchText = this.value.trim();
+            if (searchText.length >= 1) {
+                updateSearchResults(resultsContainer, searchText, module);
+                resultsContainer.style.display = 'block';
+            }
+        });
+        
+        // Håndterer Tab-tasten spesielt
+        inputElement.addEventListener('keydown', function(e) {
+            // Hvis dropdown ikke vises, gjør ingenting spesielt
+            if (resultsContainer.style.display === 'none') return;
+            
+            const items = resultsContainer.querySelectorAll('.item-result');
+            if (items.length === 0) return;
+            
+            let activeIndex = -1;
+            items.forEach((item, index) => {
+                if (item.classList.contains('active')) {
+                    activeIndex = index;
+                }
             });
-        }
-        
-        // Filter items basert på søkeord
-        const matches = items.filter(item => 
-            (item.code && item.code.toLowerCase().includes(searchTerm)) || 
-            (item.description && item.description.toLowerCase().includes(searchTerm))
-        );
-        
-        // Oppdater dropdown-liste
-        dropdownList.innerHTML = '';
-        if (matches.length > 0) {
-            matches.forEach(item => {
-                const li = document.createElement('li');
-                li.textContent = `${item.code} - ${item.description || 'Ukjent'}`;
-                li.addEventListener('click', function() {
-                    inputElement.value = item.code;
-                    dropdownList.style.display = 'none';
-                    
-                    // Utløs registreringshendelse basert på modul
-                    const scanButton = module === 'picking' ? 
-                        document.getElementById('pickManualScanBtn') :
-                        module === 'receiving' ? 
-                            document.getElementById('receiveManualScanBtn') : 
-                            document.getElementById('returnManualScanBtn');
-                            
-                    if (scanButton) {
-                        scanButton.click();
+            
+            switch (e.key) {
+                case 'ArrowDown':
+                    e.preventDefault();
+                    setActiveResult(items, activeIndex + 1);
+                    break;
+                case 'ArrowUp':
+                    e.preventDefault();
+                    setActiveResult(items, activeIndex - 1);
+                    break;
+                case 'Enter':
+                    e.preventDefault();
+                    if (activeIndex >= 0) {
+                        items[activeIndex].click();
+                    } else if (items.length > 0) {
+                        // Hvis ingen er aktiv, velg første element
+                        items[0].click();
                     }
-                });
-                dropdownList.appendChild(li);
-            });
-            dropdownList.style.display = 'block';
-        } else {
-            dropdownList.style.display = 'none';
-        }
-    });
-    
-    // Skjul dropdown når inputfeltet mister fokus
-    inputElement.addEventListener('blur', function() {
-        // Kort forsinkelse for å tillate klikk på dropdown-elementet
-        setTimeout(() => {
-            dropdownList.style.display = 'none';
-        }, 200);
-    });
+                    break;
+                case 'Tab':
+                    if (activeIndex >= 0) {
+                        e.preventDefault();
+                        items[activeIndex].click();
+                    } else if (items.length > 0) {
+                        // Hvis ingen er aktiv, velg første element
+                        e.preventDefault();
+                        items[0].click();
+                    }
+                    break;
+                case 'Escape':
+                    e.preventDefault();
+                    resultsContainer.style.display = 'none';
+                    break;
+            }
+        });
+        
+        // Legg til en data-attributt så vi kan bekrefte at oppsettet er ferdig
+        inputElement.setAttribute('data-dropdown-ready', 'true');
+        console.log(`Dropdown oppsett fullført for ${inputElement.id}`);
+        
+    } catch (error) {
+        console.error(`Feil ved oppsett av dropdown for ${inputElement?.id || 'ukjent'}:`, error);
+    }
 }
 
 /**
- * Setter aktivt element i dropdown
- * @param {NodeList} items - Liste med dropdown-elementer
- * @param {number} index - Indeks til aktivt element
+ * Fjerner eventuelle eksisterende søkeoppsett
+ * @param {HTMLElement} inputElement - Input-elementet
  */
-function setActiveItem(items, index) {
+function cleanupExistingSearch(inputElement) {
+    // Fjern eksisterende containere hvis de finnes
+    const existingContainer = inputElement.closest('.item-search-container');
+    if (existingContainer) {
+        const parent = existingContainer.parentNode;
+        parent.insertBefore(inputElement, existingContainer);
+        existingContainer.remove();
+    }
+    
+    // Fjern eventuelle eksisterende klasser fra tidligere oppsett
+    inputElement.classList.remove('search-input', 'item-search-input');
+}
+
+/**
+ * Sikrer at resultatlisten er synlig i viewport
+ * @param {HTMLElement} resultsContainer - Container for resultatlisten
+ */
+function ensureVisibleInViewport(resultsContainer) {
+    setTimeout(() => {
+        const rect = resultsContainer.getBoundingClientRect();
+        // Juster hvis listen går utenfor høyre side
+        if (rect.right > window.innerWidth) {
+            resultsContainer.style.left = 'auto';
+            resultsContainer.style.right = '0';
+        }
+        // Juster hvis listen går utenfor bunnen
+        if (rect.bottom > window.innerHeight) {
+            const maxHeight = window.innerHeight - rect.top - 20;
+            resultsContainer.style.maxHeight = maxHeight + 'px';
+        }
+    }, 0);
+}
+
+/**
+ * Setter aktivt element i resultatlisten
+ * @param {NodeList} items - Liste med resultatelementer
+ * @param {number} index - Indeks til elementet som skal aktiveres
+ */
+function setActiveResult(items, index) {
+    // Fjern aktiv klasse fra alle elementer
     items.forEach(item => item.classList.remove('active'));
+    
+    // Sett aktiv klasse på valgt element
     if (index >= 0 && index < items.length) {
         items[index].classList.add('active');
+        // Scroll til elementet om nødvendig
         items[index].scrollIntoView({ block: 'nearest' });
     }
 }
 
 /**
- * Oppdaterer innholdet i dropdown basert på søk
- * @param {HTMLElement} dropdownContainer - Dropdown-container
+ * Fremhever søkeordet i en tekst på en mer presis måte
+ * @param {string} text - Teksten som skal vises
+ * @param {string} search - Søkeordet som skal fremheves
+ * @returns {string} HTML med fremhevet søkeord
+ */
+function highlightText(text, search) {
+    if (!text || !search || search.trim() === '') return text || '';
+    
+    const lowerText = text.toLowerCase();
+    const lowerSearch = search.toLowerCase();
+    
+    // Kun tall - vi må behandle tall spesielt
+    if (/^\d+$/.test(search)) {
+        // For tall behandler vi først hele matchende tall
+        if (lowerText === lowerSearch) {
+            // Hele teksten er identisk med søket
+            return `<span class="highlight">${text}</span>`;
+        }
+        
+        // For varenummer og strekkoder, vi vil kun fremheve hvis tallet er på starten
+        if (text.startsWith(search)) {
+            return `<span class="highlight">${text.substring(0, search.length)}</span>${text.substring(search.length)}`;
+        }
+        
+        // Ellers fremhever vi kun i starten av ordet etter bindestrek eller mellomrom
+        // Dette er viktig for varenummer som ofte har formatet XXX-YYY-ZZZ
+        const parts = [];
+        let lastIndex = 0;
+        const pattern = new RegExp(`(^|[^\\d])(${escapeRegExp(lowerSearch)})(?=[^\\d]|$)`, 'g');
+        let match;
+        
+        while ((match = pattern.exec(lowerText)) !== null) {
+            const matchIndex = match.index + match[1].length; // Juster for "look-behind" gruppen
+            
+            // Legg til tekst før dette treffet
+            parts.push(text.substring(lastIndex, matchIndex));
+            
+            // Legg til det fremhevede søketreffet
+            parts.push(`<span class="highlight">${text.substring(matchIndex, matchIndex + search.length)}</span>`);
+            
+            lastIndex = matchIndex + search.length;
+        }
+        
+        // Legg til resten av teksten
+        if (lastIndex < text.length) {
+            parts.push(text.substring(lastIndex));
+        }
+        
+        return parts.length > 1 ? parts.join('') : text;
+    } 
+    // For ord (ikke bare tall)
+    else {
+        // For hele ord, bruker word boundary
+        const regExp = new RegExp(`\\b(${escapeRegExp(lowerSearch)})\\b`, 'gi');
+        return text.replace(regExp, '<span class="highlight">$&</span>');
+    }
+}
+
+/**
+ * Escaper spesialtegn for RegExp
+ * @param {string} string - Strengen som skal escapes
+ * @returns {string} Escaped streng
+ */
+function escapeRegExp(string) {
+    return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/**
+ * Oppdaterer resultatlisten basert på søk
+ * @param {HTMLElement} resultsContainer - Container for resultatlisten
  * @param {string} searchText - Søketekst
  * @param {string} module - Modulnavn
  */
-function updateDropdownContent(dropdownContainer, searchText, module) {
+function updateSearchResults(resultsContainer, searchText, module) {
     // Hent alle relevante varer basert på modul
     let items = [];
     const search = searchText.toLowerCase();
@@ -173,11 +333,14 @@ function updateDropdownContent(dropdownContainer, searchText, module) {
             const existingItem = allItems.find(item => item.id === itemId);
             
             if (existingItem) {
-                // Legg til strekkoden i eksisterende vare for søkbarhet
+                // Legg til strekkoden i eksisterende vare for søkbarhet, men kun hvis den ikke allerede finnes
                 if (!existingItem.barcodes) {
                     existingItem.barcodes = [];
                 }
-                existingItem.barcodes.push(barcode);
+                // Sjekk om strekkoden allerede er lagt til for å unngå duplikater
+                if (!existingItem.barcodes.includes(barcode)) {
+                    existingItem.barcodes.push(barcode);
+                }
                 
                 // Oppdater beskrivelse hvis den mangler
                 if (!existingItem.description && description) {
@@ -210,92 +373,233 @@ function updateDropdownContent(dropdownContainer, searchText, module) {
     
     // Filtrer basert på søketekst
     if (search) {
-        items = uniqueItems.filter(item => 
-            // Søk i varenummer
-            item.id.toLowerCase().includes(search) || 
-            // Søk i beskrivelse
-            (item.description && item.description.toLowerCase().includes(search)) || 
-            // Søk i strekkoder
-            (item.barcodes && item.barcodes.some(barcode => 
-                barcode.toLowerCase().includes(search)
-            ))
-        );
+        items = uniqueItems.filter(item => {
+            // Lag en score for hvor godt dette elementet matcher søket
+            item.searchScore = 0;
+            
+            // Sjekk varenummer - nøyaktig match er best
+            if (item.id.toLowerCase() === search) {
+                item.searchScore += 100; // Veldig høy score for eksakt match på varenummer
+                item.matchType = 'exact-id';
+            } else if (item.id.toLowerCase().startsWith(search)) {
+                item.searchScore += 75; // Høy score for match i starten av varenummeret
+                item.matchType = 'starts-with-id';
+            } else if (item.id.toLowerCase().includes(search)) {
+                item.searchScore += 50; // Lavere score for match et sted i varenummeret
+                item.matchType = 'contains-id';
+            }
+            
+            // Sjekk beskrivelse
+            if (item.description) {
+                if (item.description.toLowerCase() === search) {
+                    item.searchScore += 90; // Høy score for eksakt match på beskrivelse
+                    item.matchType = item.matchType || 'exact-description';
+                } else if (item.description.toLowerCase().startsWith(search)) {
+                    item.searchScore += 65; // God score for match i starten av beskrivelsen
+                    item.matchType = item.matchType || 'starts-with-description';
+                } else if (item.description.toLowerCase().includes(search)) {
+                    item.searchScore += 40; // Score for match et sted i beskrivelsen
+                    item.matchType = item.matchType || 'contains-description';
+                }
+                
+                // Sjekk for match på hele ord i beskrivelsen
+                const words = item.description.toLowerCase().split(/\s+/);
+                if (words.some(word => word === search)) {
+                    item.searchScore += 50; // Bonus for match på hele ord
+                }
+            }
+            
+            // Sjekk strekkoder
+            if (item.barcodes && item.barcodes.length > 0) {
+                // Se om noen av strekkodene matcher søket
+                for (const barcode of item.barcodes) {
+                    if (barcode.toLowerCase() === search) {
+                        item.searchScore += 95; // Nesten like høy score som eksakt match på varenummer
+                        item.matchType = item.matchType || 'exact-barcode';
+                        break;
+                    } else if (barcode.toLowerCase().startsWith(search)) {
+                        item.searchScore += 70; // Høy score for match i starten av strekkoden
+                        item.matchType = item.matchType || 'starts-with-barcode';
+                        break;
+                    } else if (barcode.toLowerCase().includes(search)) {
+                        item.searchScore += 45; // Score for match et sted i strekkoden
+                        item.matchType = item.matchType || 'contains-barcode';
+                        break;
+                    }
+                }
+            }
+            
+            // Returner true hvis det var noen form for match
+            return item.searchScore > 0;
+        });
+        
+        // Sorter basert på score - høyeste score først
+        items.sort((a, b) => b.searchScore - a.searchScore);
     } else {
         items = uniqueItems;
+        // Hvis ingen søketekst, sorter alfabetisk på varenummer
+        items.sort((a, b) => a.id.localeCompare(b.id));
     }
     
-    // Sorter etter relevans - varer som starter med søketeksten kommer først
-    if (search) {
+    // Marker elementer som er i den aktuelle modulens liste
+    items.forEach(item => {
+        switch (module) {
+            case 'picking':
+                item.inCurrentList = appState.pickListItems?.some(i => i.id === item.id);
+                break;
+            case 'receiving':
+                item.inCurrentList = appState.receiveListItems?.some(i => i.id === item.id);
+                break;
+            case 'returns':
+                item.inCurrentList = appState.returnListItems?.some(i => i.id === item.id);
+                break;
+        }
+    });
+    
+    // Sorter slik at elementer som er i den aktuelle listen kommer først
+    if (items.length > 1) {
         items.sort((a, b) => {
-            // Prioriter eksakte treff på varenummer
-            const aExactId = a.id.toLowerCase() === search ? -2 : 0;
-            const bExactId = b.id.toLowerCase() === search ? -2 : 0;
+            // Først etter om de er i listen
+            if (a.inCurrentList && !b.inCurrentList) return -1;
+            if (!a.inCurrentList && b.inCurrentList) return 1;
             
-            // Deretter prioriter varer som starter med søketeksten
-            const aStartsWithId = a.id.toLowerCase().startsWith(search) ? -1 : 0;
-            const bStartsWithId = b.id.toLowerCase().startsWith(search) ? -1 : 0;
-            
-            return (aExactId + aStartsWithId) - (bExactId + bStartsWithId);
+            // Deretter etter score
+            return b.searchScore - a.searchScore;
         });
     }
     
     // Begrens til maks 15 resultater for bedre ytelse
     items = items.slice(0, 15);
     
-    // Bygg HTML for dropdown
-    dropdownContainer.innerHTML = '';
+    // Tøm resultatcontaineren
+    resultsContainer.innerHTML = '';
     
+    // Vis melding hvis ingen resultater ble funnet
     if (items.length === 0) {
-        dropdownContainer.innerHTML = '<div class="dropdown-no-results">Ingen varer funnet</div>';
+        resultsContainer.innerHTML = '<div class="item-no-results">Ingen varer funnet</div>';
         return;
     }
     
+    // Legg til header med antall resultater
+    const moduleNames = {
+        'picking': 'Plukkliste',
+        'receiving': 'Mottaksliste',
+        'returns': 'Returliste'
+    };
+    
+    const header = document.createElement('div');
+    header.className = 'item-results-header';
+    header.innerHTML = `
+        <span>Søkeresultater</span>
+        <span class="item-results-count">${items.length} vare${items.length !== 1 ? 'r' : ''}</span>
+    `;
+    resultsContainer.appendChild(header);
+    
+    // Opprett en container for resultatlisten
+    const resultsList = document.createElement('div');
+    resultsList.className = 'item-results-list';
+    resultsContainer.appendChild(resultsList);
+    
+    // Legg til hvert element i resultatlisten
     items.forEach(item => {
-        const dropdownItem = document.createElement('div');
-        dropdownItem.className = 'dropdown-item';
+        // Opprett element for resultatet
+        const resultItem = document.createElement('div');
+        resultItem.className = 'item-result';
         
-        // Bruk matchende fargeformatering
-        const isInPickList = appState.pickListItems?.some(i => i.id === item.id);
-        const isInReceiveList = appState.receiveListItems?.some(i => i.id === item.id);
-        const isInReturnList = appState.returnListItems?.some(i => i.id === item.id);
-        
-        if ((module === 'picking' && isInPickList) || 
-            (module === 'receiving' && isInReceiveList) || 
-            (module === 'returns' && isInReturnList)) {
-            dropdownItem.classList.add('in-current-list');
+        // Legg til klasser basert på match-type og om varen er i listen
+        if (item.inCurrentList) {
+            resultItem.classList.add('in-list');
+            
+            // Legg til tooltip
+            const listName = moduleNames[module];
+            resultItem.setAttribute('data-tooltip', `Varen er i ${listName}`);
         }
         
-        // Vis strekkoder hvis tilgjengelig
-        let barcodesHtml = '';
+        if (item.matchType === 'exact-id' || item.matchType === 'exact-barcode') {
+            resultItem.classList.add('exact-match');
+        }
+        
+        // Legg til varenummer og beskrivelse
+        const infoContainer = document.createElement('div');
+        infoContainer.className = 'item-info';
+        
+        const number = document.createElement('div');
+        number.className = 'item-number';
+        
+        // Fremhev søketeksten i varenummeret
+        number.innerHTML = highlightText(item.id, search);
+        
+        const description = document.createElement('div');
+        description.className = 'item-description';
+        
+        // Fremhev søketeksten i beskrivelsen
+        description.innerHTML = highlightText(item.description || 'Ingen beskrivelse', search);
+        
+        infoContainer.appendChild(number);
+        infoContainer.appendChild(description);
+        resultItem.appendChild(infoContainer);
+        
+        // Legg til strekkode hvis tilgjengelig
         if (item.barcodes && item.barcodes.length > 0) {
-            const displayBarcodes = item.barcodes.slice(0, 2); // Vis maks 2 strekkoder
-            barcodesHtml = `<div class="item-barcodes">${displayBarcodes.join(', ')}</div>`;
+            // Finn strekkoden som best matcher søketeksten
+            let bestMatchingBarcode = item.barcodes[0];
+            for (const barcode of item.barcodes) {
+                if (barcode.toLowerCase().includes(search)) {
+                    bestMatchingBarcode = barcode;
+                    break;
+                }
+            }
+            
+            const barcodeElement = document.createElement('div');
+            barcodeElement.className = 'item-barcode';
+            
+            const barcodeIcon = document.createElement('i');
+            barcodeIcon.className = 'fas fa-barcode';
+            
+            barcodeElement.appendChild(barcodeIcon);
+            
+            // Fremhev søketeksten i strekkoden
+            const barcodeTextSpan = document.createElement('span');
+            barcodeTextSpan.innerHTML = ' ' + highlightText(bestMatchingBarcode, search);
+            barcodeElement.appendChild(barcodeTextSpan);
+            
+            if (item.barcodes.length > 1) {
+                const moreBarcodes = document.createElement('span');
+                moreBarcodes.className = 'item-barcode-more';
+                moreBarcodes.textContent = `+${item.barcodes.length - 1}`;
+                moreBarcodes.title = item.barcodes.join(', ');
+                barcodeElement.appendChild(moreBarcodes);
+            }
+            
+            resultItem.appendChild(barcodeElement);
         }
-        
-        // Formater varenummer og beskrivelse
-        dropdownItem.innerHTML = `
-            <div class="item-info">
-                <div class="item-id">${item.id}</div>
-                <div class="item-description">${item.description || 'Ingen beskrivelse'}</div>
-            </div>
-            ${barcodesHtml}
-        `;
         
         // Legg til klikkevents
-        dropdownItem.addEventListener('click', function() {
+        resultItem.addEventListener('click', function() {
             // Sett varenummeret i inputfeltet
-            const inputElement = dropdownContainer.parentNode.querySelector('.search-input');
+            const inputElement = resultsContainer.parentNode.querySelector('.item-search-input');
             inputElement.value = item.id;
-            dropdownContainer.style.display = 'none';
+            resultsContainer.style.display = 'none';
             
             // Utløs et input-event for å oppdatere andre lyttere
             inputElement.dispatchEvent(new Event('input', { bubbles: true }));
+            
+            // Utløs en spesiell hendelse som andre moduler kan lytte på
+            const selectEvent = new CustomEvent('item-selected', { 
+                detail: { 
+                    id: item.id, 
+                    description: item.description,
+                    barcodes: item.barcodes,
+                    module: module
+                }
+            });
+            inputElement.dispatchEvent(selectEvent);
             
             // Fokuser på inputfeltet igjen
             inputElement.focus();
         });
         
-        dropdownContainer.appendChild(dropdownItem);
+        resultsList.appendChild(resultItem);
     });
 }
 
@@ -307,5 +611,3 @@ function updateDropdownContent(dropdownContainer, searchText, module) {
 function getValidItems(items) {
     return items.filter(item => item && typeof item === 'object' && item.id);
 }
-
-// Ingen eksport her siden vi allerede har eksportert initDropdownSearch øverst i filen

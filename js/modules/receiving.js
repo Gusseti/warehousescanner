@@ -1,10 +1,11 @@
 // receiving.js - Funksjonalitet for mottak-modulen
 import { appState } from '../app.js';
-import { showToast } from './utils.js';
+import { showToast, blinkBackground, playErrorSound } from './utils.js';
 import { saveListsToStorage } from './storage.js';
 import { updateScannerStatus } from './ui.js';
 import { initCameraScanner, startCameraScanning, stopCameraScanning, connectToBluetoothScanner } from './scanner.js';
 import { openWeightModal } from './weights.js';
+import { openQuantityModal, initQuantity } from './quantity.js';
 import { importFromCSV, importFromJSON, importFromPDF, importFromReceiptPDF, exportList, exportWithFormat, exportToPDF } from './import-export.js';
 
 
@@ -76,6 +77,9 @@ export function initReceiving() {
         updateScannerStatus,
         'receive'  // Nytt parameter: modulnavn
     );
+    
+    // Initialiser antallsmodulen for å sette opp event listeners
+    initQuantity();
     
     // Legg til event listeners
     setupReceivingEventListeners();
@@ -215,9 +219,9 @@ export function updateReceivingUI() {
             </td>
         `;
         
-        // Legg til hendelse for å angi vekt
+        // Legg til hendelse for å angi antall ved dobbeltklikk
         tr.addEventListener('dblclick', function() {
-            openWeightModal(item.id);
+            openQuantityModal(item.id);
         });
         
         tbody.appendChild(tr);
@@ -269,6 +273,8 @@ function handleReceiveFileImport(event) {
         // I mottak-modulen, forsøk alltid Kvik følgeseddel-import først
         importFromReceiptPDF(file)
             .then(() => {
+                // Valider og rens importerte varer
+                validateAndCleanReceivedItems();
                 updateReceivingUI();
                 saveListsToStorage();
             })
@@ -277,6 +283,8 @@ function handleReceiveFileImport(event) {
                 console.warn('Kvik følgeseddel-import feilet, prøver standard PDF-import:', error);
                 importFromPDF(file, 'receive')
                     .then(() => {
+                        // Valider og rens importerte varer
+                        validateAndCleanReceivedItems();
                         updateReceivingUI();
                         saveListsToStorage();
                     })
@@ -297,6 +305,8 @@ function handleReceiveFileImport(event) {
                     importFromCSV(content, file.name, 'receive');
                 }
                 
+                // Valider og rens importerte varer
+                validateAndCleanReceivedItems();
                 updateReceivingUI();
                 saveListsToStorage();
                 
@@ -311,6 +321,88 @@ function handleReceiveFileImport(event) {
     
     // Reset file input
     event.target.value = '';
+}
+
+/**
+ * Validerer og renser importerte varer
+ * - Fjerner poster som inneholder "Kundenr." eller lignende
+ * - Bruker produktnummer (varenr) direkte for identifisering
+ */
+function validateAndCleanReceivedItems() {
+    if (!appState.receiveListItems || appState.receiveListItems.length === 0) {
+        return;
+    }
+
+    const validatedItems = [];
+    
+    // Sjekk hver vare i listen
+    appState.receiveListItems.forEach((item, index) => {
+        const itemId = item.id;
+        
+        // Sjekk om dette er en systempost (f.eks. kundenummer)
+        if (itemId && (
+            itemId.includes('Kundenr.') || 
+            itemId.toLowerCase().includes('ordrenr') ||
+            (itemId.match(/^[A-Z]{2}\d{6}/) && item.description && item.description.includes('Kundenr'))
+        )) {
+            console.log(`Filtrerer ut systempost: ${itemId}`);
+            return; // Hopp over denne posten
+        }
+        
+        // Sjekk om det er snakk om et produkt vi kjenner igjen fra barcodes.json
+        let productId = itemId;
+        let description = item.description;
+        
+        // Hvis det er en ukjent strekkode, prøv å finne produktnummeret
+        let isKnownProduct = false;
+        
+        // Sjekk om varenummeret (itemId) allerede er et produktnummer som finnes i barcodes.json
+        for (const [barcode, data] of Object.entries(appState.barcodeMapping)) {
+            const barcodeItemId = typeof data === 'object' ? data.id : data;
+            // Sjekk om dette itemId matcher et produktnummer vi kjenner
+            if (barcodeItemId === itemId) {
+                isKnownProduct = true;
+                // Hvis vi har en beskrivelse, bruk den
+                if (typeof data === 'object' && data.description) {
+                    description = data.description;
+                }
+                break;
+            }
+        }
+        
+        // Hvis vi ikke fant produktet, men det ser ut som et UKJ-prefiks,
+        // prøv å ekstrahere det opprinnelige produktnummeret
+        if (!isKnownProduct && itemId.startsWith('UKJ-')) {
+            const parts = itemId.split('-');
+            // UKJ-1-000-HS20860 format
+            if (parts.length >= 3) {
+                // Fjern UKJ-X- prefikset og bruk resten
+                const originalProductId = parts.slice(2).join('-');
+                console.log(`Ekstraherer originalt produktnummer fra ${itemId}: ${originalProductId}`);
+                productId = originalProductId;
+            }
+        }
+
+        // Oppdater produktdetaljer
+        item.id = productId;
+        if (description) {
+            item.description = description;
+        }
+        
+        // Valider vekten - hvis den er svært høy, sett til en default verdi
+        if (item.weight && item.weight > 10000) {
+            console.log(`Unormal vekt oppdaget for ${item.id}: ${item.weight}kg, justerer til standard vekt`);
+            item.weight = appState.settings.defaultItemWeight || 1;
+        }
+        
+        validatedItems.push(item);
+    });
+    
+    // Oppdater listen med validerte varer
+    appState.receiveListItems = validatedItems;
+    
+    // Logg resultatet
+    console.log(`Validering fullført: ${validatedItems.length} varer beholdt`);
 }
 
 /**
@@ -341,19 +433,9 @@ async function startReceiveCameraScanning() {
 
 /**
  * Håndterer skanning for mottak
- * @param {string} barcode - Skannet strekkode
+ * @param {string} barcode - Skannet strekkode eller varenummer
  */
 export function handleReceiveScan(barcode) {
-    // VIKTIG: Fjern sjekken som blokkerer skanning når annen modul er aktiv
-    // Dette var hovedproblemet som forårsaket at skanninger ikke ble registrert
-    
-    // Original kode som blokkerte registrering:
-    // if (appState.currentModule !== 'receiving') {
-    //     console.log('Ignorerer strekkodeskanning i mottak-modulen fordi en annen modul er aktiv:', appState.currentModule);
-    //     return;
-    // }
-    
-    // Ny kode som logger men ikke blokkerer:
     if (appState.currentModule !== 'receiving') {
         console.log('Merk: handleReceiveScan kalles mens en annen modul er aktiv:', appState.currentModule);
         // Vi fortsetter likevel med funksjonen i tilfelle dette er et direkte kall
@@ -368,37 +450,115 @@ export function handleReceiveScan(barcode) {
         receiveManualScanEl.value = '';
     }
     
-    // Sjekk om strekkoden finnes i barcode mapping
+    // Normaliser input (fjern hvitspace, etc.)
+    barcode = barcode.toString().trim();
+    
+    // Sjekk om input er et varenummer direkte
     let itemId = barcode;
-    if (appState.barcodeMapping[barcode]) {
-        itemId = appState.barcodeMapping[barcode];
+    let description = 'Ukjent vare';
+    let isDirectProductId = false;
+    let isKnownItem = false;
+    
+    // Sjekk om det som ble skannet er et varenummer (ikke strekkode)
+    // Produktnummer har ofte formatet 000-XX9999 eller lignende
+    if (barcode.includes('-')) {
+        // Sjekk om dette varenummeret finnes i vår database
+        for (const [ean, data] of Object.entries(appState.barcodeMapping)) {
+            const productId = typeof data === 'object' ? data.id : data;
+            
+            if (productId === barcode) {
+                isDirectProductId = true;
+                isKnownItem = true;
+                itemId = barcode; // Behold varenummeret direkte
+                // Finn beskrivelse hvis tilgjengelig
+                if (typeof data === 'object' && data.description) {
+                    description = data.description;
+                }
+                console.log('Fant varenummer direkte:', itemId, 'Beskrivelse:', description);
+                break;
+            }
+        }
+    }
+    
+    // Hvis ikke funnet som varenummer, sjekk om det er en strekkode
+    if (!isDirectProductId && appState.barcodeMapping[barcode]) {
+        isKnownItem = true;
+        const data = appState.barcodeMapping[barcode];
+        
+        if (typeof data === 'object' && data.id) {
+            itemId = data.id;
+            description = data.description || 'Ukjent vare';
+        } else {
+            itemId = data;
+        }
         console.log(`Strekkode ${barcode} mappet til varenummer ${itemId}`);
     }
     
-    // Finn varen i listen
-    let item = appState.receiveListItems.find(item => item.id === itemId);
+    // Logger for debug
+    console.log(`DEBUG INFO - Skannet: ${barcode}, Mappet til itemId: ${itemId}`);
+    console.log(`DEBUG INFO - Mottaksliste inneholder ${appState.receiveListItems.length} varer`);
+    
+    // Finn varen i mottakslisten - her bruker vi alle mulige variasjoner
+    // for å sikre at vi finner den riktige varen
+    let item = null;
+    
+    // 1. Prøv først direkte med itemId
+    item = appState.receiveListItems.find(item => item.id === itemId);
+    
+    // 2. Hvis ikke funnet, prøv direkte med opprinnelig barcode
+    if (!item) {
+        item = appState.receiveListItems.find(item => item.id === barcode);
+        if (item) {
+            console.log(`Fant vare med opprinnelig strekkode: ${barcode}`);
+            itemId = barcode; // Bruk original strekkode siden det er det som er i listen
+        }
+    }
+    
+    // 3. Prøv case-insensitive sammenligning hvis fortsatt ikke funnet
+    if (!item) {
+        const lowerItemId = itemId.toLowerCase();
+        item = appState.receiveListItems.find(item => 
+            item.id.toLowerCase() === lowerItemId);
+            
+        if (item) {
+            console.log(`Fant vare med case-insensitive sammenligning: ${item.id}`);
+            itemId = item.id; // Bruk ID fra listen, den har riktig formatering
+        }
+    }
+    
+    // 4. Forsøk å finne nesten-matchende varer hvis ikke funnet
+    if (!item) {
+        // Fjern eventuelt mellomrom og bindestreker for sammenligning
+        const cleanItemId = itemId.replace(/[\s-]/g, '');
+        
+        for (const listItem of appState.receiveListItems) {
+            const cleanListItemId = listItem.id.replace(/[\s-]/g, '');
+            if (cleanListItemId === cleanItemId) {
+                item = listItem;
+                console.log(`Fant vare med normalisert varenummer: ${listItem.id}`);
+                itemId = listItem.id; // Bruk ID fra listen
+                break;
+            }
+        }
+    }
+    
+    // Logger hver vare i listen for debugging
+    if (!item) {
+        console.log('DEBUG: Kunne ikke finne varen. Her er alle varer i listen:');
+        appState.receiveListItems.forEach(listItem => {
+            console.log(`Liste-ID: ${listItem.id}, Beskrivelse: ${listItem.description}`);
+        });
+    }
     
     // Håndtere varer som ikke er i listen
     if (!item) {
-        // For mottak, legg til varen hvis den ikke finnes
-        item = {
-            id: itemId,
-            description: 'Ukjent vare',
-            quantity: 1,
-            weight: appState.itemWeights[itemId] || appState.settings.defaultItemWeight,
-            received: false,
-            receivedAt: null,
-            receivedCount: 0
-        };
-        
-        appState.receiveListItems.push(item);
-        
-        // Åpne vektmodal for å angi vekt
-        openWeightModal(itemId);
-        
-        showToast(`Ny vare "${itemId}" lagt til i mottakslisten.`, 'info');
+        showToast(`Vare "${itemId}" finnes ikke i mottakslisten. Kun varer i mottakslisten kan skannes.`, 'error');
+        blinkBackground('red');
+        playErrorSound();
+        return;
     }
     
+    // Her fortsetter vi med eksisterende kode for å registrere varen
     // Initialisere tellefelt hvis det ikke eksisterer
     if (item.receivedCount === undefined) {
         item.receivedCount = 0;
@@ -406,8 +566,18 @@ export function handleReceiveScan(barcode) {
     
     // Sjekk om vi har mottatt alle enhetene av denne varen
     if (item.receivedCount >= item.quantity) {
-        showToast(`Alle ${item.quantity} enheter av "${itemId}" er allerede mottatt!`, 'warning');
-        return;
+        // Sjekk hvis vi har overstyr-innstilling for ferdig mottatte varer
+        if (appState.settings.allowOverScanning) {
+            // Fortsette med skanning (overskrider forventet antall)
+            showToast(`Merk: ${item.quantity} enheter av "${itemId}" er allerede mottatt. Overskanning aktivert.`, 'warning');
+            blinkBackground('orange');
+        } else {
+            // Stopp videre skanning av denne varen
+            showToast(`Alle ${item.quantity} enheter av "${itemId}" er allerede mottatt! Videre skanning blokkert.`, 'error');
+            blinkBackground('red');
+            playErrorSound();
+            return;
+        }
     }
     
     // Øk antallet mottatt

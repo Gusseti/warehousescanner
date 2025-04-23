@@ -51,6 +51,32 @@ function setupWeightEventListeners() {
  * @param {string} itemId - Varenummer
  */
 export function openWeightModal(itemId) {
+    // Sikre at DOM-elementene er hentet
+    if (!weightModalEl) {
+        weightModalEl = document.getElementById('weightModal');
+        weightModalItemIdEl = document.getElementById('weightModalItemId');
+        itemWeightEl = document.getElementById('itemWeight');
+        saveWeightBtnEl = document.getElementById('saveWeightBtn');
+        cancelWeightBtnEl = document.getElementById('cancelWeightBtn');
+        closeWeightModalEl = document.getElementById('closeWeightModal');
+        
+        // Sett opp event listeners hvis elementene finnes
+        if (saveWeightBtnEl && cancelWeightBtnEl && closeWeightModalEl) {
+            setupWeightEventListeners();
+        }
+    }
+    
+    // Sjekk om vi fortsatt mangler elementer
+    if (!weightModalEl || !weightModalItemIdEl || !itemWeightEl) {
+        console.error('Kunne ikke åpne vektmodal: Manglende DOM-elementer', {
+            weightModalEl,
+            weightModalItemIdEl,
+            itemWeightEl
+        });
+        return; // Avbryt hvis elementene ikke er funnet
+    }
+    
+    // Sett varenummer og standard vekt
     weightModalItemIdEl.textContent = itemId;
     itemWeightEl.value = appState.itemWeights[itemId] || appState.settings.defaultItemWeight;
     weightModalEl.style.display = 'block';

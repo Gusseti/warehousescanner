@@ -1,87 +1,208 @@
 /* dropdown-search.css - Stiler for søkbar dropdown */
 
-/* Beholder posisjonering */
-.form-group {
-    position: relative;
-}
-
-/* Dropdown Search komponent */
-.dropdown-search {
+/* Hovedcontainer for dropdown-søk */
+.item-search-container {
     position: relative;
     width: 100%;
+    margin-bottom: 0.5rem;
 }
 
-/* Search input styling */
-.search-input {
+/* Input-felt styling */
+.item-search-input {
     width: 100%;
-    padding: 0.5rem;
-    border: 1px solid var(--border-color);
-    border-radius: 4px;
+    height: 48px;
+    padding: 0.75rem 1rem;
+    padding-right: 2.5rem;
+    border: 2px solid var(--border-color);
+    border-radius: 8px;
     font-size: 1rem;
-    outline: none;
     background-color: var(--bg-card);
     color: var(--text);
-    transition: border-color 0.3s;
+    transition: all 0.2s ease;
+    box-sizing: border-box;
 }
 
-.search-input:focus {
+.item-search-input:focus {
     border-color: var(--primary);
+    box-shadow: 0 0 0 3px rgba(71, 165, 76, 0.2);
     outline: none;
-    box-shadow: 0 0 0 3px rgba(33, 150, 243, 0.2);
 }
 
-/* Dropdown container */
-.search-dropdown {
+/* Søkeikon */
+.item-search-icon {
     position: absolute;
-    top: 100%;
+    right: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--gray);
+    pointer-events: none;
+    font-size: 1.1rem;
+    transition: color 0.2s ease;
+}
+
+.item-search-input:focus + .item-search-icon,
+.item-search-input:not(:placeholder-shown) + .item-search-icon {
+    color: var(--primary);
+}
+
+/* Dropdown-liste container - ENDRET FOR Å SIKRE OVERLAY */
+.item-search-results {
+    position: absolute;
+    top: calc(100% + 5px);
     left: 0;
     width: 100%;
-    max-height: 300px;
-    overflow-y: auto;
     background-color: var(--bg-card);
     border: 1px solid var(--border-color);
-    border-radius: 0 0 4px 4px;
-    box-shadow: 0 4px 8px var(--shadow-color);
-    z-index: 100;
+    border-radius: 8px;
+    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.25);
+    z-index: 1000;
     display: none;
+    overflow: hidden;
+    animation: fadeInDown 0.2s ease-out;
+    max-height: 350px; /* Begrens høyden for å unngå at den tar over hele skjermen */
+    overflow-y: auto;
 }
 
-/* Dropdown items */
-.dropdown-item {
-    padding: 0.75rem;
-    cursor: pointer;
-    border-bottom: 1px solid var(--border-color);
+/* Header i dropdown */
+.item-results-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    transition: background-color 0.2s;
+    padding: 0.6rem 1rem;
+    background-color: rgba(0, 0, 0, 0.03);
+    border-bottom: 1px solid var(--border-color);
+    font-size: 0.85rem;
+    font-weight: 500;
+    color: var(--text);
+    position: sticky;
+    top: 0;
+    z-index: 2;
 }
 
-.dropdown-item:last-child {
-    border-bottom: none;
+.item-results-count {
+    background-color: var(--primary);
+    color: white;
+    padding: 0.2rem 0.5rem;
+    border-radius: 12px;
+    font-size: 0.75rem;
+    font-weight: 500;
 }
 
-.dropdown-item:hover, .dropdown-item.active {
-    background-color: var(--gray-light);
+/* Container for resultatlisten - ENDRET TIL GRID FORMAT */
+.item-results-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+    gap: 0.5rem;
+    padding: 0.5rem;
+    max-height: 300px;
+    overflow-y: auto;
+    scrollbar-width: thin;
 }
 
-.dropdown-item.in-current-list {
+.item-results-list::-webkit-scrollbar {
+    width: 6px;
+}
+
+.item-results-list::-webkit-scrollbar-track {
+    background: var(--bg-card);
+}
+
+.item-results-list::-webkit-scrollbar-thumb {
+    background-color: var(--gray);
+    border-radius: 6px;
+}
+
+/* Resultat-rute - ENDRET FRA RAD TIL RUTE */
+.item-result {
+    padding: 0.75rem;
+    cursor: pointer;
+    border: 1px solid rgba(0, 0, 0, 0.1);
+    border-radius: 6px;
+    display: flex;
+    flex-direction: column;
+    transition: all 0.2s ease;
+    color: var(--text);
+    background-color: var(--bg-card);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+.item-result:hover, .item-result.active {
+    background-color: rgba(71, 165, 76, 0.08);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+}
+
+.item-result.active {
+    border-left: 3px solid var(--primary);
+}
+
+.item-result.in-list {
     background-color: rgba(76, 175, 80, 0.1);
+    border-left: 3px solid var(--primary);
 }
 
-.dropdown-item.in-current-list:hover, .dropdown-item.in-current-list.active {
+.item-result.in-list:hover,
+.item-result.in-list.active {
     background-color: rgba(76, 175, 80, 0.2);
 }
 
-.item-info {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
+.item-result.exact-match {
+    background-color: rgba(71, 165, 76, 0.15);
 }
 
-.item-id {
-    font-weight: bold;
+.item-result.exact-match .item-number {
+    color: var(--primary);
+    font-weight: 700;
+}
+
+/* Fremheving av søketreff */
+.highlight {
+    background-color: rgba(255, 230, 0, 0.3);
+    color: #000;
+    font-weight: 600;
+    border-radius: 2px;
+    padding: 0 2px;
+    box-shadow: 0 0 0 1px rgba(255, 230, 0, 0.4);
+}
+
+/* Tooltip for varer i listen */
+.item-result[data-tooltip] {
+    position: relative;
+}
+
+.item-result[data-tooltip]:hover::after {
+    content: attr(data-tooltip);
+    position: absolute;
+    bottom: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    background-color: rgba(0, 0, 0, 0.8);
+    color: white;
+    padding: 0.4rem;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    white-space: nowrap;
+    z-index: 1010;
+    pointer-events: none;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+}
+
+/* Venstre-siden av resultatraden med varenummer og beskrivelse - JUSTERT FOR GRID-LAYOUT */
+.item-info {
+    display: flex;
+    flex-direction: column;
+    margin-bottom: 0.5rem;
+    overflow: hidden;
+}
+
+.item-number {
+    font-weight: 600;
     color: var(--primary-dark);
+    margin-bottom: 0.2rem;
+    font-size: 0.9rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .item-description {
@@ -89,40 +210,77 @@
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    font-size: 0.9rem;
+    font-size: 0.8rem;
+    line-height: 1.2;
 }
 
-.item-barcodes {
-    font-size: 0.8rem;
+.item-result:hover .item-description {
+    color: var(--text);
+}
+
+/* Strekkode - JUSTERT FOR GRID-LAYOUT */
+.item-barcode {
+    font-size: 0.75rem;
     color: var(--gray);
-    padding-left: 1rem;
-    max-width: 40%;
-    text-align: right;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+    background-color: rgba(0, 0, 0, 0.03);
+    padding: 0.3rem 0.5rem;
+    border-radius: 4px;
+    max-width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 0.3rem;
+    align-self: flex-start;
+    margin-top: auto;
 }
 
-/* Ingen resultater */
-.dropdown-no-results {
-    padding: 1rem;
+.item-barcode i {
+    color: var(--primary-dark);
+}
+
+.item-barcode-more {
+    display: inline-block;
+    background-color: var(--primary);
+    color: white;
+    font-size: 0.7rem;
+    padding: 0.1rem 0.3rem;
+    border-radius: 10px;
+    margin-left: 0.3rem;
+    font-weight: bold;
+    cursor: help;
+}
+
+/* Tom resultatliste */
+.item-no-results {
+    padding: 1.2rem 1rem;
     text-align: center;
     color: var(--gray);
     font-style: italic;
+    font-size: 0.9rem;
+    grid-column: 1 / -1;
 }
 
-/* Mobilvisning */
+/* Animasjon for dropdown */
+@keyframes fadeInDown {
+    from {
+        opacity: 0;
+        transform: translateY(-5px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* Mobil-tilpasning */
 @media (max-width: 576px) {
-    .dropdown-item {
-        flex-direction: column;
-        align-items: flex-start;
+    .item-results-list {
+        grid-template-columns: 1fr;
     }
     
-    .item-id {
-        margin-bottom: 0.25rem;
-    }
-    
-    .item-description {
-        padding-left: 0;
+    .item-info {
+        width: 100%;
     }
 }

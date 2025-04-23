@@ -109,55 +109,41 @@ function setupSettingsEventListeners() {
     if (forceRefreshBtn) {
         forceRefreshBtn.addEventListener('click', function() {
             // Vis en bekreftelsesmelding
-            if (confirm('Dette vil slette all data i applikasjonen, inkludert IndexedDB, localStorage, cookies og cache. Vil du fortsette?')) {
+            if (confirm('Dette vil laste applikasjonen på nytt og tømme cache. Vil du fortsette?')) {
                 try {
-                    // Tøm localStorage
-                    localStorage.clear();
+                    showToast('Tømmer cache og laster applikasjonen på nytt...', 'info');
                     
-                    // Tøm sessionStorage
-                    sessionStorage.clear();
-                    
-                    // Slett cookies
-                    document.cookie.split(";").forEach(function(c) {
-                        document.cookie = c.replace(/^ +/, "").replace(/=.*/, "=;expires=" + new Date().toUTCString() + ";path=/");
-                    });
-                    
-                    // Slett IndexedDB databaser
-                    const deleteIndexedDBs = async () => {
-                        const databases = await window.indexedDB.databases();
-                        databases.forEach(db => {
-                            window.indexedDB.deleteDatabase(db.name);
-                        });
-                    };
-                    
-                    // Slett cache via Service Worker API hvis tilgjengelig
+                    // Tøm Service Worker cache hvis tilgjengelig
                     if ('caches' in window) {
-                        caches.keys().then(names => {
-                            names.forEach(name => {
-                                caches.delete(name);
-                            });
+                        caches.keys().then(cacheNames => {
+                            return Promise.all(
+                                cacheNames.map(cacheName => {
+                                    return caches.delete(cacheName);
+                                })
+                            );
                         });
                     }
                     
-                    // Prøv å slette IndexedDB-databaser
-                    deleteIndexedDBs().then(() => {
-                        // Last siden på nytt etter at all data er slettet
-                        setTimeout(() => {
-                            showToast('All data er slettet. Laster applikasjonen på nytt...', 'success');
-                            setTimeout(() => {
-                                window.location.href = 'login.html';
-                            }, 1500);
-                        }, 500);
-                    }).catch(error => {
-                        console.error('Feil ved sletting av IndexedDB:', error);
-                        // Uansett - last siden på nytt
-                        window.location.href = 'login.html';
-                    });
+                    // Avregistrer service worker
+                    if ('serviceWorker' in navigator) {
+                        navigator.serviceWorker.getRegistrations().then(registrations => {
+                            for (let registration of registrations) {
+                                registration.unregister();
+                            }
+                        });
+                    }
+                    
+                    // Vent litt så toast-meldingen vises
+                    setTimeout(() => {
+                        // Bruk spesielle flagg for å tvinge full reload uten cache
+                        window.location.href = window.location.href.split('?')[0] + 
+                            '?forcereload=' + Date.now();
+                    }, 1000);
                     
                 } catch (error) {
-                    console.error('Feil ved sletting av data:', error);
+                    console.error('Feil ved oppdatering:', error);
                     // Hvis det skjer en feil, prøv å laste siden på nytt uansett
-                    window.location.href = 'login.html';
+                    window.location.reload(true);
                 }
             }
         });

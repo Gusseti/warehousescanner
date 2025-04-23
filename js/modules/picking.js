@@ -1,6 +1,6 @@
 // picking.js - Funksjonalitet for plukk-modulen
 import { appState } from '../app.js';
-import { showToast } from './utils.js';
+import { showToast, formatDate } from './utils.js';
 import { saveListsToStorage } from './storage.js';
 import { updateScannerStatus } from './ui.js';
 import { initCameraScanner, startCameraScanning, stopCameraScanning, connectToBluetoothScanner, blinkBackground, playErrorSound } from './scanner.js';
@@ -541,13 +541,46 @@ function exportPickList(format = 'pdf') {
     
     try {
         if (format.toLowerCase() === 'pdf') {
-            // Bruk den nye PDF-eksportfunksjonen
-            exportToPDF(appState.pickListItems, 'plukk', {
+            // Hent brukerinformasjon
+            const userName = appState.user ? appState.user.name : 'ukjent';
+            const now = new Date();
+            const dateStr = formatDate(now, 'YYYY_MM_DD_HH');
+            
+            // Hent informasjon om opprinnelig filnavn
+            let fileName = '';
+            const fileInfoElement = document.getElementById('pickFileInfo');
+            
+            if (fileInfoElement && fileInfoElement.textContent.includes('Aktiv plukkliste:')) {
+                // Sjekk om vi har originalfilnavnet fra importprosessen
+                if (appState.pickListMetadata && appState.pickListMetadata.originalFilename) {
+                    // Bruk originalfilnavnet, men legg til brukernavn på starten
+                    fileName = `${userName}_${appState.pickListMetadata.originalFilename}`;
+                    console.log("Bruker originalfilnavn fra metadata:", fileName);
+                } else {
+                    // Hvis vi ikke har originalfilnavn, bruk standard format
+                    fileName = `${userName}_Plukke_liste_TI${Math.floor(100000 + Math.random() * 900000)}_${dateStr}.pdf`;
+                }
+            } else {
+                // Hvis vi ikke har filinfo, bruk standard format
+                fileName = `${userName}_Plukke_liste_TI${Math.floor(100000 + Math.random() * 900000)}_${dateStr}.pdf`;
+            }
+            
+            // Sørg for at filnavnet er gyldig
+            fileName = fileName.replace(/[/\\?%*:|"<>]/g, '_');
+            
+            console.log("Genererer PDF med filnavn:", fileName);
+            
+            // Bruk den nye PDF-eksportfunksjonen med egendefinert filnavn
+            const pdfOptions = {
                 title: 'Plukkliste',
                 subtitle: 'Eksportert fra SnapScan',
-                exportDate: new Date(),
-                showStatus: true
-            });
+                exportDate: now,
+                showStatus: true,
+                customFileName: fileName
+            };
+            
+            // Kall eksportfunksjonen
+            exportToPDF(appState.pickListItems, 'plukk', pdfOptions);
         } else {
             // Bruk den eksisterende eksportfunksjonen for andre formater
             exportWithFormat(appState.pickListItems, 'plukk', format);

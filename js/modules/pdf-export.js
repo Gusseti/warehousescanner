@@ -1,5 +1,7 @@
 // pdf-export.js - PDF eksport funksjonalitet med jsPDF
 import { formatDate } from './utils.js';
+import { appState } from '../app.js';
+import { showToast } from './utils.js';
 
 /**
  * Genererer en PDF for plukkliste eller annen liste
@@ -77,23 +79,28 @@ export async function generatePDF(items, type, options = {}) {
     const summary = calculateSummary(items, type);
     
     // Legg til sammendrag
+    let metadataY = margin + 30;
     doc.setFontSize(10);
     doc.setTextColor(0);
     doc.setFont('helvetica', 'bold');
-    doc.text('Sammendrag:', margin, margin + 30);
+    doc.text('Sammendrag:', margin, metadataY);
     doc.setFont('helvetica', 'normal');
-    doc.text(`Antall varer: ${summary.totalItems}`, margin, margin + 37);
+    metadataY += 7;
+    doc.text(`Antall varer: ${summary.totalItems}`, margin, metadataY);
     
     if (settings.showStatus) {
+        metadataY += 7;
         const statusText = getStatusText(type);
-        doc.text(`${statusText}: ${summary.completedItems} av ${summary.totalItems}`, margin, margin + 44);
+        doc.text(`${statusText}: ${summary.completedItems} av ${summary.totalItems}`, margin, metadataY);
     }
     
-    doc.text(`Total vekt: ${summary.totalWeight.toFixed(2)} kg`, margin, margin + 51);
+    metadataY += 7;
+    doc.text(`Total vekt: ${summary.totalWeight.toFixed(2)} kg`, margin, metadataY);
     
     // Legg til en skillelinje
+    metadataY += 5;
     doc.setDrawColor(200);
-    doc.line(margin, margin + 56, pageWidth - margin, margin + 56);
+    doc.line(margin, metadataY, pageWidth - margin, metadataY);
     
     // Legg til tabell
     const headers = getTableHeaders(type);
@@ -103,7 +110,7 @@ export async function generatePDF(items, type, options = {}) {
     const columnWidths = calculateColumnWidths(headers, data, contentWidth);
     
     // Start y-posisjon for tabellen
-    let tableY = margin + 60;
+    let tableY = metadataY + 5;
     
     // Tegn tabellhodet
     doc.setFont('helvetica', 'bold');
@@ -127,6 +134,7 @@ export async function generatePDF(items, type, options = {}) {
     
     const rowHeight = 8;
     
+    // Oppdater for-løkken i generatePDF som tegner tabellen
     for (let i = 0; i < data.length; i++) {
         // Sjekk om vi trenger ny side
         if (tableY + rowHeight > pageHeight - margin) {
@@ -156,22 +164,80 @@ export async function generatePDF(items, type, options = {}) {
         
         // Tegn celleinnhold
         xOffset = margin;
-        for (let j = 0; j < data[i].length; j++) {
+        
+        // Spesiell håndtering for status-styling
+        const statusIndex = data[i].length - 2; // Status tekst er nest siste element
+        const statusClassIndex = data[i].length - 1; // Status klasse er siste element
+        const statusClass = data[i][statusClassIndex];
+        
+        for (let j = 0; j < data[i].length - 1; j++) { // -1 for å hoppe over statusClass
             // Spesiell formatering for status-kolonne
-            if (j === data[i].length - 1 && settings.showStatus) {
-                const statusValue = data[i][j];
-                if (statusValue === 'Ja') {
-                    doc.setTextColor(0, 128, 0); // Grønn farge for plukket/mottatt
-                } else if (statusValue.includes('Delvis')) {
-                    doc.setTextColor(255, 140, 0); // Oransje farge for delvis plukket/mottatt
+            if (j === statusIndex && settings.showStatus) {
+                const statusText = data[i][j];
+                const lastColX = xOffset;
+                const lastColWidth = columnWidths[j];
+                
+                // Tegn fargede bokser for status basert på klasse
+                if (statusClass === 'status-ja') {
+                    // Grønn boks for "Ja"
+                    doc.setFillColor(76, 175, 80); // #4CAF50
+                    doc.setTextColor(255, 255, 255); // Hvit tekst
+                    
+                    // Tegn boks som dekker 80% av bredden og er sentrert
+                    const boxWidth = lastColWidth * 0.8;
+                    const boxX = lastColX + (lastColWidth - boxWidth) / 2;
+                    doc.roundedRect(boxX, tableY + 1, boxWidth, rowHeight - 2, 1, 1, 'F');
+                    
+                    // Tegn tekst sentrert i boksen
+                    doc.setFont('helvetica', 'bold');
+                    const textWidth = doc.getTextWidth(statusText);
+                    doc.text(statusText, boxX + (boxWidth/2) - (textWidth/2), tableY + 5.5);
+                    doc.setFont('helvetica', 'normal');
+                    
+                } else if (statusClass === 'status-delvis') {
+                    // Oransje boks for "Delvis"
+                    doc.setFillColor(255, 152, 0); // #FF9800
+                    doc.setTextColor(255, 255, 255); // Hvit tekst
+                    
+                    // Tegn boks som dekker 80% av bredden og er sentrert
+                    const boxWidth = lastColWidth * 0.8;
+                    const boxX = lastColX + (lastColWidth - boxWidth) / 2;
+                    doc.roundedRect(boxX, tableY + 1, boxWidth, rowHeight - 2, 1, 1, 'F');
+                    
+                    // Tegn tekst sentrert i boksen
+                    doc.setFont('helvetica', 'bold');
+                    const textWidth = doc.getTextWidth(statusText);
+                    doc.text(statusText, boxX + (boxWidth/2) - (textWidth/2), tableY + 5.5);
+                    doc.setFont('helvetica', 'normal');
+                    
+                } else if (statusClass === 'status-nei') {
+                    // Rød boks for "Nei"
+                    doc.setFillColor(244, 67, 54); // #F44336
+                    doc.setTextColor(255, 255, 255); // Hvit tekst
+                    
+                    // Tegn boks som dekker 80% av bredden og er sentrert
+                    const boxWidth = lastColWidth * 0.8;
+                    const boxX = lastColX + (lastColWidth - boxWidth) / 2;
+                    doc.roundedRect(boxX, tableY + 1, boxWidth, rowHeight - 2, 1, 1, 'F');
+                    
+                    // Tegn tekst sentrert i boksen
+                    doc.setFont('helvetica', 'bold');
+                    const textWidth = doc.getTextWidth(statusText);
+                    doc.text(statusText, boxX + (boxWidth/2) - (textWidth/2), tableY + 5.5);
+                    doc.setFont('helvetica', 'normal');
+                    
                 } else {
-                    doc.setTextColor(100); // Grå farge for ikke plukket/mottatt
+                    // Standard visning for retur-tilstand og andre verdier
+                    doc.setTextColor(0);
+                    doc.text(statusText, xOffset + 2, tableY + 5.5);
                 }
             } else {
+                // Vanlig tekstrendering for andre kolonner
                 doc.setTextColor(0);
+                doc.text(data[i][j], xOffset + 2, tableY + 5.5);
             }
             
-            doc.text(data[i][j], xOffset + 2, tableY + 5.5);
+            // Flytt til neste kolonne
             xOffset += columnWidths[j];
         }
         
@@ -232,16 +298,173 @@ export async function generatePDF(items, type, options = {}) {
 }
 
 /**
+ * Eksporterer varer som PDF
+ * @param {Array} items - Liste med varer
+ * @param {string} type - Type liste (plukk, mottak, retur)
+ * @param {Object} options - Ekstra alternativer for PDF-generering
+ * @returns {Promise<void>}
+ */
+export async function exportPDF(items, type, options = {}) {
+    try {
+        // Generer PDF
+        const pdfBlob = await generatePDF(items, type, options);
+        
+        // Opprett filnavn
+        const today = options.exportDate || new Date();
+        const dateStr = formatDate(today, 'YYYY_MM_DD_HH');
+        
+        // Hent brukernavn fra appState
+        const userName = appState.user ? appState.user.name : 'ukjent';
+        
+        // Ekstraher kundenavn og ordrenummer fra originalt PDF-filnavn (hvis tilgjengelig)
+        let customerName = '';
+        let orderNumber = '';
+        
+        // Sjekk om det finnes en originalfil-referanse i DOM (f.eks. pickFileInfo)
+        const fileInfoElement = type === 'plukk' ? 
+            document.getElementById('pickFileInfo') : 
+            document.getElementById('receiveFileInfo');
+            
+        if (fileInfoElement) {
+            const fileInfoText = fileInfoElement.textContent || '';
+            const pdfNameMatch = fileInfoText.match(/Lastet inn: (.+?)(?:\s\(\d+\s+varer\))?$/);
+            
+            if (pdfNameMatch && pdfNameMatch[1]) {
+                // Originalfilnavn funnet
+                const originalFilename = pdfNameMatch[1];
+                console.log('Originalfilnavn funnet:', originalFilename);
+                
+                // Parsing av kundenavn og ordrenummer fra filnavn
+                if (originalFilename.includes('Plukke_liste_') || originalFilename.includes('Plukkliste_')) {
+                    // For filnavn med format: Kundenavn_Plukke_liste_Ordrenr_Dato
+                    const splitPattern = originalFilename.includes('Plukke_liste_') ? 'Plukke_liste_' : 'Plukkliste_';
+                    const parts = originalFilename.split(splitPattern);
+                    
+                    if (parts.length >= 2) {
+                        // Kundenavn er den første delen
+                        customerName = parts[0].replace(/_/g, ' ').trim();
+                        
+                        // Ordrenummer er starten av den andre delen frem til første underscore
+                        const orderParts = parts[1].split('_');
+                        if (orderParts.length >= 1) {
+                            orderNumber = orderParts[0];
+                        }
+                    }
+                }
+            }
+        }
+        
+        // Rens kundenavn for ugyldige filnavntegn
+        customerName = customerName.replace(/[^a-zA-Z0-9æøåÆØÅ ]/g, '_');
+        
+        // Generer filnavn med kundenavn, ordrenummer og bruker
+        let filename = '';
+        if (customerName && orderNumber) {
+            filename = `${customerName}_${capitalizeFirstLetter(type)}_${orderNumber}_${userName}_${dateStr}.pdf`;
+        } else if (customerName) {
+            filename = `${customerName}_${capitalizeFirstLetter(type)}_${userName}_${dateStr}.pdf`;
+        } else {
+            filename = `${capitalizeFirstLetter(type)}_liste_${userName}_${dateStr}.pdf`;
+        }
+        
+        // Sørg for at filnavnet ikke har ulovlige tegn
+        filename = filename.replace(/\s+/g, '_');
+        
+        console.log(`Eksporterer med filnavn: ${filename}`);
+        
+        // Last ned PDF
+        const url = URL.createObjectURL(pdfBlob);
+        const downloadLink = document.createElement('a');
+        downloadLink.href = url;
+        downloadLink.download = filename;
+        document.body.appendChild(downloadLink);
+        downloadLink.click();
+        
+        // Rydd opp
+        setTimeout(() => {
+            document.body.removeChild(downloadLink);
+            URL.revokeObjectURL(url);
+        }, 100);
+        
+        showToast(`${capitalizeFirstLetter(type)}liste eksportert som PDF`, 'success');
+    } catch (error) {
+        console.error('Feil ved eksport av PDF:', error);
+        showToast('Kunne ikke eksportere PDF', 'error');
+    }
+}
+
+/**
  * Genererer et filnavn for PDF-eksport
  * @param {string} type - Type liste (plukk, mottak, retur)
  * @returns {string} Filnavn for PDF-eksporten
  */
 export function generatePDFFilename(type) {
     const now = new Date();
-    const dateStr = now.toISOString().split('T')[0]; // YYYY-MM-DD
-    const timeStr = now.toTimeString().split(' ')[0].replace(/:/g, ''); // HHMMSS
+    const dateStr = formatDate(now, 'YYYY_MM_DD_HH');
     
-    return `${capitalizeFirstLetter(type)}liste_${dateStr}_${timeStr}.pdf`;
+    // Hent brukernavn fra appState
+    const userName = appState.user ? appState.user.name : 'ukjent';
+    
+    // Finn originalfilnavn fra DOM
+    let customerName = '';
+    let orderNumber = '';
+    
+    // Sjekk om det finnes en originalfil-referanse i DOM
+    const fileInfoElement = type === 'plukk' ? 
+        document.getElementById('pickFileInfo') : 
+        document.getElementById('receiveFileInfo');
+        
+    if (fileInfoElement) {
+        const fileInfoText = fileInfoElement.textContent || '';
+        const pdfNameMatch = fileInfoText.match(/Lastet inn: (.+?)(?:\s\(\d+\s+varer\))?$/);
+        
+        if (pdfNameMatch && pdfNameMatch[1]) {
+            // Originalfilnavn funnet
+            const originalFilename = pdfNameMatch[1];
+            console.log('Originalfilnavn funnet for filnavngenerering:', originalFilename);
+            
+            // Parsing av kundenavn og ordrenummer fra filnavn
+            if (originalFilename.includes('Plukke_liste_') || originalFilename.includes('Plukkliste_')) {
+                // For filnavn med format: Kundenavn_Plukke_liste_Ordrenr_Dato
+                const splitPattern = originalFilename.includes('Plukke_liste_') ? 'Plukke_liste_' : 'Plukkliste_';
+                const parts = originalFilename.split(splitPattern);
+                
+                if (parts.length >= 2) {
+                    // Kundenavn er den første delen
+                    customerName = parts[0].replace(/_/g, ' ').trim();
+                    
+                    // Ordrenummer er starten av den andre delen frem til første underscore
+                    const orderParts = parts[1].split('_');
+                    if (orderParts.length >= 1) {
+                        orderNumber = orderParts[0];
+                    }
+                }
+            }
+        }
+    }
+    
+    // Generer filnavn med kundenavn, ordrenummer og bruker
+    let filename = '';
+    if (customerName && orderNumber) {
+        // Rens kundenavn for ugyldige filnavntegn og erstatt mellomrom med understrek
+        customerName = customerName.replace(/[^a-zA-Z0-9æøåÆØÅ ]/g, '_');
+        customerName = customerName.replace(/\s+/g, '_');
+        
+        filename = `${customerName}_${capitalizeFirstLetter(type)}_${orderNumber}_${userName}_${dateStr}.pdf`;
+    } else if (customerName) {
+        // Rens kundenavn for ugyldige filnavntegn og erstatt mellomrom med understrek
+        customerName = customerName.replace(/[^a-zA-Z0-9æøåÆØÅ ]/g, '_');
+        customerName = customerName.replace(/\s+/g, '_');
+        
+        filename = `${customerName}_${capitalizeFirstLetter(type)}_${userName}_${dateStr}.pdf`;
+    } else if (orderNumber) {
+        filename = `${capitalizeFirstLetter(type)}_${orderNumber}_${userName}_${dateStr}.pdf`;
+    } else {
+        filename = `${capitalizeFirstLetter(type)}liste_${dateStr}.pdf`;
+    }
+    
+    console.log(`Genererer filnavn: ${filename}`);
+    return filename;
 }
 
 /**
@@ -361,26 +584,31 @@ function formatTableData(items, type) {
         if (type === 'plukk') {
             if (item.picked) {
                 row.push('Ja');
+                row.push('status-ja'); // Legg til klasse for styling
             } else if ((item.pickedCount || 0) > 0) {
                 row.push(`Delvis (${item.pickedCount}/${item.quantity})`);
+                row.push('status-delvis'); // Legg til klasse for styling
             } else {
                 row.push('Nei');
+                row.push('status-nei'); // Legg til klasse for styling
             }
         } else if (type === 'mottak') {
             if (item.received) {
                 row.push('Ja');
+                row.push('status-ja'); // Legg til klasse for styling
             } else if ((item.receivedCount || 0) > 0) {
                 row.push(`Delvis (${item.receivedCount}/${item.quantity})`);
+                row.push('status-delvis'); // Legg til klasse for styling
             } else {
                 row.push('Nei');
+                row.push('status-nei'); // Legg til klasse for styling
             }
         } else if (type === 'retur') {
             // For retur viser vi tilstanden i stedet for bare "Ja"
             const condition = item.condition || 'uåpnet';
             const conditionInfo = conditionColors[condition] || { text: condition, color: '' };
             row.push(conditionInfo.text);
-            // Notat: Vi kan ikke legge til fargekoding direkte her,
-            // men bruker conditionInfo senere for styling i PDF-dokument
+            // For retur bruker vi ikke fargekoding på samme måte
         }
         
         return row;

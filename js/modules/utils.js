@@ -42,9 +42,10 @@ export function calculateTotalWeight(items, type) {
 /**
  * Formatterer dato til lesbar streng
  * @param {Date|string} date - Dato eller dato-streng
+ * @param {string} format - Formatstreng (f.eks. 'YYYY_MM_DD_HH' eller null for standard format)
  * @returns {string} Formattert dato
  */
-export function formatDate(date) {
+export function formatDate(date, format = null) {
     if (!date) return '';
     
     const dateObj = date instanceof Date ? date : new Date(date);
@@ -52,6 +53,25 @@ export function formatDate(date) {
     // Sjekk om dateObj er gyldig dato
     if (isNaN(dateObj.getTime())) return '';
     
+    // Hvis format er spesifisert, bruker vi det
+    if (format) {
+        const year = dateObj.getFullYear();
+        const month = String(dateObj.getMonth() + 1).padStart(2, '0');
+        const day = String(dateObj.getDate()).padStart(2, '0');
+        const hours = String(dateObj.getHours()).padStart(2, '0');
+        const minutes = String(dateObj.getMinutes()).padStart(2, '0');
+        const seconds = String(dateObj.getSeconds()).padStart(2, '0');
+        
+        return format
+            .replace('YYYY', year)
+            .replace('MM', month)
+            .replace('DD', day)
+            .replace('HH', hours)
+            .replace('mm', minutes)
+            .replace('ss', seconds);
+    }
+    
+    // Ellers bruker vi standard formatering
     return dateObj.toLocaleString('nb-NO', {
         year: 'numeric',
         month: '2-digit',
@@ -141,4 +161,93 @@ export function escapeHtml(html) {
     const div = document.createElement('div');
     div.textContent = html;
     return div.innerHTML;
+}
+
+/**
+ * Får bakgrunnen til å blinke med spesifisert farge for å indikere suksess/feil
+ * @param {string} color - Farge som skal brukes ('red', 'green', 'orange')
+ * @param {number} duration - Varighet i millisekunder
+ */
+export function blinkBackground(color = 'green', duration = 500) {
+    const body = document.body;
+    const originalBackgroundColor = body.style.backgroundColor;
+    
+    // Velg riktig farge basert på parameter
+    let blinkColor;
+    switch (color.toLowerCase()) {
+        case 'red':
+            blinkColor = 'rgba(255, 0, 0, 0.3)';
+            break;
+        case 'green':
+            blinkColor = 'rgba(0, 255, 0, 0.3)';
+            break;
+        case 'orange':
+        case 'yellow':
+            blinkColor = 'rgba(255, 165, 0, 0.3)';
+            break;
+        default:
+            blinkColor = 'rgba(0, 255, 0, 0.3)';
+    }
+    
+    // Endre bakgrunnsfarge
+    body.style.backgroundColor = blinkColor;
+    
+    // Tilbakestill etter angitt varighet
+    setTimeout(() => {
+        body.style.backgroundColor = originalBackgroundColor;
+    }, duration);
+}
+
+/**
+ * Spiller av en lydsignal for å indikere feil/suksess
+ * @param {string} type - Type lyd ('error', 'success')
+ */
+export function playErrorSound(type = 'error') {
+    // Opprett en enkel tone med Web Audio API
+    try {
+        const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        const oscillator = audioContext.createOscillator();
+        const gainNode = audioContext.createGain();
+        
+        // Koble sammen nodene
+        oscillator.connect(gainNode);
+        gainNode.connect(audioContext.destination);
+        
+        // Sett opp lydtype
+        if (type === 'error') {
+            // Feilsignal: Kort høy tone etterfulgt av en lavere
+            oscillator.type = 'square';
+            oscillator.frequency.value = 800;
+            gainNode.gain.value = 0.1;
+            oscillator.start();
+            
+            setTimeout(() => {
+                oscillator.frequency.value = 400;
+                setTimeout(() => {
+                    oscillator.stop();
+                }, 200);
+            }, 200);
+        } else {
+            // Suksesssignal: Oppadgående tone
+            oscillator.type = 'sine';
+            oscillator.frequency.value = 400;
+            gainNode.gain.value = 0.1;
+            oscillator.start();
+            
+            // Gradvis øk frekvensen for en "pling"-lyd
+            oscillator.frequency.linearRampToValueAtTime(800, audioContext.currentTime + 0.2);
+            setTimeout(() => {
+                oscillator.stop();
+            }, 300);
+        }
+    } catch (error) {
+        console.error('Kunne ikke spille av lyd:', error);
+    }
+}
+
+/**
+ * Spiller av en enkel suksesslyd
+ */
+export function playSuccessSound() {
+    playErrorSound('success');
 }

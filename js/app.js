@@ -6,6 +6,7 @@ import { updatePickingUI, initPicking as registerPickingHandlers } from './modul
 import { updateReceivingUI, initReceiving as registerReceivingHandlers } from './modules/receiving.js';
 import { updateReturnsUI, initReturns as registerReturnsHandlers } from './modules/returns.js';
 import { initSettings as registerSettingsHandlers } from './modules/settings.js';
+import { initProfile as registerProfileHandlers, loadUserDetails } from './modules/profile.js';
 import { 
     loadBarcodeMappingFromStorage, 
     loadListsFromStorage, 
@@ -158,8 +159,12 @@ async function initApp() {
     window.addEventListener('online', updateOnlineStatus);
     window.addEventListener('offline', updateOnlineStatus);
     
-    // Initier dropdown-søk
-    initDropdownSearch();
+    // Flytte initDropdownSearch til slutten for å sikre at alle elementer er lastet
+    // Og legg til en liten forsinkelse for å sikre at alle DOM-elementer er ferdig rendret
+    setTimeout(() => {
+        console.log('Starter initialisering av dropdown-søk...');
+        initDropdownSearch();
+    }, 100);
     
     console.log('Applikasjonsinitialisering fullført');
 }
@@ -308,6 +313,7 @@ function registerDashboardHandlers() {
     registerReceivingHandlers();
     registerReturnsHandlers();
     registerSettingsHandlers();
+    registerProfileHandlers(); // Initialiserer profilmodulen
     
     // Registrer handlinger for hovedmenyen
     const menuItems = document.querySelectorAll('.menu-item');
@@ -409,6 +415,12 @@ function showModule(moduleId) {
                 break;
             case 'returns':
                 updateReturnsUI();
+                break;
+            case 'profile':
+                // Last oppdatert brukerdetaljer og oppdater profilsiden
+                loadUserDetails().catch(error => {
+                    console.error('Kunne ikke laste brukerdetaljer:', error);
+                });
                 break;
         }
     } else {

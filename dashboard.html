@@ -8,6 +8,7 @@
     <link rel="manifest" href="manifest.json">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
     <link rel="stylesheet" href="css/styles.css">
+    <link rel="stylesheet" href="css/dropdown-search.css">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <!-- VIKTIG: Kommenterer ut camera-styles.css for å unngå konflikt -->
@@ -101,7 +102,7 @@
         .user-name {
             font-size: 0.9rem;
             font-weight: 500;
-            color: #333;
+            color: #cccccc;
         }
 
         .user-dropdown {
@@ -126,6 +127,7 @@
             cursor: pointer;
             display: flex;
             align-items: center;
+            color: #333; /* Fikser problemet med hvit tekst på hvit bakgrunn */
         }
 
         .user-dropdown-item:hover {
@@ -137,6 +139,155 @@
             width: 20px;
             text-align: center;
             color: #555;
+        }
+        
+        /* Profil-modulens styling */
+        .profile-container {
+            padding: 1rem;
+        }
+        
+        .profile-header {
+            display: flex;
+            align-items: center;
+            margin-bottom: 2rem;
+            padding-bottom: 1rem;
+            border-bottom: 1px solid #e0e0e0;
+        }
+        
+        .profile-avatar {
+            margin-right: 1.5rem;
+        }
+        
+        .large-avatar {
+            width: 80px;
+            height: 80px;
+            background-color: #2196f3;
+            border-radius: 50%;
+            color: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 2.5rem;
+            font-weight: bold;
+        }
+        
+        .profile-name h2 {
+            margin: 0 0 0.5rem 0;
+            font-size: 1.8rem;
+            color: #333;
+        }
+        
+        .profile-name p {
+            margin: 0;
+            color: #666;
+            font-size: 1.1rem;
+        }
+        
+        .profile-section {
+            margin-bottom: 2rem;
+            background-color: #f9f9f9;
+            border-radius: 8px;
+            padding: 1.5rem;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+        }
+        
+        .profile-section-title {
+            margin-top: 0;
+            margin-bottom: 1.5rem;
+            color: #333;
+            font-size: 1.3rem;
+            display: flex;
+            align-items: center;
+        }
+        
+        .profile-section-title i {
+            margin-right: 0.5rem;
+            color: #2196f3;
+        }
+        
+        .profile-info-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        
+        .profile-info-table th, 
+        .profile-info-table td {
+            padding: 0.8rem;
+            text-align: left;
+            border-bottom: 1px solid #eee;
+        }
+        
+        .profile-info-table th {
+            width: 30%;
+            color: #666;
+            font-weight: 500;
+        }
+        
+        .profile-info-table td {
+            color: #333;
+            font-weight: 400;
+        }
+        
+        .profile-stats {
+            display: flex;
+            justify-content: space-between;
+            text-align: center;
+            margin-top: 1rem;
+        }
+        
+        .profile-stat-item {
+            flex: 1;
+            padding: 1rem;
+            background-color: #fff;
+            border-radius: 8px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+            margin: 0 0.5rem;
+        }
+        
+        .profile-stat-item:first-child {
+            margin-left: 0;
+        }
+        
+        .profile-stat-item:last-child {
+            margin-right: 0;
+        }
+        
+        .profile-stat-value {
+            font-size: 2rem;
+            font-weight: bold;
+            color: #2196f3;
+            margin-bottom: 0.5rem;
+        }
+        
+        .profile-stat-label {
+            font-size: 0.9rem;
+            color: #666;
+        }
+
+        /* Dark mode support for profile */
+        body.dark-mode .profile-section {
+            background-color: #333;
+        }
+        
+        body.dark-mode .profile-name h2,
+        body.dark-mode .profile-section-title,
+        body.dark-mode .profile-info-table td {
+            color: #eee;
+        }
+        
+        body.dark-mode .profile-name p,
+        body.dark-mode .profile-info-table th,
+        body.dark-mode .profile-stat-label {
+            color: #aaa;
+        }
+        
+        body.dark-mode .profile-stat-item {
+            background-color: #444;
+        }
+        
+        body.dark-mode .profile-section-title i,
+        body.dark-mode .profile-stat-value {
+            color: #64b5f6;
         }
     </style>
 </head>
@@ -702,6 +853,126 @@
                 </div>
             </div>
         </div>
+        
+        <!-- Profile Module -->
+        <div id="profileModule" class="module-container">
+            <div class="card">
+                <div class="card-title">
+                    <i class="fas fa-user"></i> Min Profil
+                </div>
+                
+                <div class="module-section">
+                    <div class="profile-container">
+                        <div class="profile-header">
+                            <div class="profile-avatar">
+                                <div class="large-avatar" id="profileAvatar">G</div>
+                            </div>
+                            <div class="profile-name">
+                                <h2 id="profileName">Gustav</h2>
+                                <p id="profileCompany">Stadven AS</p>
+                            </div>
+                        </div>
+                        
+                        <div class="profile-details">
+                            <div class="profile-section">
+                                <h3 class="profile-section-title"><i class="fas fa-id-card"></i> Brukerinformasjon</h3>
+                                
+                                <table class="profile-info-table">
+                                    <tr>
+                                        <th>Navn:</th>
+                                        <td id="profileFullName">Gustav</td>
+                                    </tr>
+                                    <tr>
+                                        <th>E-post:</th>
+                                        <td id="profileEmail">gustav@stadven.no</td>
+                                    </tr>
+                                    <tr>
+                                        <th>Firma:</th>
+                                        <td id="profileCompanyDetail">Stadven AS</td>
+                                    </tr>
+                                    <tr>
+                                        <th>Brukerrolle:</th>
+                                        <td id="profileRole">Administrator</td>
+                                    </tr>
+                                    <tr>
+                                        <th>Registrert:</th>
+                                        <td id="profileCreated">23. april 2025</td>
+                                    </tr>
+                                </table>
+                            </div>
+                            
+                            <div class="profile-section">
+                                <h3 class="profile-section-title"><i class="fas fa-chart-line"></i> Aktivitetsstatistikk</h3>
+                                
+                                <div class="profile-stats">
+                                    <div class="profile-stat-item">
+                                        <div class="profile-stat-value" id="profilePickCount">0</div>
+                                        <div class="profile-stat-label">Plukkede varer</div>
+                                    </div>
+                                    <div class="profile-stat-item">
+                                        <div class="profile-stat-value" id="profileReceiveCount">0</div>
+                                        <div class="profile-stat-label">Mottatte varer</div>
+                                    </div>
+                                    <div class="profile-stat-item">
+                                        <div class="profile-stat-value" id="profileReturnCount">0</div>
+                                        <div class="profile-stat-label">Returnerte varer</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modaler -->
+    <!-- Vektmodal -->
+    <div id="weightModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Angi vekt for produkt</h2>
+                <span id="closeWeightModal" class="close">&times;</span>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label for="weightModalItemId">Varenummer:</label>
+                    <span id="weightModalItemId" class="modal-item-id"></span>
+                </div>
+                <div class="form-group">
+                    <label for="itemWeight">Vekt (kg):</label>
+                    <input type="number" id="itemWeight" class="form-control" step="0.01" min="0" value="1">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button id="cancelWeightBtn" class="btn btn-secondary">Avbryt</button>
+                <button id="saveWeightBtn" class="btn btn-primary">Lagre</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Antallsmodal for mottak -->
+    <div id="quantityModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Angi antall for produkt</h2>
+                <span id="closeQuantityModal" class="close">&times;</span>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label for="quantityModalItemId">Varenummer:</label>
+                    <span id="quantityModalItemId" class="modal-item-id"></span>
+                </div>
+                <div class="form-group">
+                    <label for="itemQuantity">Antall:</label>
+                    <input type="number" id="itemQuantity" class="form-control" min="1" value="1">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button id="cancelQuantityBtn" class="btn btn-secondary">Avbryt</button>
+                <button id="saveQuantityBtn" class="btn btn-primary">Lagre</button>
+            </div>
+        </div>
     </div>
 
     <!-- JavaScript-filer -->
@@ -753,6 +1024,20 @@
                 logoutBtn.addEventListener('click', function() {
                     localStorage.removeItem('snapscan_user');
                     window.location.href = 'login.html';
+                });
+            }
+
+            // Håndter klikk på "Min profil"
+            const userSettings = document.getElementById('userSettings');
+            if (userSettings) {
+                userSettings.addEventListener('click', function() {
+                    // Lukk dropdown-menyen
+                    userDropdown.classList.remove('active');
+                    
+                    // Vis profilsiden
+                    if (typeof window.app !== 'undefined' && typeof window.app.showModule === 'function') {
+                        window.app.showModule('profile');
+                    }
                 });
             }
             

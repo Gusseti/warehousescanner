@@ -305,6 +305,21 @@ export async function importFromPDF(file, type) {
             throw new Error('Ingen tekst funnet i PDF-en. Sjekk at PDF-en ikke er skannet bilde eller passordbeskyttet.');
         }
         
+        // Ekstraher metadata fra PDF-teksten
+        const metadata = extractMetadataFromPDF(allTextLines);
+        console.log('Ekstrahert metadata fra PDF:', metadata);
+        
+        // Lagre det opprinnelige filnavnet i metadata
+        metadata.originalFilename = file.name;
+        console.log('Lagret originalfilnavn i metadata:', file.name);
+        
+        // Lagre metadata i appState for senere bruk ved eksport
+        if (type === 'pick') {
+            appState.pickListMetadata = metadata;
+        } else if (type === 'receive') {
+            appState.receiveListMetadata = metadata;
+        }
+        
         // Bruk parseProductLinesWithFallback-funksjonen for å identifisere produkter
         console.log('Starter parsing av produktlinjer...');
         const parsedItems = parseProductLinesFromPDF(allTextLines);
@@ -357,6 +372,188 @@ export async function importFromPDF(file, type) {
 }
 
 /**
+ * Ekstraherer metadata fra PDF-tekst
+ * @param {Array<string>} lines - Tekstlinjer fra PDF
+ * @returns {Object} Metadata-objekt med leveringsdato, ordrenr, selger, jobbeskrivelse og kundenavn
+ */
+function extractMetadataFromPDF(lines) {
+    const metadata = {
+        leveringsdato: '',
+        ordrenr: '',
+        selger: '',
+        jobbeskrivelse: '',
+        kundenavn: ''
+    };
+    
+    console.log('Ekstraherer metadata fra PDF...');
+    
+    // Logg de første 30 linjene for debugging
+    console.log("Første 30 linjer for metadata-ekstraksjon:");
+    lines.slice(0, 30).forEach((line, i) => console.log(`${i}: ${line}`));
+    
+    // Søk etter kunde-informasjon
+    let foundKunde = false;
+    for (let i = 0; i < lines.length; i++) {
+        const line = lines[i].trim();
+        
+        // Søk etter "KUNDE:"
+        if (line.toUpperCase().includes('KUNDE:') || line === 'KUNDE') {
+            foundKunde = true;
+            
+            // Kundenavnet er vanligvis på neste linje(r)
+            if (i + 1 < lines.length) {
+                // Start med neste linje
+                let j = i + 1;
+                let kundenavn = '';
+                
+                // Samle etterfølgende linjer som ikke er nye seksjoner eller tomme
+                while (j < lines.length && j < i + 5) {
+                    const nextLine = lines[j].trim();
+                    
+                    // Stopp hvis vi har nådd en ny seksjon
+                    if (nextLine.toUpperCase().includes('LEVERING') || 
+                        nextLine.toUpperCase().includes('ORDRE') || 
+                        nextLine.toUpperCase().includes('SELGER') || 
+                        nextLine.toUpperCase().includes('JOBBESKR')) {
+                        break;
+                    }
+                    
+                    // Legg til denne linjen til kundenavnet hvis den ikke er tom
+                    if (nextLine) {
+                        kundenavn += (kundenavn ? ' ' : '') + nextLine;
+                    }
+                    
+                    j++;
+                }
+                
+                if (kundenavn) {
+                    metadata.kundenavn = kundenavn;
+                    console.log(`Fant kundenavn: ${kundenavn}`);
+                }
+            }
+        }
+        
+        // Søk etter "LEVERING:" eller "LEVERINGSDATO:"
+        if (line.toUpperCase().includes('LEVERING')) {
+            // Prøv å finne datoen på samme linje
+            const dateMatch = line.match(/(\d{1,2}\.\d{1,2}\.\d{4}|\d{4}-\d{2}-\d{2})/);
+            if (dateMatch) {
+                metadata.leveringsdato = dateMatch[1];
+                console.log(`Fant leveringsdato: ${metadata.leveringsdato}`);
+            } 
+            // Ellers sjekk neste linje
+            else if (i + 1 < lines.length) {
+                const nextLine = lines[i + 1].trim();
+                const nextDateMatch = nextLine.match(/(\d{1,2}\.\d{1,2}\.\d{4}|\d{4}-\d{2}-\d{2})/);
+                if (nextDateMatch) {
+                    metadata.leveringsdato = nextDateMatch[1];
+                    console.log(`Fant leveringsdato på neste linje: ${metadata.leveringsdato}`);
+                }
+            }
+        }
+        
+        // Søk etter "ORDRE NR:" eller "ORDRENR:" eller "ORDRENUMMER:"
+        if (line.toUpperCase().includes('ORDRE')) {
+            // Prøv å finne ordrenummer på samme linje
+            const orderMatch = line.match(/[A-Z]{2}\d{7}|\d{7}/);
+            if (orderMatch) {
+                metadata.ordrenr = orderMatch[0];
+                console.log(`Fant ordrenummer: ${metadata.ordrenr}`);
+            } 
+            // Sjekk om ordrenummeret er etter kolon
+            else if (line.includes(':')) {
+                const afterColon = line.split(':')[1].trim();
+                if (afterColon) {
+                    metadata.ordrenr = afterColon;
+                    console.log(`Fant ordrenummer etter kolon: ${metadata.ordrenr}`);
+                }
+            }
+            // Ellers sjekk neste linje
+            else if (i + 1 < lines.length) {
+                const nextLine = lines[i + 1].trim();
+                if (nextLine && !nextLine.toUpperCase().includes('KUNDE') && 
+                    !nextLine.toUpperCase().includes('SELGER') && 
+                    !nextLine.toUpperCase().includes('LEVERING')) {
+                    metadata.ordrenr = nextLine;
+                    console.log(`Fant ordrenummer på neste linje: ${metadata.ordrenr}`);
+                }
+            }
+        }
+        
+        // Søk etter "SELGER:"
+        if (line.toUpperCase().includes('SELGER')) {
+            // Prøv å finne selger på samme linje
+            if (line.includes(':')) {
+                const afterColon = line.split(':')[1].trim();
+                if (afterColon) {
+                    metadata.selger = afterColon;
+                    console.log(`Fant selger: ${metadata.selger}`);
+                }
+            }
+            // Ellers sjekk neste linje
+            else if (i + 1 < lines.length) {
+                const nextLine = lines[i + 1].trim();
+                if (nextLine && !nextLine.toUpperCase().includes('KUNDE') && 
+                    !nextLine.toUpperCase().includes('ORDRE') && 
+                    !nextLine.toUpperCase().includes('LEVERING')) {
+                    metadata.selger = nextLine;
+                    console.log(`Fant selger på neste linje: ${metadata.selger}`);
+                }
+            }
+        }
+        
+        // Søk etter "JOBBESKRIVELSE:" eller lignende
+        if (line.toUpperCase().includes('JOBBESKR') || line.toUpperCase().includes('JOBBNAVN')) {
+            // Prøv å finne jobbeskrivelse på samme linje
+            if (line.includes(':')) {
+                const afterColon = line.split(':')[1].trim();
+                if (afterColon) {
+                    metadata.jobbeskrivelse = afterColon;
+                    console.log(`Fant jobbeskrivelse: ${metadata.jobbeskrivelse}`);
+                }
+            }
+            // Ellers sjekk neste linje
+            else if (i + 1 < lines.length) {
+                const nextLine = lines[i + 1].trim();
+                if (nextLine && !nextLine.toUpperCase().includes('KUNDE') && 
+                    !nextLine.toUpperCase().includes('ORDRE') && 
+                    !nextLine.toUpperCase().includes('SELGER')) {
+                    metadata.jobbeskrivelse = nextLine;
+                    console.log(`Fant jobbeskrivelse på neste linje: ${metadata.jobbeskrivelse}`);
+                }
+            }
+        }
+    }
+    
+    // Alternativ måte å finne TI-ordrenummer på hvis det ikke ble funnet tidligere
+    if (!metadata.ordrenr) {
+        // Søk etter TI-ordrenummer-format i alle linjer
+        for (const line of lines) {
+            const tiOrderMatch = line.match(/TI\d{7}/);
+            if (tiOrderMatch) {
+                metadata.ordrenr = tiOrderMatch[0];
+                console.log(`Fant TI-ordrenummer: ${metadata.ordrenr}`);
+                break;
+            }
+        }
+    }
+    
+    // Søk etter plukkliste-ID i filnavn hvis ordrenr fortsatt ikke er funnet
+    if (!metadata.ordrenr) {
+        const plukklisteMatch = lines.find(line => line.includes('Plukke_liste_') || line.includes('Plukkliste_'));
+        if (plukklisteMatch) {
+            const match = plukklisteMatch.match(/(?:Plukke_liste_|Plukkliste_)([A-Z0-9]+)/i);
+            if (match && match[1]) {
+                metadata.ordrenr = match[1];
+                console.log(`Fant ordrenummer fra plukkliste-ID: ${metadata.ordrenr}`);
+            }
+        }
+    }
+    
+    return metadata;
+}
+
+/**
  * Parser produktlinjer fra PDF-tekst
  * @param {Array} lines - Tekstlinjer fra PDF
  * @returns {Array} Liste med produkter
@@ -371,8 +568,29 @@ function parseProductLinesFromPDF(lines) {
         products = parseComplexProductLines(lines);
     }
     
-    // Legg til denne linjen for å returnere produktene
-    return products;
+    // Konsolider duplikate produkter ved å summere antallet
+    const consolidatedProducts = [];
+    const productMap = {}; // Et objekt for å spore produkter basert på ID
+    
+    for (const product of products) {
+        if (productMap[product.id]) {
+            // Hvis produktet allerede eksisterer, oppdater antallet
+            productMap[product.id].quantity += product.quantity;
+        } else {
+            // Hvis dette er første gang vi ser produktet, legg det til i kartet
+            productMap[product.id] = { ...product };
+        }
+    }
+    
+    // Konverter produktkartet tilbake til en array
+    for (const productId in productMap) {
+        consolidatedProducts.push(productMap[productId]);
+    }
+    
+    console.log(`Konsolidert ${products.length} produktlinjer til ${consolidatedProducts.length} unike produkter`);
+    
+    // Returner de konsoliderte produktene i stedet for de originale
+    return consolidatedProducts;
 }
 
 /**
@@ -772,10 +990,61 @@ function generateHTML(items, type, summary) {
             th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
             th { background-color: #f2f2f2; }
             .summary { background-color: #f9f9f9; padding: 15px; border-radius: 5px; }
-            /* Tilstand-fargekoding */
+            
+            /* Tydeligere fargekoding for status - heldekket farge */
+            .status-ja { 
+                background-color: #4caf50; 
+                color: white; 
+                font-weight: bold; 
+                padding: 6px 10px; 
+                text-align: center;
+                border-radius: 4px;
+                display: inline-block;
+                width: 85%;
+                margin: 0 auto;
+                box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+            }
+            
+            .status-nei { 
+                background-color: #f44336; 
+                color: white; 
+                font-weight: bold; 
+                padding: 6px 10px; 
+                text-align: center;
+                border-radius: 4px;
+                display: inline-block;
+                width: 85%;
+                margin: 0 auto;
+                box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+            }
+            
+            .status-delvis { 
+                background-color: #ff9800; 
+                color: white; 
+                font-weight: bold; 
+                padding: 6px 10px; 
+                text-align: center;
+                border-radius: 4px;
+                display: inline-block;
+                width: 85%;
+                margin: 0 auto;
+                box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+            }
+            
+            /* Fargekoding for rader - lysere bakgrunner */
+            tr.completed { background-color: rgba(76, 175, 80, 0.1); }
+            tr.partial { background-color: rgba(255, 152, 0, 0.1); }
+            tr.not-started { background-color: rgba(244, 67, 54, 0.05); }
+            
+            /* Tilstand-fargekoding for retur */
             .unopened { background-color: rgba(76, 175, 80, 0.1); }
             .opened { background-color: rgba(255, 193, 7, 0.1); }
             .damaged { background-color: rgba(244, 67, 54, 0.1); }
+            
+            /* Sentrering av statuskolonne */
+            .status-column {
+                text-align: center;
+            }
         </style>
     </head>
     <body>
@@ -796,7 +1065,7 @@ function generateHTML(items, type, summary) {
                     <th>Varenummer</th>
                     <th>Beskrivelse</th>
                     <th>Antall</th>
-                    <th>Vekt (pr. enhet)</th>
+                    <th>Vekt (kg)</th>
                     ${type === 'plukk' ? '<th>Plukket</th>' : ''}
                     ${type === 'mottak' ? '<th>Mottatt</th>' : ''}
                     ${type === 'retur' ? '<th>Tilstand</th>' : ''}
@@ -804,22 +1073,64 @@ function generateHTML(items, type, summary) {
             </thead>
             <tbody>
                 ${items.map(item => {
-                    // Bestem CSS-klasse basert på tilstand hvis dette er en returliste
+                    // Bestem rad-klasse basert på status
                     let rowClass = '';
-                    if (type === 'retur' && item.condition) {
-                        if (item.condition === 'uåpnet') rowClass = 'unopened';
-                        else if (item.condition === 'åpnet') rowClass = 'opened';
-                        else if (item.condition === 'skadet') rowClass = 'damaged';
+                    let statusClass = '';
+                    let statusText = '';
+                    
+                    // For plukk
+                    if (type === 'plukk') {
+                        if (item.picked) {
+                            rowClass = 'completed';
+                            statusClass = 'status-ja';
+                            statusText = 'Ja';
+                        } else if (item.pickedCount > 0) {
+                            rowClass = 'partial';
+                            statusClass = 'status-delvis';
+                            statusText = `Delvis (${item.pickedCount}/${item.quantity})`;
+                        } else {
+                            rowClass = 'not-started';
+                            statusClass = 'status-nei';
+                            statusText = 'Nei';
+                        }
+                    }
+                    
+                    // For mottak
+                    if (type === 'mottak') {
+                        if (item.received) {
+                            rowClass = 'completed';
+                            statusClass = 'status-ja';
+                            statusText = 'Ja';
+                        } else if (item.receivedCount > 0) {
+                            rowClass = 'partial';
+                            statusClass = 'status-delvis';
+                            statusText = `Delvis (${item.receivedCount}/${item.quantity})`;
+                        } else {
+                            rowClass = 'not-started';
+                            statusClass = 'status-nei';
+                            statusText = 'Nei';
+                        }
+                    }
+                    
+                    // For retur
+                    if (type === 'retur') {
+                        if (item.condition === 'uåpnet') {
+                            rowClass = 'unopened';
+                        } else if (item.condition === 'åpnet') {
+                            rowClass = 'opened';
+                        } else if (item.condition === 'skadet') {
+                            rowClass = 'damaged';
+                        }
                     }
                     
                     return `
                     <tr class="${rowClass}">
                         <td>${item.id}</td>
                         <td>${item.description}</td>
-                        <td>${item.quantity || 1}</td>
-                        <td>${(item.weight || 0).toFixed(2)} kg</td>
-                        ${type === 'plukk' ? `<td>${item.picked ? 'Ja' : 'Nei'}</td>` : ''}
-                        ${type === 'mottak' ? `<td>${item.received ? 'Ja' : 'Nei'}</td>` : ''}
+                        <td>${item.pickedCount || item.receivedCount || 0} / ${item.quantity || 1}</td>
+                        <td>${(item.weight || 0).toFixed(2)}</td>
+                        ${type === 'plukk' ? `<td class="status-column"><div class="${statusClass}">${statusText}</div></td>` : ''}
+                        ${type === 'mottak' ? `<td class="status-column"><div class="${statusClass}">${statusText}</div></td>` : ''}
                         ${type === 'retur' ? `<td>${item.condition || 'uåpnet'}</td>` : ''}
                     </tr>
                 `}).join('')}
@@ -844,9 +1155,98 @@ export async function exportToPDF(items, type, options = {}) {
     try {
         showToast('Genererer PDF...', 'info');
         
-        // Generer PDF
-        const pdfBlob = await generatePDF(items, type, options);
-        const fileName = generatePDFFilename(type);
+        // Hent metadata basert på listetype
+        const metadata = type === 'plukk' 
+            ? appState.pickListMetadata 
+            : (type === 'mottak' 
+                ? appState.receiveListMetadata 
+                : {});
+        
+        // Kombiner standard alternativer, metadata og tilpassede alternativer
+        const pdfOptions = {
+            ...options,
+            leveringsdato: metadata?.leveringsdato || options.leveringsdato || '',
+            ordrenr: metadata?.ordrenr || options.ordrenr || '',
+            selger: metadata?.selger || options.selger || '',
+            jobbeskrivelse: metadata?.jobbeskrivelse || options.jobbeskrivelse || '',
+            kundenavn: metadata?.kundenavn || options.kundenavn || ''
+        };
+        
+        console.log('PDF-eksport med metadata:', pdfOptions);
+        
+        // Generer PDF med metadata
+        const pdfBlob = await generatePDF(items, type, pdfOptions);
+        
+        // Bruk customFileName hvis det er spesifisert, ellers generer filnavn
+        let fileName;
+        
+        if (options.customFileName) {
+            console.log('Bruker egendefinert filnavn:', options.customFileName);
+            fileName = options.customFileName;
+        } else {
+            // Ekstraher kundenavn og ordrenummer fra originalfilnavn
+            let customerName = '';
+            let orderNumber = '';
+            
+            // Sjekk om det finnes en originalfil-referanse i DOM
+            const fileInfoElement = type === 'plukk' ? 
+                document.getElementById('pickFileInfo') : 
+                document.getElementById('receiveFileInfo');
+                
+            if (fileInfoElement) {
+                const fileInfoText = fileInfoElement.textContent || '';
+                const pdfNameMatch = fileInfoText.match(/Lastet inn: (.+?)(?:\s\(\d+\s+varer\))?$/);
+                
+                if (pdfNameMatch && pdfNameMatch[1]) {
+                    // Originalfilnavn funnet
+                    const originalFilename = pdfNameMatch[1];
+                    console.log('Originalfilnavn funnet:', originalFilename);
+                    
+                    // Parsing av kundenavn og ordrenummer fra filnavn
+                    if (originalFilename.includes('Plukke_liste_') || originalFilename.includes('Plukkliste_')) {
+                        // For filnavn med format: Kundenavn_Plukke_liste_Ordrenr_Dato
+                        const splitPattern = originalFilename.includes('Plukke_liste_') ? 'Plukke_liste_' : 'Plukkliste_';
+                        const parts = originalFilename.split(splitPattern);
+                        
+                        if (parts.length >= 2) {
+                            // Kundenavn er den første delen
+                            customerName = parts[0].replace(/_/g, ' ').trim();
+                            
+                            // Ordrenummer er starten av den andre delen frem til første underscore
+                            const orderParts = parts[1].split('_');
+                            if (orderParts.length >= 1) {
+                                orderNumber = orderParts[0];
+                            }
+                        }
+                    }
+                }
+            }
+            
+            // Hent brukernavn fra appState
+            const userName = appState.user ? appState.user.name : 'ukjent';
+            
+            // Rens kundenavn og ordrenummer for ugyldige filnavntegn
+            customerName = customerName.replace(/[^a-zA-Z0-9æøåÆØÅ ]/g, '_');
+            
+            // Generer filnavn med kundenavn, ordrenummer og bruker
+            const now = new Date();
+            const dateStr = formatDate(now, 'YYYY_MM_DD_HH');
+            
+            if (customerName && orderNumber) {
+                fileName = `${customerName}_${capitalizeFirstLetter(type)}_${orderNumber}_${userName}_${dateStr}.pdf`;
+            } else if (customerName) {
+                fileName = `${customerName}_${capitalizeFirstLetter(type)}_${userName}_${dateStr}.pdf`;
+            } else if (orderNumber) {
+                fileName = `${capitalizeFirstLetter(type)}_${orderNumber}_${userName}_${dateStr}.pdf`;
+            } else {
+                fileName = generatePDFFilename(type);
+            }
+            
+            // Sørg for at filnavnet ikke har ulovlige tegn
+            fileName = fileName.replace(/\s+/g, '_');
+        }
+        
+        console.log(`Eksporterer med filnavn: ${fileName}`);
         
         // Last ned PDF
         const url = URL.createObjectURL(pdfBlob);
@@ -867,6 +1267,16 @@ export async function exportToPDF(items, type, options = {}) {
         console.error('Feil ved eksport til PDF:', error);
         showToast('Kunne ikke generere PDF. ' + error.message, 'error');
     }
+}
+
+/**
+ * Gjør første bokstav stor (hjelpefunksjon)
+ * @param {string} text - Tekst
+ * @returns {string} Tekst med stor forbokstav
+ */
+function capitalizeFirstLetter(text) {
+    if (!text) return '';
+    return text.charAt(0).toUpperCase() + text.slice(1);
 }
 
 /**
@@ -971,238 +1381,180 @@ export async function importFromReceiptPDF(file) {
 // Oppdatert funksjon for processKvikReceiptLines i import-export.js
 
 /**
- * Prosesserer linjer fra Kvik følgeseddel-PDF
+ * Prosesserer linjer fra Kvik følgeseddel-PDF med tabellformat
  * @param {Array<string>} lines - Tekstlinjer fra PDF
  * @returns {Array<Object>} Array med vareposter
  */
 function processKvikReceiptLines(lines) {
     const items = [];
-    const seenProductIds = new Set(); // For å unngå duplikater
+    const productMap = {}; // For å konsolidere duplikate produkter
+    let currentPalleId = null;
     
     try {
-        // Sjekk om dette er en Kvik følgeseddel
-        const isKvikReceipt = lines.some(line => 
-            line.includes('Kvik') && (line.includes('Følgeseddel') || line.includes('ordrenummer'))
-        );
+        console.log("Starter prosessering av følgeseddel linjer", lines.length);
         
-        if (!isKvikReceipt) {
-            console.warn('Dette ser ikke ut som en Kvik følgeseddel');
-            return [];
-        }
+        // Logg de første 20 linjene for debugging
+        console.log("Første 20 linjer av dokumentet:");
+        lines.slice(0, 20).forEach((line, i) => console.log(`${i}: ${line}`));
         
-        console.log("Dokumentet er gjenkjent som Kvik følgeseddel");
+        // Variabler for å holde styr på parsing-tilstand
+        let currentProductId = null;
+        let currentDescription = null;
+        let currentQuantity = null;
+        let collectingMultilineDescription = false;
         
-        // Find tabellhode for å identifisere kolonnene
-        let tableHeaderIndex = -1;
-        for (let i = 0; i < lines.length; i++) {
-            if (lines[i].includes('Varenummer') && 
-                lines[i].includes('Beskrivelse') && 
-                lines[i].includes('Bestilt') && 
-                lines[i].includes('Plukket')) {
-                tableHeaderIndex = i;
-                break;
-            }
-        }
-        
-        if (tableHeaderIndex === -1) {
-            console.warn('Kunne ikke finne tabellhode i Kvik følgeseddel');
-        }
-        
-        // Finn rader som er vareposter i tabellformat
-        let currentPalleId = null;
+        // Gå gjennom alle linjer og finn produkter basert på standardformat:
+        // Varenummer på en linje (evt. med paller info)
+        // Beskrivelse på neste linje(r)
+        // Antall på en senere linje eller etter beskrivelsen
         
         for (let i = 0; i < lines.length; i++) {
             const line = lines[i].trim();
             
-            // Skip tomme linjer eller for korte linjer
-            if (!line || line.length < 3) continue;
+            // Skip tomme linjer
+            if (!line) {
+                continue;
+            }
             
-            // Sjekk etter Palle ID format (9-sifret nummer alene på en linje)
-            if (/^\d{9}$/.test(line)) {
+            // Sjekk etter palleinfo (8-9 sifret nummer alene på en linje)
+            if (/^\d{8,9}$/.test(line)) {
                 currentPalleId = line;
                 console.log(`Fant Palle ID: ${currentPalleId}`);
                 continue;
             }
             
-            // Hop over linjer med bank/kontoinformasjon og andre metadata
-            if (line.includes('NDEANOKK') || 
-                line.includes('NO3960210700601') || 
-                line.includes('kontonummer') || 
-                line.includes('info@kvik.com') || 
-                line.includes('Nordea') ||
-                line.includes('IBAN') ||
-                line.includes('BIC') ||
-                line.includes('Telefonnr') ||
-                line.includes('Organisasjonsnr') ||
-                line.includes('Bank:') ||
-                line.includes('E-post:') ||
-                line.includes('Side') ||
-                line.includes('Varenummer') ||
-                line.includes('Paller:')) {
+            // Sjekk for standard Kvik-varenummerformater
+            // Format: 3 siffer - bokstaver/tall (f.eks. 042-T12124, 118-L08143, 844-K20016)
+            const standardProductPattern = /^(\d{3}-[A-Z0-9]+)$/;
+            const standardMatch = line.match(standardProductPattern);
+            
+            // Sjekk for andre produktformater (f.eks. BP01915, 244-L08066, 000-K11152)
+            const otherProductPattern = /^([A-Z0-9]+-?[A-Z0-9]+)$/;
+            const otherMatch = line.match(otherProductPattern);
+            
+            // Sjekk om linjen inneholder et tall som kan være antall
+            const isQuantityLine = /^\d+$/.test(line);
+            
+            // Hvis vi samler flerlinjebeskrivelse og møter et nytt varenummer eller antall
+            if (collectingMultilineDescription && (standardMatch || otherMatch || isQuantityLine)) {
+                collectingMultilineDescription = false;
+                
+                // Hvis dette er et antall, legg det til det gjeldende produktet
+                if (isQuantityLine) {
+                    currentQuantity = parseInt(line, 10);
+                    console.log(`Fant antall for ${currentProductId}: ${currentQuantity}`);
+                    
+                    // Legg til produktet siden vi nå har all info
+                    addProduct(currentProductId, currentDescription, currentQuantity);
+                    
+                    // Nullstill for neste produkt
+                    currentProductId = null;
+                    currentDescription = null;
+                    currentQuantity = null;
+                    continue;
+                }
+            }
+            
+            // Hvis vi samler flerlinjebeskrivelse, fortsett å samle
+            if (collectingMultilineDescription) {
+                currentDescription += " " + line;
+                console.log(`Legger til linje i beskrivelsen for ${currentProductId}: ${line}`);
                 continue;
             }
             
-            // Identifiser produktlinjer basert på et produktkode-mønster
-            const productPatterns = [
-                /^\d{3}-[A-Z][A-Z0-9]+-\d+/, // 000-XX-000 format
-                /^\d{3}-[A-Z][A-Z0-9]+/,     // 000-XX format
-                /^[0-9]{3}-[A-Z0-9]/,        // 000-X format
-                /^[A-Z]{2}\d{5}/,           // XX00000 format
-                /^BP\d{5}/,                 // BP00000 format
-                /^HV\d{1,2}(-\d+)?/,        // HV00 eller HV00-000 format
-                /^HV\d{2,5}/,               // HV0000 format
-                /^[A-Z0-9]+-[A-Z0-9]+/,     // XX-YY format
-                /^[A-Z]\d{4,5}/,            // X0000 format
-                /^ID\d{5}/,                 // ID00000 format
-                /^IB\d{5}/,                 // IB00000 format
-                /^IP\d{5,6}/,               // IP00000 format
-                /^K\d{5}/,                  // K00000 format
-                /^SB\d{5}/,                 // SB00000 format
-                /^\d{3}-[A-Z]/,             // 000-X format
-                /^\d{3}-[TDKOU]/,           // 000-T format
-                /^[A-Z]{1,3}\d{4,5}/        // XX0000 format
-            ];
-            
-            // Finn produkt-ID på starten av linjen
-            let productId = null;
-            for (const pattern of productPatterns) {
-                const match = line.match(pattern);
-                if (match && match.index === 0) { // Starter på starten av linjen
-                    productId = match[0];
-                    break;
+            // Hvis vi finner et varenummer
+            if (standardMatch || otherMatch) {
+                // Lagre forrige produkt hvis alle data er tilgjengelige
+                if (currentProductId && currentDescription && currentQuantity !== null) {
+                    addProduct(currentProductId, currentDescription, currentQuantity);
                 }
+                
+                // Start nytt produkt
+                currentProductId = standardMatch ? standardMatch[1] : otherMatch[1];
+                currentDescription = null;
+                currentQuantity = null;
+                
+                // Sjekk om beskrivelse er på neste linje
+                if (i + 1 < lines.length && !lines[i + 1].match(standardProductPattern) && 
+                    !lines[i + 1].match(otherProductPattern) && !/^\d+$/.test(lines[i + 1].trim())) {
+                    const nextLine = lines[i + 1].trim();
+                    if (nextLine) {
+                        currentDescription = nextLine;
+                        i++; // Hopp over neste linje siden vi har brukt den
+                        
+                        // Start flerlinjebeskrivelsesmodus
+                        collectingMultilineDescription = true;
+                        
+                        // Sjekk om antall er på den neste linjen
+                        if (i + 1 < lines.length && /^\d+$/.test(lines[i + 1].trim())) {
+                            collectingMultilineDescription = false; // Avslutt flerlinjebeskrivelsen
+                            currentQuantity = parseInt(lines[i + 1].trim(), 10);
+                            i++; // Hopp over antallslinjen
+                        }
+                    }
+                }
+                
+                console.log(`Fant produkt: ${currentProductId}, Beskrivelse: ${currentDescription}, Antall: ${currentQuantity}`);
+                continue;
             }
             
-            // Hvis vi fant en produkt-ID
-            if (productId) {
-                // Skip spesielle linjer
-                if (line.includes('Paller:') || /^\d{9}, \d{9}/.test(line)) {
-                    continue;
-                }
+            // Sjekk om linjen er et tall (antall) for gjeldende produkt
+            if (currentProductId && currentDescription && currentQuantity === null && isQuantityLine) {
+                currentQuantity = parseInt(line, 10);
+                console.log(`Fant antall for ${currentProductId}: ${currentQuantity}`);
                 
-                // Unngå å tolke palle-ID-linjer og tall alene som produkter
-                if (/^\d{9}$/.test(productId) || /^\d{1,3}$/.test(productId)) {
-                    continue;
-                }
+                // Legg til produktet siden vi nå har all info
+                addProduct(currentProductId, currentDescription, currentQuantity);
                 
-                // Unngå duplikater av samme produkt-ID, men tillat samme vare på forskjellige paller
-                const productKey = `${productId}-${currentPalleId || 'default'}`;
-                if (seenProductIds.has(productKey)) {
-                    continue;
-                }
-                
-                // VIKTIG ENDRING: Forbedret søk etter antall i linjen
-                let bestilt = 1; // Standard antall hvis ikke spesifisert
-                let beskrivelse = '';
-                
-                // Fjern produkt-ID fra starten av linjen
-                let remainingLine = line.substring(productId.length).trim();
-                
-                // Søk etter antall og status-tall på slutten av linjen
-                // Typisk format: "Beskrivelse  3  3  0" (bestilt, plukket, gjenstående)
-                const numberPattern = /(\d+)\s+(\d+)\s+(\d+)$/;
-                const numbersMatch = remainingLine.match(numberPattern);
-                
-                if (numbersMatch) {
-                    // VIKTIG: Korrekt utpakking av tallene
-                    bestilt = parseInt(numbersMatch[1], 10);
-                    const plukket = parseInt(numbersMatch[2], 10);
-                    const gjenstaaende = parseInt(numbersMatch[3], 10);
-                    
-                    // Verifiser at tallene gir mening (bestilt = plukket + gjenstående)
-                    if (bestilt !== plukket + gjenstaaende) {
-                        console.warn(`Misforhold i tall for ${productId}: Bestilt=${bestilt}, Plukket=${plukket}, Gjenstående=${gjenstaaende}`);
-                    }
-                    
-                    // Beskrivelsen er alt mellom produkt-ID og tallene
-                    const endOfDescIndex = remainingLine.lastIndexOf(numbersMatch[0]);
-                    beskrivelse = remainingLine.substring(0, endOfDescIndex).trim();
-                } else {
-                    // Alternativ metode for å finne antall
-                    // Søk etter tall på slutten av linjen eller i neste linje
-                    const singleNumberMatch = remainingLine.match(/(\d+)$/);
-                    if (singleNumberMatch) {
-                        bestilt = parseInt(singleNumberMatch[1], 10);
-                        beskrivelse = remainingLine.substring(0, remainingLine.lastIndexOf(singleNumberMatch[0])).trim();
-                    } else {
-                        // Hvis ingen tall på denne linjen, prøv neste linje
-                        if (i + 1 < lines.length) {
-                            const nextLine = lines[i + 1].trim();
-                            // Søk etter tall på neste linje
-                            const nextLineNumberMatch = nextLine.match(/^(\d+)$/);
-                            if (nextLineNumberMatch) {
-                                bestilt = parseInt(nextLineNumberMatch[1], 10);
-                                i++; // Hopp over neste linje
-                            }
-                        }
-                        
-                        // Bruk resten av linjen som beskrivelse
-                        beskrivelse = remainingLine;
-                    }
-                }
-                
-                // Hvis beskrivelsen fortsatt er tom, forsøk å finne en i nærliggende linjer
-                if (!beskrivelse || beskrivelse.length < 3) {
-                    // Søk i neste linje
-                    if (i + 1 < lines.length) {
-                        const nextLine = lines[i + 1].trim();
-                        // Sjekk at neste linje ikke er et nytt produkt
-                        if (!nextLine.match(/^\d{3}-[A-Z]/) && !nextLine.match(/^[A-Z]{2}\d{5}/)) {
-                            beskrivelse = nextLine;
-                            i++; // Hopp over neste linje
-                        }
-                    }
-                }
-                
-                // Hvis beskrivelsen fortsatt er tom, søk i hele dokumentet
-                if (!beskrivelse || beskrivelse.length < 3) {
-                    for (let j = 0; j < lines.length; j++) {
-                        if (j !== i && lines[j].includes(productId)) {
-                            const otherDesc = lines[j].substring(lines[j].indexOf(productId) + productId.length).trim();
-                            if (otherDesc.length > beskrivelse.length) {
-                                beskrivelse = otherDesc.replace(/\d+\s+\d+\s+\d+$/, '').trim();
-                                break;
-                            }
-                        }
-                    }
-                }
-                
-                // Fallback til produktID hvis ingen beskrivelse er funnet
-                if (!beskrivelse || beskrivelse.length < 3) {
-                    beskrivelse = `Vare ${productId}`;
-                }
-                
-                // Trim long descriptions to avoid UI issues
-                if (beskrivelse.length > 100) {
-                    beskrivelse = beskrivelse.substring(0, 97) + '...';
-                }
-                
-                // Opprett varen og legg til i listen med korrekt antall
-                if (productId && bestilt > 0) {
-                    items.push({
-                        id: productId,
-                        description: beskrivelse,
-                        quantity: bestilt, // VIKTIG: Her bruker vi det korrekte antallet
-                        weight: appState.itemWeights[productId] || appState.settings.defaultItemWeight,
-                        received: false,
-                        receivedAt: null,
-                        receivedCount: 0,
-                        palleId: currentPalleId
-                    });
-                    
-                    seenProductIds.add(productKey);
-                    console.log(`Importert produkt: ${productId}, Beskrivelse: ${beskrivelse}, Antall: ${bestilt}`);
-                }
+                // Nullstill for neste produkt
+                currentProductId = null;
+                currentDescription = null;
+                currentQuantity = null;
+            }
+            
+            // Hvis dette er en beskrivelseslinje for et gjeldende produkt
+            if (currentProductId && !currentDescription && line && !isQuantityLine) {
+                currentDescription = line;
+                collectingMultilineDescription = true;
+                console.log(`Fant beskrivelse for ${currentProductId}: ${currentDescription}`);
             }
         }
         
-        console.log(`Ferdig med å behandle følgeseddel. Fant ${items.length} produkter.`);
+        // Legg til siste produkt hvis data er tilgjengelig
+        if (currentProductId && currentDescription && currentQuantity !== null) {
+            addProduct(currentProductId, currentDescription, currentQuantity);
+        }
         
-        // Return sorted items for better UX
+        // Hjelpefunksjon for å legge til produkt i kartet
+        function addProduct(id, description, quantity) {
+            if (productMap[id]) {
+                // Oppdater eksisterende produkt
+                productMap[id].quantity += quantity;
+            } else {
+                // Opprett nytt produkt
+                productMap[id] = {
+                    id: id,
+                    description: description,
+                    quantity: quantity,
+                    weight: appState.itemWeights[id] || 1.0, // Standard vekt
+                    received: false,
+                    receivedAt: null,
+                    receivedCount: 0,
+                    palleId: currentPalleId
+                };
+            }
+        }
+        
+        // Konverter produktkartet til en liste
+        for (const key in productMap) {
+            items.push(productMap[key]);
+        }
+        
+        console.log(`Ferdig med å behandle følgeseddel. Fant ${items.length} unike produkter.`);
         return items.sort((a, b) => a.id.localeCompare(b.id));
     } catch (error) {
         console.error('Feil under parsing av Kvik følgeseddel:', error);
-        return items; // Returner det vi har så langt
+        return Object.values(productMap).filter(product => product && product.id);
     }
 }
 
