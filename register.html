@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="no">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#2196f3">
+    <title>Registrer deg - SnapScan</title>
+    <link rel="manifest" href="manifest.json">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
+    <link rel="stylesheet" href="css/styles.css">
+    <link rel="stylesheet" href="css/homepage.css">
+    <style>
+        .nav-login-btn {
+            display: inline-block !important; 
+        }
+    </style>
+</head>
+<body class="homepage">
+    <header class="home-header">
+        <div class="header-content">
+            <div class="logo-area">
+                <a href="index.html" style="text-decoration: none; display: flex; align-items: center;">
+                    <i class="fas fa-qrcode app-logo"></i>
+                    <div class="app-title">
+                        <h1>SnapScan</h1>
+                        <span class="app-version">v1.0</span>
+                    </div>
+                </a>
+            </div>
+            <nav class="main-nav">
+                <ul>
+                    <li><a href="index.html#features">Funksjoner</a></li>
+                    <li><a href="index.html#how-it-works">Hvordan det fungerer</a></li>
+                    <li><a href="index.html#contact">Kontakt</a></li>
+                    <li><a href="login.html" class="nav-login-btn">Logg inn</a></li>
+                </ul>
+            </nav>
+        </div>
+    </header>
+
+    <main>
+        <div class="auth-container">
+            <div class="auth-header">
+                <i class="fas fa-qrcode app-logo"></i>
+                <h2>Registrer deg på SnapScan</h2>
+                <p>Opprett en konto for å få tilgang til lagerskanneren. <span class="highlight">Få 30% rabatt på alle abonnementer!</span></p>
+            </div>
+            <form class="auth-form" id="registerForm">
+                <div class="form-group">
+                    <label for="name">Navn</label>
+                    <input type="text" id="name" name="name" class="form-control" required>
+                </div>
+                <div class="form-group">
+                    <label for="email">E-postadresse</label>
+                    <input type="email" id="email" name="email" class="form-control" required>
+                </div>
+                <div class="form-group">
+                    <label for="password">Passord</label>
+                    <input type="password" id="password" name="password" class="form-control" required>
+                </div>
+                <div class="form-group">
+                    <label for="confirmPassword">Bekreft passord</label>
+                    <input type="password" id="confirmPassword" name="confirmPassword" class="form-control" required>
+                </div>
+                <div class="auth-submit">
+                    <button type="submit" class="btn btn-primary" style="width: 100%;">Registrer deg</button>
+                </div>
+            </form>
+            <div class="auth-footer">
+                <p>Har du allerede en konto? <a href="login.html">Logg inn</a></p>
+            </div>
+        </div>
+    </main>
+
+    <footer>
+        <div class="footer-content">
+            <div class="footer-logo">
+                <i class="fas fa-qrcode app-logo"></i>
+                <div class="app-title">
+                    <h2>SnapScan</h2>
+                </div>
+            </div>
+            <div class="footer-links">
+                <h3>Lenker</h3>
+                <ul>
+                    <li><a href="index.html#features">Funksjoner</a></li>
+                    <li><a href="index.html#how-it-works">Hvordan det fungerer</a></li>
+                    <li><a href="login.html">Logg inn</a></li>
+                    <li><a href="register.html">Registrer deg</a></li>
+                </ul>
+            </div>
+            <div id="contact" class="footer-contact">
+                <h3>Kontakt oss</h3>
+                <p><i class="fas fa-envelope"></i> support@snapscan.no</p>
+                <p><i class="fas fa-phone"></i> +47 123 45 678</p>
+            </div>
+        </div>
+        <div class="footer-bottom">
+            <p>&copy; 2025 SnapScan. Alle rettigheter reservert.</p>
+        </div>
+    </footer>
+
+    <script src="js/modules/load-libraries.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // Sjekk om brukeren allerede er logget inn
+            const currentUser = localStorage.getItem('snapscan_user');
+            if (currentUser) {
+                window.location.href = 'dashboard.html';
+                return;
+            }
+
+            // Aktiver registreringsskjema
+            const registerForm = document.getElementById('registerForm');
+            const submitButton = registerForm.querySelector('button[type="submit"]');
+            submitButton.disabled = false;
+            submitButton.textContent = "Registrer deg";
+            submitButton.style.backgroundColor = "";
+            submitButton.style.cursor = "pointer";
+            
+            registerForm.addEventListener('submit', function(e) {
+                e.preventDefault();
+                
+                const name = document.getElementById('name').value;
+                const email = document.getElementById('email').value;
+                const password = document.getElementById('password').value;
+                const confirmPassword = document.getElementById('confirmPassword').value;
+                
+                // Enkel validering
+                if (password !== confirmPassword) {
+                    alert('Passordene er ikke like. Vennligst prøv igjen.');
+                    return;
+                }
+                
+                // Hent eksisterende brukere fra JSON-fil
+                fetch('users.json')
+                    .then(response => response.json())
+                    .then(data => {
+                        const users = data.users || [];
+                        
+                        // Sjekk om e-postadressen allerede er i bruk
+                        if (users.some(user => user.email === email)) {
+                            alert('Denne e-postadressen er allerede registrert. Prøv å logge inn isteden.');
+                            return;
+                        }
+                        
+                        // Opprett ny bruker med unik ID
+                        const newUser = {
+                            id: Date.now().toString(),
+                            name: name,
+                            email: email,
+                            password: password,
+                            role: "user",
+                            registeredAt: new Date().toISOString(),
+                            discountApplied: true,
+                            discountPercentage: 30
+                        };
+                        
+                        // For nå setter vi sesjon i localStorage
+                        localStorage.setItem('snapscan_user', JSON.stringify({
+                            id: newUser.id,
+                            name: newUser.name,
+                            email: newUser.email,
+                            role: newUser.role,
+                            loginTime: new Date().toISOString(),
+                            discountApplied: true,
+                            discountPercentage: 30
+                        }));
+                        
+                        // For demonstrasjonsformål, vis en melding om at registrering er vellykket
+                        alert('Registrering vellykket! Du får 30% rabatt på alle abonnementer. Omdirigerer til dashbordet...');
+                        
+                        // Redirect til dashboard
+                        window.location.href = 'dashboard.html';
+                    })
+                    .catch(error => {
+                        console.error('Registreringsfeil:', error);
+                        alert('Det oppstod en feil ved registrering. Vennligst prøv igjen senere.');
+                    });
+            });
+        });
+    </script>
+</body>
+</html>

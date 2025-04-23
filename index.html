@@ -4,951 +4,346 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="theme-color" content="#2196f3">
-    <title>SnapScan</title>
+    <title>SnapScan - Strekkodeskanning for lager og logistikk</title>
     <link rel="manifest" href="manifest.json">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
     <link rel="stylesheet" href="css/styles.css">
+    <link rel="stylesheet" href="css/homepage.css">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <!-- VIKTIG: Kommenterer ut camera-styles.css for å unngå konflikt -->
-    <!-- <link rel="stylesheet" href="css/camera-styles.css"> -->
-
-    <!-- Inline stiler for kameravisning - dette sikrer at ingen CSS-konflikter oppstår -->
     <style>
-        .simple-camera-container {
-            margin: 1rem 0;
-            padding: 1rem;
-            background-color: #f0f8ff;
-            border-radius: 8px;
-            border: 1px solid #64b5f6;
-        }
-        
-        .simple-camera-wrapper {
-            position: relative;
-            width: 100%;
-            height: 400px;
-            overflow: hidden;
-            border-radius: 8px;
-            background-color: #000;
-            margin-bottom: 1rem;
-        }
-        
-        .simple-video {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100% !important;
-            height: 100% !important;
-            object-fit: cover;
-            z-index: 1;
-            background-color: #000;
-        }
-        
-        .simple-overlay {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            z-index: 3;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            pointer-events: none;
-        }
-        
-        .simple-scan-area {
-            width: 250px;
-            height: 150px;
-            border: 3px solid #4caf50;
-            border-radius: 8px;
-            box-shadow: 0 0 0 2000px rgba(0, 0, 0, 0.5);
-            position: relative;
-        }
-        
-        .simple-canvas {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            z-index: 2;
-            background-color: transparent;
+        .btn-register, .register-hidden {
+            display: none !important;
         }
     </style>
 </head>
 <body>
-    <header>
-        <div class="header-left">
-            <button id="backButton" class="back-button">
-                <i class="fas fa-arrow-left"></i>
-            </button>
-            <div class="app-brand">
-                <i class="fas fa-qrcode app-logo"></i>
-                <div class="app-title">
-                    <h1>SnapScan</h1>
-                    <span class="app-version">v0.01</span>
+    <header class="landing-header">
+        <div class="container">
+            <div class="header-content">
+                <div class="logo">
+                    <i class="fas fa-qrcode logo-icon"></i>
+                    <div class="logo-text">
+                        <h1>SnapScan</h1>
+                        <span class="version">v1.0</span>
+                    </div>
                 </div>
+                <nav class="main-nav">
+                    <ul>
+                        <li><a href="#features">Funksjoner</a></li>
+                        <li><a href="#about">Om oss</a></li>
+                        <li><a href="#contact">Kontakt</a></li>
+                        <li><a href="login.html" class="btn-login">Logg inn</a></li>
+                        <li><a href="register.html" class="btn-register">Registrer</a></li>
+                    </ul>
+                </nav>
+                <button class="mobile-menu-btn">
+                    <i class="fas fa-bars"></i>
+                </button>
             </div>
-        </div>
-        
-        <div class="header-right">
-            <div id="scannerStatusHeader" class="scanner-status">
-                <div id="scannerIndicator" class="scanner-indicator"></div>
-                <span id="scannerStatus">Skanner: Ikke tilkoblet</span>
-            </div>
-            
-            <!-- Dark Mode Toggle Switch -->
-            <label class="theme-switch">
-                <input type="checkbox" id="themeToggle">
-                <span class="slider"></span>
-                <i class="fas fa-moon theme-icon dark-icon"></i>
-                <i class="fas fa-sun theme-icon light-icon"></i>
-            </label>
         </div>
     </header>
-    
-    <div class="main-container">
-        <!-- Main Menu -->
-        <div id="mainMenu" class="main-menu">
-            <div class="menu-grid">
-                <div class="menu-item" data-module="picking">
-                    <i class="fas fa-clipboard-list"></i>
-                    <span>Plukk</span>
-                </div>
-                <div class="menu-item" data-module="receiving">
-                    <i class="fas fa-truck-loading"></i>
-                    <span>Mottak</span>
-                </div>
-                <div class="menu-item" data-module="returns">
-                    <i class="fas fa-undo-alt"></i>
-                    <span>Retur</span>
-                </div>
-                <div class="menu-item" data-module="settings">
-                    <i class="fas fa-cogs"></i>
-                    <span>Innstillinger</span>
-                </div>
-            </div>
-        </div>
-        
-        <!-- Picking Module -->
-        <div id="pickingModule" class="module-container">
-            <div class="card">
-                <div class="card-title">
-                    <i class="fas fa-clipboard-list"></i> Plukk
-                </div>
-                
-                <div class="module-section">
-                    <!-- Toppknapper for import, bluetooth og kamera -->
-                    <div class="top-action-buttons">
-                        <input type="file" id="importPickFile" accept=".csv,.txt,.json,.pdf" style="display: none;">
-                        <button id="importPickBtn" class="action-button">
-                            <i class="fas fa-file-import"></i>
-                            <span>Import</span>
-                        </button>
-                        <button id="connectScannerPick" class="action-button">
-                            <i class="fab fa-bluetooth-b"></i>
-                            <span>Bluetooth</span>
-                        </button>
-                        <button id="cameraScannerPick" class="action-button">
-                            <i class="fas fa-camera"></i>
-                            <span>Kamera</span>
-                        </button>
-                    </div>
-                    
-                    <div id="pickFileInfo" class="module-info-text">Ingen fil lastet inn</div>
-                    
-                    <!-- Forenklet kameraskanner for plukk -->
-                    <div id="cameraScannerPickContainer" class="simple-camera-container" style="display: none;">
-                        <div class="simple-camera-wrapper">
-                            <video id="videoPickScanner" class="simple-video" autoplay playsinline muted></video>
-                            <canvas id="canvasPickScanner" class="simple-canvas"></canvas>
-                            <div id="scannerPickOverlay" class="simple-overlay">
-                                <div class="simple-scan-area"></div>
-                            </div>
-                        </div>
-                        <div class="scanner-controls">
-                            <button id="switchCameraPick" class="btn btn-primary scanner-switch-btn">
-                                <i class="fas fa-sync"></i> Bytt kamera
-                            </button>
-                            <button id="closePickScanner" class="btn btn-danger scanner-close-btn" style="width: 100%;">
-                                <i class="fas fa-times"></i> Lukk skanner
-                            </button>
-                        </div>
-                    </div>
-                    
-                    <!-- Fremdrift for plukk -->
-                    <div class="progress-container">
-                        <div class="status-bar">
-                            <div id="pickStatusPicked" class="status-picked" style="width: 0%"></div>
-                            <div id="pickStatusRemaining" class="status-remaining" style="width: 100%"></div>
-                        </div>
-                        <div id="pickStatusText" class="status-text">0 av 0 varer plukket (0%)</div>
-                    </div>
-                    
-                    <!-- Manuell registrering over listen -->
-                    <div class="scan-input-group">
-                        <div class="scan-input-container">
-                            <input type="text" id="pickManualScan" class="form-control" placeholder="Skann eller skriv inn varenummer">
-                            <button id="pickManualScanBtn" class="btn btn-primary scan-button">
-                                <i class="fas fa-barcode"></i> Registrer
-                            </button>
-                        </div>
-                    </div>
-                    
-                    <!-- Total vekt vises direkte over liste -->
-                    <div class="quick-weight-info">
-                        <div class="weight-label">Total vekt:</div>
-                        <div id="totalWeight" class="weight-box">0 kg</div>
-                    </div>
-                    
-                    <!-- Plukkliste -->
-                    <div class="list-container">
-                        <table id="pickList">
-                            <thead>
-                                <tr>
-                                    <th>Varenr.</th>
-                                    <th>Beskrivelse</th>
-                                    <th>Antall</th>
-                                    <th>Vekt (kg)</th>
-                                    <th>Status</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                <!-- Data fylles inn via JavaScript -->
-                            </tbody>
-                        </table>
-                    </div>
-                    
-                    <!-- Handlingsknapper for plukk -->
-                    <div class="action-buttons-container">
-                        <div class="module-action-buttons">
-                            <button id="pickUndoBtn" class="btn btn-warning" disabled>
-                                <i class="fas fa-undo"></i> Angre siste skann
-                            </button>
-                            <div class="dropdown" style="display:inline-block;">
-                                <button id="pickExportBtn" class="btn btn-success dropdown-toggle" disabled>
-                                    <i class="fas fa-file-export"></i> Eksporter
-                                </button>
-                                <div class="dropdown-content">
-                                    <a href="#" data-format="pdf">PDF-dokument</a>
-                                    <a href="#" data-format="html">HTML-dokument</a>
-                                    <a href="#" data-format="csv">CSV-fil</a>
-                                    <a href="#" data-format="json">JSON-fil</a>
-                                    <a href="#" data-format="txt">Tekst-fil</a>
-                                </div>
-                            </div>
-                            <button id="pickClearBtn" class="btn btn-danger" disabled>
-                                <i class="fas fa-trash"></i> Tøm liste
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-        
-        <!-- Receiving Module -->
-        <div id="receivingModule" class="module-container">
-            <div class="card">
-                <div class="card-title">
-                    <i class="fas fa-truck-loading"></i> Mottak
-                </div>
-                
-                <div class="module-section">
-                    <!-- Toppknapper for import, bluetooth og kamera -->
-                    <div class="top-action-buttons">
-                        <input type="file" id="importReceiveFile" accept=".csv,.txt,.json,.pdf" style="display: none;">
-                        <button id="importReceiveBtn" class="action-button">
-                            <i class="fas fa-file-import"></i>
-                            <span>Import</span>
-                        </button>
-                        <button id="connectScannerReceive" class="action-button">
-                            <i class="fab fa-bluetooth-b"></i>
-                            <span>Bluetooth</span>
-                        </button>
-                        <button id="cameraScannerReceive" class="action-button">
-                            <i class="fas fa-camera"></i>
-                            <span>Kamera</span>
-                        </button>
-                    </div>
-                    
-                    <div id="receiveFileInfo" class="module-info-text">Ingen fil lastet inn</div>
-                    
-                    <!-- Forenklet kameraskanner for mottak -->
-                    <div id="cameraScannerReceiveContainer" class="simple-camera-container" style="display: none;">
-                        <div class="simple-camera-wrapper">
-                            <video id="videoReceiveScanner" class="simple-video" autoplay playsinline muted></video>
-                            <canvas id="canvasReceiveScanner" class="simple-canvas"></canvas>
-                            <div id="scannerReceiveOverlay" class="simple-overlay">
-                                <div class="simple-scan-area"></div>
-                            </div>
-                        </div>
-                        <div class="scanner-controls">
-                            <button id="switchCameraReceive" class="btn btn-primary scanner-switch-btn">
-                                <i class="fas fa-sync"></i> Bytt kamera
-                            </button>
-                            <button id="closeReceiveScanner" class="btn btn-danger scanner-close-btn" style="width: 100%;">
-                                <i class="fas fa-times"></i> Lukk skanner
-                            </button>
-                        </div>
-                    </div>
-                    
-                    <!-- Fremdrift for mottak -->
-                    <div class="progress-container">
-                        <div class="status-bar">
-                            <div id="receiveStatusReceived" class="status-picked" style="width: 0%"></div>
-                            <div id="receiveStatusRemaining" class="status-remaining" style="width: 100%"></div>
-                        </div>
-                        <div id="receiveStatusText" class="status-text">0 av 0 varer mottatt (0%)</div>
-                    </div>
-                    
-                    <!-- Manuell registrering over listen -->
-                    <div class="scan-input-group">
-                        <div class="scan-input-container">
-                            <input type="text" id="receiveManualScan" class="form-control" placeholder="Skann eller skriv inn varenummer">
-                            <button id="receiveManualScanBtn" class="btn btn-primary scan-button">
-                                <i class="fas fa-barcode"></i> Registrer
-                            </button>
-                        </div>
-                    </div>
-                    
-                    <!-- Total vekt vises direkte over liste -->
-                    <div class="quick-weight-info">
-                        <div class="weight-label">Total vekt:</div>
-                        <div id="totalReceiveWeight" class="weight-box">0 kg</div>
-                    </div>
-                    
-                    <!-- Mottaksliste -->
-                    <div class="list-container">
-                        <table id="receiveList">
-                            <thead>
-                                <tr>
-                                    <th>Varenr.</th>
-                                    <th>Beskrivelse</th>
-                                    <th>Antall</th>
-                                    <th>Vekt (kg)</th>
-                                    <th>Status</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                <!-- Data fylles inn via JavaScript -->
-                            </tbody>
-                        </table>
-                    </div>
-                    
-                    <!-- Handlingsknapper for mottak -->
-                    <div class="action-buttons-container">
-                        <div class="module-action-buttons">
-                            <button id="receiveUndoBtn" class="btn btn-warning" disabled>
-                                <i class="fas fa-undo"></i> Angre siste skann
-                            </button>
-                            <div class="dropdown" style="display:inline-block;">
-                                <button id="receiveExportBtn" class="btn btn-success dropdown-toggle" disabled>
-                                    <i class="fas fa-file-export"></i> Eksporter
-                                </button>
-                                <div class="dropdown-content">
-                                    <a href="#" data-format="pdf">PDF-dokument</a>
-                                    <a href="#" data-format="html">HTML-dokument</a>
-                                    <a href="#" data-format="csv">CSV-fil</a>
-                                    <a href="#" data-format="json">JSON-fil</a>
-                                    <a href="#" data-format="txt">Tekst-fil</a>
-                                </div>
-                            </div>
-                            <button id="receiveClearBtn" class="btn btn-danger" disabled>
-                                <i class="fas fa-trash"></i> Tøm liste
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-        
-        <!-- Returns Module -->
-        <div id="returnsModule" class="module-container">
-            <div class="card">
-                <div class="card-title">
-                    <i class="fas fa-undo-alt"></i> Retur
-                </div>
-                
-                <div class="module-section">
-                    <!-- Toppknapper for bluetooth og kamera -->
-                    <div class="top-action-buttons">
-                        <button id="connectScannerReturn" class="action-button">
-                            <i class="fab fa-bluetooth-b"></i>
-                            <span>Bluetooth</span>
-                        </button>
-                        <button id="cameraScannerReturn" class="action-button">
-                            <i class="fas fa-camera"></i>
-                            <span>Kamera</span>
-                        </button>
-                    </div>
 
-                    <!-- Forenklet kameraskanner for retur -->
-                    <div id="cameraScannerReturnContainer" class="simple-camera-container" style="display: none;">
-                        <div class="simple-camera-wrapper">
-                            <video id="videoReturnScanner" class="simple-video" autoplay playsinline muted></video>
-                            <canvas id="canvasReturnScanner" class="simple-canvas"></canvas>
-                            <div id="scannerReturnOverlay" class="simple-overlay">
-                                <div class="simple-scan-area"></div>
-                            </div>
-                        </div>
-                        <div class="scanner-controls">
-                            <button id="switchCameraReturn" class="btn btn-primary scanner-switch-btn">
-                                <i class="fas fa-sync"></i> Bytt kamera
-                            </button>
-                            <button id="closeReturnScanner" class="btn btn-danger scanner-close-btn" style="width: 100%;">
-                                <i class="fas fa-times"></i> Lukk skanner
-                            </button>
-                        </div>
+    <section class="hero">
+        <div class="container">
+            <div class="hero-content">
+                <div class="hero-text">
+                    <h1>Strekkodeskanning for effektiv lagerhåndtering</h1>
+                    <p>SnapScan er en kraftig app for strekkodeskanning som hjelper med plukk, mottak og retur for lagerhåndtering. Fungerer med strekkodeskannere eller direkte med smarttelefon-kamera.</p>
+                    <div class="hero-buttons">
+                        <a href="#features" class="btn btn-secondary">Se funksjoner</a>
                     </div>
-                    
-                    <!-- Manuell registrering over listen -->
-                    <div class="return-register-form">
-                        <div class="form-row">
-                            <div class="form-group">
-                                <label for="returnManualScan"><i class="fas fa-barcode"></i> Varenummer</label>
-                                <input type="text" id="returnManualScan" class="form-control" placeholder="Skann eller skriv inn varenummer">
-                            </div>
-                        </div>
-                        
-                        <div class="form-row two-columns">
-                            <div class="form-group">
-                                <label for="returnQuantity"><i class="fas fa-sort-amount-up"></i> Antall</label>
-                                <input type="number" id="returnQuantity" class="form-control" value="1" min="1" placeholder="Antall">
-                            </div>
-                            
-                            <div class="form-group">
-                                <label for="returnItemCondition"><i class="fas fa-clipboard-check"></i> Tilstand</label>
-                                <select id="returnItemCondition" class="form-control">
-                                    <option value="uåpnet">Uåpnet</option>
-                                    <option value="åpnet">Åpnet</option>
-                                    <option value="skadet">Skadet</option>
-                                </select>
-                            </div>
-                        </div>
-                        
-                        <button id="returnManualScanBtn" class="btn btn-primary full-width-btn">
-                            <i class="fas fa-plus-circle"></i> Registrer retur
-                        </button>
-                    </div>
-                    
-                    <!-- Returliste -->
-                    <div class="list-container">
-                        <table id="returnList">
-                            <thead>
-                                <tr>
-                                    <th>Varenr.</th>
-                                    <th>Beskrivelse</th>
-                                    <th>Antall</th>
-                                    <th>Tilstand</th>
-                                    <th>Handlinger</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                <!-- Data fylles inn via JavaScript -->
-                            </tbody>
-                        </table>
-                    </div>
-                    
-                    <!-- Handlingsknapper for returliste -->
-                    <div class="action-buttons-container">
-                        <div class="module-action-buttons">
-                            <div class="dropdown" style="display:inline-block;">
-                                <button id="returnExportBtn" class="btn btn-success dropdown-toggle" disabled>
-                                    <i class="fas fa-file-export"></i> Eksporter
-                                </button>
-                                <div class="dropdown-content">
-                                    <a href="#" data-format="pdf">PDF-dokument</a>
-                                    <a href="#" data-format="html">HTML-dokument</a>
-                                    <a href="#" data-format="csv">CSV-fil</a>
-                                    <a href="#" data-format="json">JSON-fil</a>
-                                    <a href="#" data-format="txt">Tekst-fil</a>
-                                </div>
-                            </div>
-                            <button id="clearReturnList" class="btn btn-danger" disabled>
-                                <i class="fas fa-trash"></i> Tøm liste
-                            </button>
-                        </div>
-                    </div>
+                </div>
+                <div class="hero-image">
+                    <img src="img/frontpage.png" alt="SnapScan i bruk på lager">
                 </div>
             </div>
         </div>
-        
-        <!-- Settings Module -->
-        <div id="settingsModule" class="module-container">
-            <div class="card">
-                <div class="card-title">
-                    <i class="fas fa-cogs"></i> Innstillinger
-                </div>
-                
-                <!-- Innstillinger Tabs -->
-                <div class="settings-tabs">
-                    <button class="settings-tab-btn active" data-tab="generalSettings">
-                        <i class="fas fa-sliders-h"></i> Generelt
-                    </button>
-                    <button class="settings-tab-btn" data-tab="barcodeSettings">
-                        <i class="fas fa-barcode"></i> Strekkoder
-                    </button>
-                    <button class="settings-tab-btn" data-tab="dataSettings">
-                        <i class="fas fa-database"></i> Data
-                    </button>
-                    <button class="settings-tab-btn" data-tab="systemSettings">
-                        <i class="fas fa-tools"></i> System
-                    </button>
-                </div>
-                
-                <!-- General Settings Tab -->
-                <div id="generalSettings" class="settings-tab-content active">
-                    <div class="settings-section">
-                        <h3 class="settings-section-title"><i class="fas fa-weight"></i> Vekt og måleenheter</h3>
-                        
-                        <div class="settings-option">
-                            <div class="settings-option-info">
-                                <label for="weightUnit">Vektenhet</label>
-                                <p class="settings-description">Velg standard måleenhet for vekt i applikasjonen.</p>
-                            </div>
-                            <div class="settings-option-control">
-                                <select id="weightUnit" class="form-control">
-                                    <option value="kg">Kilogram (kg)</option>
-                                    <option value="g">Gram (g)</option>
-                                </select>
-                            </div>
-                        </div>
-                        
-                        <div class="settings-option">
-                            <div class="settings-option-info">
-                                <label for="defaultItemWeight">Standard varevekt</label>
-                                <p class="settings-description">Sett standard vekt for varer som ikke har en definert vekt.</p>
-                            </div>
-                            <div class="settings-option-control">
-                                <input type="number" id="defaultItemWeight" class="form-control" value="1" min="0.01" step="0.01">
-                            </div>
-                        </div>
-                    </div>
-                    
-                    <div class="settings-section">
-                        <h3 class="settings-section-title"><i class="fas fa-palette"></i> Utseende</h3>
-                        
-                        <div class="settings-option">
-                            <div class="settings-option-info">
-                                <label for="themeToggleSettings">Fargemodus</label>
-                                <p class="settings-description">Velg mellom lys og mørk modus for applikasjonen.</p>
-                            </div>
-                            <div class="settings-option-control">
-                                <div class="theme-toggle-container">
-                                    <span class="theme-label">Lys</span>
-                                    <label class="theme-switch-settings">
-                                        <input type="checkbox" id="themeToggleSettings">
-                                        <span class="slider round"></span>
-                                    </label>
-                                    <span class="theme-label">Mørk</span>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                
-                <!-- Barcode Settings Tab -->
-                <div id="barcodeSettings" class="settings-tab-content">
-                    <div class="settings-section">
-                        <h3 class="settings-section-title"><i class="fas fa-barcode"></i> Strekkodeinnstillinger</h3>
-                        
-                        <div class="settings-option">
-                            <div class="settings-option-info">
-                                <label>Importer strekkodeoversikt</label>
-                                <p class="settings-description">Last opp en JSON-fil med strekkoder for bruk i applikasjonen.</p>
-                            </div>
-                            <div class="settings-option-control">
-                                <input type="file" id="importBarcodeFile" accept=".json" style="display: none;">
-                                <button id="importBarcodeBtn" class="btn btn-primary">
-                                    <i class="fas fa-file-import"></i> Importer strekkoder
-                                </button>
-                                <div id="barcodeFileInfo" class="settings-info-text">Ingen strekkoder lastet inn</div>
-                            </div>
-                        </div>
-                        
-                        <div class="settings-note">
-                            <i class="fas fa-info-circle"></i> Appen inneholder innebygde strekkoder som alltid vil være tilgjengelige.
-                        </div>
-                        
-                        <div class="settings-action-buttons">
-                            <button id="resetBarcodeData" class="btn btn-secondary">
-                                <i class="fas fa-undo"></i> Tilbakestill til kun innebygde strekkoder
-                            </button>
-                            <button id="clearBarcodeData" class="btn btn-warning">
-                                <i class="fas fa-trash"></i> Tøm brukerdefinerte strekkoder
-                            </button>
-                        </div>
-                    </div>
-                </div>
-                
-                <!-- Data Settings Tab -->
-                <div id="dataSettings" class="settings-tab-content">
-                    <div class="settings-section">
-                        <h3 class="settings-section-title"><i class="fas fa-database"></i> Databehandling</h3>
-                        
-                        <div class="settings-action-panel danger-zone">
-                            <div class="panel-header">
-                                <i class="fas fa-exclamation-triangle"></i> Faresone
-                            </div>
-                            <div class="panel-body">
-                                <p>Disse handlingene vil fjerne data permanent og kan ikke angres.</p>
-                                
-                                <button id="clearAllBarcodeData" class="btn btn-warning">
-                                    <i class="fas fa-trash"></i> Tøm all strekkodedata
-                                </button>
-                                
-                                <button id="clearAllData" class="btn btn-danger">
-                                    <i class="fas fa-trash-alt"></i> Tøm alle data
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                
-                <!-- System Settings Tab -->
-                <div id="systemSettings" class="settings-tab-content">
-                    <div class="settings-section">
-                        <h3 class="settings-section-title"><i class="fas fa-sync-alt"></i> Oppdatering og systemvedlikehold</h3>
-                        <p class="settings-description">Hvis du har problemer med appen eller ønsker å hente nyeste versjon av appen, kan du bruke knappen under. Dette vil slette all lokal cache, cookies og tømme lagring for å sikre at du får nyeste versjon.</p>
-                        
-                        <div class="settings-action-panel">
-                            <button id="forceRefreshBtn" class="btn btn-info btn-refresh">
-                              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16" style="margin-right: 5px;">
-                                <path d="M8 3a5 5 0 1 0 4.546 2.914.5.5 0 0 1 .908-.417A6 6 0 1 1 8 2v1z"/>
-                                <path d="M8 4.466V.534a.25.25 0 0 1 .41-.192l2.36 1.966c.12.1.12.284 0 .384L8.41 4.658A.25.25 0 0 1 8 4.466z"/>
-                              </svg>
-                              Last nyeste versjon
-                            </button>
-                        </div>
-                    </div>
-                    
-                    <div class="settings-section">
-                        <h3 class="settings-section-title"><i class="fas fa-info-circle"></i> Systeminfo</h3>
-                        <div id="featuresSupportInfo" class="settings-info-panel">
-                            <!-- Innhold fylles via JavaScript -->
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-    
-    <!-- Weight Input Modal -->
-    <div id="weightModal" class="modal">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h2 class="modal-title">Angi vekt for <span id="weightModalItemId"></span></h2>
-                <span class="close" id="closeWeightModal">&times;</span>
-            </div>
-            <div class="modal-body">
-                <div class="form-group">
-                    <label for="itemWeight">Vekt per enhet (kg)</label>
-                    <input type="number" id="itemWeight" class="form-control" value="1" min="0.01" step="0.01">
-                </div>
-            </div>
-            <div class="modal-footer">
-                <button id="saveWeightBtn" class="btn btn-success">Lagre</button>
-                <button id="cancelWeightBtn" class="btn btn-danger">Avbryt</button>
-            </div>
-        </div>
-    </div>
+    </section>
 
-    <!-- Condition Change Modal -->
-    <div id="conditionModal" class="modal">
-        <div class="modal-content">
-            <div class="modal-header"></div>
-                <h2 class="modal-title">Endre tilstand for <span id="conditionModalItemId"></span></h2>
-                <span class="close" id="closeConditionModal">&times;</span>
-            </div>
-            <div class="modal-body">
-                <div class="form-group">
-                    <label for="itemCondition">Velg tilstand</label>
-                    <select id="itemCondition" class="form-control">
-                        <option value="uåpnet">Uåpnet</option>
-                        <option value="åpnet">Åpnet</option>
-                        <option value="skadet">Skadet</option>
-                    </select>
+    <section id="features" class="features">
+        <div class="container">
+            <h2 class="section-title">Kraftige funksjoner</h2>
+            <div class="features-grid">
+                <div class="feature-card">
+                    <div class="feature-icon">
+                        <i class="fas fa-clipboard-list"></i>
+                    </div>
+                    <h3>Plukklister</h3>
+                    <p>Importer plukklister, skann varer og hold oversikt over plukkeprosessen i sanntid. Eksporter resultater i flere formater.</p>
+                </div>
+                
+                <div class="feature-card">
+                    <div class="feature-icon">
+                        <i class="fas fa-truck-loading"></i>
+                    </div>
+                    <h3>Mottak</h3>
+                    <p>Håndter varemottak enkelt med strekkodeskanning. Sammenlign mottatte varer mot forventede leveranser.</p>
+                </div>
+                
+                <div class="feature-card">
+                    <div class="feature-icon">
+                        <i class="fas fa-undo-alt"></i>
+                    </div>
+                    <h3>Retur</h3>
+                    <p>Behandle vareretur med detaljert registrering av returårsak, tilstand og andre viktige detaljer.</p>
+                </div>
+                
+                <div class="feature-card">
+                    <div class="feature-icon">
+                        <i class="fas fa-camera"></i>
+                    </div>
+                    <h3>Kameraskanning</h3>
+                    <p>Bruk smarttelefon eller nettbrett-kamera som strekkodeskanner. Ingen ekstra maskinvare nødvendig.</p>
+                </div>
+                
+                <div class="feature-card">
+                    <div class="feature-icon">
+                        <i class="fab fa-bluetooth-b"></i>
+                    </div>
+                    <h3>Bluetooth-støtte</h3>
+                    <p>Koble til Bluetooth-strekkodeskannere for raskere og mer presis skanning i krevende miljøer.</p>
+                </div>
+                
+                <div class="feature-card">
+                    <div class="feature-icon">
+                        <i class="fas fa-file-export"></i>
+                    </div>
+                    <h3>Eksport av data</h3>
+                    <p>Eksporter data i flere formater, inkludert PDF, CSV, JSON og tekst for enkel integrasjon med andre systemer.</p>
                 </div>
             </div>
-            <div class="modal-footer">
-                <button id="saveConditionBtn" class="btn btn-success">Lagre</button>
-                <button id="cancelConditionBtn" class="btn btn-danger">Avbryt</button>
+        </div>
+    </section>
+
+    <section class="cta-banner">
+        <div class="container">
+            <div class="cta-content">
+                <h2>Spesialtilbud: 30% rabatt på alle abonnementer!</h2>
+                <p>Registrer deg nå og få 30% rabatt på alle våre abonnementsplaner. Tilbudet er tidsbegrenset til 15. mai 2025.</p>
+                <a href="register.html" class="btn btn-cta">Registrer deg nå</a>
             </div>
         </div>
-    </div>
+    </section>
 
-    <div id="toast" class="toast"></div>
-    
-    <!-- Test kamera for debugging -->
-    <div id="testCamera" style="position: fixed; bottom: 20px; right: 20px; width: 320px; height: 240px; border: 3px solid red; z-index: 9999; display: none; background: #000;"></div>
-        <video id="testVideo" autoplay playsinline muted style="width: 100%; height: 100%;"></video>
-        <button id="startTestCamera" style="position: absolute; top: 5px; left: 5px; z-index: 2;">Start Test</button>
-        <button id="closeTestCamera" style="position: absolute; top: 5px; right: 5px; z-index: 2;">X</button>
-    </div>
-    
-    <!-- Scripts -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.7.107/pdf.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@ericblade/quagga2/dist/quagga.min.js"></script>
-    <script src="https://unpkg.com/@zxing/library@latest"></script>
-    
-    <!-- Test kamera script -->
-    <script>
-    // Enkel direkte kameratest
-    document.addEventListener('DOMContentLoaded', () => {
-        // Legg til en test-knapp til alle scanner-controls
-        document.querySelectorAll('.scanner-controls').forEach(control => {
-            control.insertAdjacentHTML('beforeend', '<button id="showTestCamera" class="btn btn-info">Test Kamera</button>');
-        });
-        
-        // Vis test kamera
-        document.querySelectorAll('#showTestCamera').forEach(btn => {
-            btn.addEventListener('click', () => {
-                document.getElementById('testCamera').style.display = 'block';
-            });
-        });
-        
-        // Start test kamera
-        document.getElementById('startTestCamera').addEventListener('click', async () => {
-            try {
-                const video = document.getElementById('testVideo');
-                const stream = await navigator.mediaDevices.getUserMedia({video: true});
-                video.srcObject = stream;
-                video.play().catch(e => console.error("Test video play error:", e));
-            } catch (err) {
-                console.error("Test kamera feil:", err);
-            }
-        });
-        
-        // Lukk test kamera
-        document.getElementById('closeTestCamera').addEventListener('click', () => {
-            const video = document.getElementById('testVideo');
-            if (video.srcObject) {
-                video.srcObject.getTracks().forEach(track => track.stop());
-                video.srcObject = null;
-            }
-            document.getElementById('testCamera').style.display = 'none';
-        });
-    });
-    </script>
-    
-    <script type="module" src="js/app.js"></script>
-    
-    <!-- Script for Last nyeste versjon-knappen -->
-    <script>
-        document.getElementById('forceRefreshBtn').addEventListener('click', function() {
-            // Vis lastestatus
-            this.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16" style="margin-right: 5px; animation: spin 1s linear infinite;"><path d="M8 3a5 5 0 1 0 4.546 2.914.5.5 0 0 1 .908-.417A6 6 0 1 1 8 2v1z"/><path d="M8 4.466V.534a.25.25 0 0 1 .41-.192l2.36 1.966c.12.1.12.284 0 .384L8.41 4.658A.25.25 0 0 1 8 4.466z"/></svg> Laster...';
+    <section id="about" class="about">
+        <div class="container">
+            <div class="about-content">
+                <div class="about-image">
+                    <img src="img/frontpage2.jpg" alt="Om SnapScan">
+                </div>
+                <div class="about-text">
+                    <h2 class="section-title">Om SnapScan</h2>
+                    <p>SnapScan er utviklet for å møte behovene til moderne lager- og logistikkoperasjoner. Vår plattform kombinerer brukervennlighet med kraftige funksjoner for å gi en sømløs opplevelse for alle lagerstørrelser.</p>
+                    <p>Vi forstår utfordringene med manuell lagerstyring, og vår løsning er designet for å redusere feil, spare tid og øke produktiviteten gjennom digitalisering av nøkkelprosesser.</p>
+                    <p>SnapScan kan brukes på alle enheter med nettilgang, uten behov for installasjon eller komplisert oppsett. Start i dag og opplev fordelene med moderne lagerstyring.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section id="contact" class="contact">
+        <div class="container">
+            <h2 class="section-title">Kontakt oss</h2>
+            <p class="section-description">Har du spørsmål eller trenger hjelp med SnapScan? Ta kontakt med oss!</p>
             
-            // Avregistrer service worker først
-            if ('serviceWorker' in navigator) {
-                navigator.serviceWorker.getRegistrations().then(function(registrations) {
-                    for (let registration of registrations) {
-                        registration.unregister();
-                        console.log('Service Worker avregistrert');
-                    }
-                }).catch(e => console.error('Feil ved avregistrering av Service Worker:', e));
-            }
-            
-            // Tøm caches
-            if ('caches' in window) {
-                caches.keys().then(function(names) {
-                    for (let name of names) {
-                        caches.delete(name);
-                        console.log('Cache slettet:', name);
-                    }
-                }).catch(e => console.error('Feil ved sletting av cache:', e));
-            }
-            
-            // Tøm IndexedDB
-            const deleteAllDatabases = async () => {
-                try {
-                    const databases = await window.indexedDB.databases();
-                    for (const db of databases) {
-                        console.log('Sletter IndexedDB database:', db.name);
-                        window.indexedDB.deleteDatabase(db.name);
-                    }
-                } catch (e) {
-                    console.error('Feil ved sletting av IndexedDB:', e);
-                }
-            };
-            
-            // Prøv å slette IndexedDB-databaser
-            if ('indexedDB' in window && window.indexedDB.databases) {
-                deleteAllDatabases();
-            } else if ('indexedDB' in window) {
-                // Alternativ metode hvis databases() ikke er støttet
-                try {
-                    // Vanlige navn for IndexedDB-databaser i PWA-applikasjoner
-                    const commonDBNames = ['app-storage', 'keyval-store', 'localforage', 'warehousescanner-db'];
-                    commonDBNames.forEach(dbName => {
-                        try {
-                            window.indexedDB.deleteDatabase(dbName);
-                            console.log('Prøvde å slette IndexedDB:', dbName);
-                        } catch (e) {
-                            console.log('Kunne ikke slette IndexedDB:', dbName);
-                        }
-                    });
-                } catch (e) {
-                    console.error('Feil ved sletting av IndexedDB (alternativ metode):', e);
-                }
-            }
-            
-            // Tøm localStorage og sessionStorage
-            try {
-                localStorage.clear();
-                console.log('localStorage tømt');
-                sessionStorage.clear();
-                console.log('sessionStorage tømt');
-            } catch (e) {
-                console.error('Feil ved tømming av storage:', e);
-            }
-            
-            // Slett alle cookies
-            try {
-                const cookies = document.cookie.split(";");
-                for (let cookie of cookies) {
-                    const eqPos = cookie.indexOf("=");
-                    const name = eqPos > -1 ? cookie.substr(0, eqPos).trim() : cookie.trim();
-                    document.cookie = name + "=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/";
-                    console.log('Cookie slettet:', name);
-                }
-            } catch (e) {
-                console.error('Feil ved sletting av cookies:', e);
-            }
-            
-            // Slett application cache (deprecated, men kan fortsatt eksistere)
-            try {
-                if (window.applicationCache && window.applicationCache.abort) {
-                    window.applicationCache.abort();
-                    console.log('Application cache avbrutt');
-                }
-            } catch (e) {
-                console.error('Feil ved håndtering av application cache:', e);
-            }
-            
-            // Tving nettleseren til å laste alle filer på nytt med no-cache parametere
-            setTimeout(function() {
-                // Legg til en parameter som unikt identifiserer denne lastingen
-                const timestamp = new Date().getTime();
-                const currentUrl = new URL(window.location.href);
+            <div class="contact-grid">
+                <div class="contact-form">
+                    <form id="contactForm">
+                        <div class="form-group">
+                            <label for="name">Navn</label>
+                            <input type="text" id="name" name="name" required>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="email">E-post</label>
+                            <input type="email" id="email" name="email" required>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="subject">Emne</label>
+                            <input type="text" id="subject" name="subject" required>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="message">Melding</label>
+                            <textarea id="message" name="message" rows="5" required></textarea>
+                        </div>
+                        
+                        <button type="submit" class="btn btn-primary">Send melding</button>
+                    </form>
+                </div>
                 
-                // Fjern tidligere refresh parametre
-                currentUrl.searchParams.delete('refresh');
+                <div class="contact-info">
+                    <div class="contact-item">
+                        <div class="contact-icon">
+                            <i class="fas fa-envelope"></i>
+                        </div>
+                        <div class="contact-text">
+                            <h3>E-post</h3>
+                            <p>kontakt@snapscan.no</p>
+                        </div>
+                    </div>
+                    
+                    <div class="contact-item">
+                        <div class="contact-icon">
+                            <i class="fas fa-phone-alt"></i>
+                        </div>
+                        <div class="contact-text">
+                            <h3>Telefon</h3>
+                            <p>+47 123 45 678</p>
+                        </div>
+                    </div>
+                    
+                    <div class="contact-item">
+                        <div class="contact-icon">
+                            <i class="fas fa-map-marker-alt"></i>
+                        </div>
+                        <div class="contact-text">
+                            <h3>Adresse</h3>
+                            <p>Teknologigata 10<br>0150 Oslo, Norge</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <footer class="footer">
+        <div class="container">
+            <div class="footer-content">
+                <div class="footer-logo">
+                    <i class="fas fa-qrcode logo-icon"></i>
+                    <div class="logo-text">
+                        <h2>SnapScan</h2>
+                        <span class="version">v1.0</span>
+                    </div>
+                </div>
                 
-                // Legg til ny refresh parameter
-                currentUrl.searchParams.set('refresh', timestamp);
-                
-                // Gå til URL-en med cache-invalidering parametre
-                const newUrl = currentUrl.toString();
-                
-                // Sett cache-control headers via meta tag
-                const meta = document.createElement('meta');
-                meta.httpEquiv = 'Cache-Control';
-                meta.content = 'no-cache, no-store, must-revalidate';
-                document.head.appendChild(meta);
-                
-                // Bruk location.replace istedenfor href for å unngå historikk-oppføring
-                window.location.replace(newUrl);
-            }, 1500);
-        });
-    </script>
-    
-    <!-- Innstillinger Tabs Script -->
+                <div class="footer-links">
+                    <div class="footer-section">
+                        <h3>Sider</h3>
+                        <ul>
+                            <li><a href="index.html">Hjem</a></li>
+                            <li><a href="#features">Funksjoner</a></li>
+                            <li><a href="#about">Om oss</a></li>
+                            <li><a href="#contact">Kontakt</a></li>
+                        </ul>
+                    </div>
+                    
+                    <div class="footer-section">
+                        <h3>Brukerkonto</h3>
+                        <ul>
+                            <li><a href="login.html">Logg inn</a></li>
+                            <li><a href="dashboard.html">Dashboard</a></li>
+                        </ul>
+                    </div>
+                    
+                    <div class="footer-section">
+                        <h3>Juridisk</h3>
+                        <ul>
+                            <li><a href="#">Personvern</a></li>
+                            <li><a href="#">Vilkår</a></li>
+                            <li><a href="#">Cookies</a></li>
+                        </ul>
+                    </div>
+                    
+                    <div class="footer-section">
+                        <h3>Følg oss</h3>
+                        <div class="social-links">
+                            <a href="#" class="social-link"><i class="fab fa-facebook-f"></i></a>
+                            <a href="#" class="social-link"><i class="fab fa-twitter"></i></a>
+                            <a href="#" class="social-link"><i class="fab fa-linkedin-in"></i></a>
+                            <a href="#" class="social-link"><i class="fab fa-instagram"></i></a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="footer-bottom">
+                <p>&copy; 2025 SnapScan. Alle rettigheter reservert.</p>
+            </div>
+        </div>
+    </footer>
+
     <script>
         document.addEventListener('DOMContentLoaded', function() {
-            // Tab funksjonalitet for innstillinger
-            const tabButtons = document.querySelectorAll('.settings-tab-btn');
-            const tabContents = document.querySelectorAll('.settings-tab-content');
+            // Mobile meny-toggle
+            const mobileMenuBtn = document.querySelector('.mobile-menu-btn');
+            const mainNav = document.querySelector('.main-nav');
             
-            // Lytt etter klikk på tab-knapper
-            tabButtons.forEach(button => {
-                button.addEventListener('click', () => {
-                    // Fjern active-klasse fra alle knapper og innholdspaneler
-                    tabButtons.forEach(btn => btn.classList.remove('active'));
-                    tabContents.forEach(content => content.classList.remove('active'));
-                    
-                    // Legg til active-klasse på valgt knapp
-                    button.classList.add('active');
-                    
-                    // Vis tilsvarende innhold
-                    const tabId = button.getAttribute('data-tab');
-                    document.getElementById(tabId).classList.add('active');
-                });
-            });
-            
-            // Synkroniser mørk modus-bryterne
-            const mainThemeToggle = document.getElementById('themeToggle');
-            const settingsThemeToggle = document.getElementById('themeToggleSettings');
-            
-            // Sett innstillinger-bryteren til å matche hovedbryteren ved oppstart
-            if (settingsThemeToggle && mainThemeToggle) {
-                settingsThemeToggle.checked = mainThemeToggle.checked;
-                
-                // Oppdater hovedbryteren når innstillinger-bryteren endres
-                settingsThemeToggle.addEventListener('change', function() {
-                    mainThemeToggle.checked = this.checked;
-                    mainThemeToggle.dispatchEvent(new Event('change'));
-                });
-                
-                // Oppdater innstillinger-bryteren når hovedbryteren endres
-                mainThemeToggle.addEventListener('change', function() {
-                    settingsThemeToggle.checked = this.checked;
+            if (mobileMenuBtn && mainNav) {
+                mobileMenuBtn.addEventListener('click', function() {
+                    mainNav.classList.toggle('show');
                 });
             }
             
-            // Tab funksjonalitet for moduler (Plukk, Mottak, Retur)
-            const moduleTabButtons = document.querySelectorAll('.module-tab-btn');
-            
-            // Håndter klikk på modul-tabknapper
-            moduleTabButtons.forEach(button => {
-                button.addEventListener('click', () => {
-                    // Finn den aktive modulen først
-                    const activeModule = document.querySelector('.module-container[style*="display: flex"]');
-                    if (!activeModule) return;
+            // Smooth scroll for ankerlinker
+            document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+                anchor.addEventListener('click', function (e) {
+                    e.preventDefault();
                     
-                    // Finn alle tabs og innhold i denne modulen
-                    const moduleTabs = activeModule.querySelectorAll('.module-tab-btn');
-                    const moduleContents = activeModule.querySelectorAll('.module-tab-content');
+                    const targetId = this.getAttribute('href');
+                    if (targetId === '#') return;
                     
-                    // Fjern active klasse fra alle tabs og innhold i denne modulen
-                    moduleTabs.forEach(tab => tab.classList.remove('active'));
-                    moduleContents.forEach(content => content.classList.remove('active'));
-                    
-                    // Legg til active klasse på valgt tab
-                    button.classList.add('active');
-                    
-                    // Vis tilsvarende innhold
-                    const tabId = button.getAttribute('data-module-tab');
-                    const tabContent = document.getElementById(tabId);
-                    if (tabContent) {
-                        tabContent.classList.add('active');
+                    const targetElement = document.querySelector(targetId);
+                    if (targetElement) {
+                        window.scrollTo({
+                            top: targetElement.offsetTop - 80, // Justering for header
+                            behavior: 'smooth'
+                        });
+                        
+                        // Lukk mobil-menyen hvis den er åpen
+                        if (mainNav && mainNav.classList.contains('show')) {
+                            mainNav.classList.remove('show');
+                        }
                     }
                 });
             });
             
-            // Initialiser returvektberegning-elementer
-            const initReturnWeightElements = () => {
-                // Elementer som vil bli fylt med JavaScript, men som trenger initialisering
-                const returnElements = [
-                    'returnTotalItems', 'returnUnopenedItems', 'returnOpenedItems', 'returnDamagedItems',
-                    'returnUnopenedWeight', 'returnOpenedWeight', 'returnDamagedWeight'
-                ];
-                
-                returnElements.forEach(elementId => {
-                    const element = document.getElementById(elementId);
-                    if (element) {
-                        if (elementId.includes('Weight')) {
-                            element.textContent = '0 kg';
-                        } else {
-                            element.textContent = '0';
-                        }
+            // Kontaktskjema
+            const contactForm = document.getElementById('contactForm');
+            if (contactForm) {
+                contactForm.addEventListener('submit', function(e) {
+                    e.preventDefault();
+                    
+                    // Enkel validering
+                    const name = document.getElementById('name').value;
+                    const email = document.getElementById('email').value;
+                    const subject = document.getElementById('subject').value;
+                    const message = document.getElementById('message').value;
+                    
+                    if (!name || !email || !subject || !message) {
+                        alert('Vennligst fyll ut alle feltene i skjemaet.');
+                        return;
+                    }
+                    
+                    // Her ville vi normalt sende data til en server
+                    alert('Takk for din henvendelse! Vi vil kontakte deg så snart som mulig.');
+                    contactForm.reset();
+                });
+            }
+            
+            // Sjekk om brukeren allerede er logget inn
+            const currentUser = localStorage.getItem('snapscan_user');
+            if (currentUser) {
+                // Hvis brukeren er logget inn, oppdater login/register knappene
+                const loginButtons = document.querySelectorAll('.btn-login, .btn-register');
+                loginButtons.forEach(button => {
+                    if (button.classList.contains('btn-login')) {
+                        button.textContent = 'Dashboard';
+                        button.href = 'dashboard.html';
+                    } else if (button.classList.contains('btn-register')) {
+                        button.textContent = 'Logg ut';
+                        button.href = '#';
+                        button.addEventListener('click', function(e) {
+                            e.preventDefault();
+                            localStorage.removeItem('snapscan_user');
+                            window.location.reload();
+                        });
                     }
                 });
-            };
-            
-            // Initialiser returnvektberegning når siden laster
-            initReturnWeightElements();
+            }
         });
     </script>
 </body>
