@@ -602,21 +602,55 @@
             // Avregistrer service worker først
             if ('serviceWorker' in navigator) {
                 navigator.serviceWorker.getRegistrations().then(function(registrations) {
-                for (let registration of registrations) {
-                    registration.unregister();
-                    console.log('Service Worker avregistrert');
-                }
-                });
+                    for (let registration of registrations) {
+                        registration.unregister();
+                        console.log('Service Worker avregistrert');
+                    }
+                }).catch(e => console.error('Feil ved avregistrering av Service Worker:', e));
             }
             
             // Tøm caches
             if ('caches' in window) {
                 caches.keys().then(function(names) {
-                for (let name of names) {
-                    caches.delete(name);
-                    console.log('Cache slettet:', name);
+                    for (let name of names) {
+                        caches.delete(name);
+                        console.log('Cache slettet:', name);
+                    }
+                }).catch(e => console.error('Feil ved sletting av cache:', e));
+            }
+            
+            // Tøm IndexedDB
+            const deleteAllDatabases = async () => {
+                try {
+                    const databases = await window.indexedDB.databases();
+                    for (const db of databases) {
+                        console.log('Sletter IndexedDB database:', db.name);
+                        window.indexedDB.deleteDatabase(db.name);
+                    }
+                } catch (e) {
+                    console.error('Feil ved sletting av IndexedDB:', e);
                 }
-                });
+            };
+            
+            // Prøv å slette IndexedDB-databaser
+            if ('indexedDB' in window && window.indexedDB.databases) {
+                deleteAllDatabases();
+            } else if ('indexedDB' in window) {
+                // Alternativ metode hvis databases() ikke er støttet
+                try {
+                    // Vanlige navn for IndexedDB-databaser i PWA-applikasjoner
+                    const commonDBNames = ['app-storage', 'keyval-store', 'localforage', 'warehousescanner-db'];
+                    commonDBNames.forEach(dbName => {
+                        try {
+                            window.indexedDB.deleteDatabase(dbName);
+                            console.log('Prøvde å slette IndexedDB:', dbName);
+                        } catch (e) {
+                            console.log('Kunne ikke slette IndexedDB:', dbName);
+                        }
+                    });
+                } catch (e) {
+                    console.error('Feil ved sletting av IndexedDB (alternativ metode):', e);
+                }
             }
             
             // Tøm localStorage og sessionStorage
@@ -642,12 +676,41 @@
                 console.error('Feil ved sletting av cookies:', e);
             }
             
-            // Vent litt for å gi tid til at caches, cookies og storage slettes
+            // Slett application cache (deprecated, men kan fortsatt eksistere)
+            try {
+                if (window.applicationCache && window.applicationCache.abort) {
+                    window.applicationCache.abort();
+                    console.log('Application cache avbrutt');
+                }
+            } catch (e) {
+                console.error('Feil ved håndtering av application cache:', e);
+            }
+            
+            // Tving nettleseren til å laste alle filer på nytt med no-cache parametere
             setTimeout(function() {
-                // Bruk location.reload(true) for å tvinge en full refresh
-                window.location.href = window.location.href + '?refresh=' + new Date().getTime();
+                // Legg til en parameter som unikt identifiserer denne lastingen
+                const timestamp = new Date().getTime();
+                const currentUrl = new URL(window.location.href);
+                
+                // Fjern tidligere refresh parametre
+                currentUrl.searchParams.delete('refresh');
+                
+                // Legg til ny refresh parameter
+                currentUrl.searchParams.set('refresh', timestamp);
+                
+                // Gå til URL-en med cache-invalidering parametre
+                const newUrl = currentUrl.toString();
+                
+                // Sett cache-control headers via meta tag
+                const meta = document.createElement('meta');
+                meta.httpEquiv = 'Cache-Control';
+                meta.content = 'no-cache, no-store, must-revalidate';
+                document.head.appendChild(meta);
+                
+                // Bruk location.replace istedenfor href for å unngå historikk-oppføring
+                window.location.replace(newUrl);
             }, 1500);
-            });
+        });
       </script>
 </body>
 </html>
