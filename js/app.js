@@ -1,18 +1,26 @@
 // app.js - Hovedapplikasjonen
 
 // Import nødvendige moduler
-import { initScanner, closeScanner } from './modules/scanner.js';
-import { updatePickingUI, registerPickingHandlers } from './modules/picking.js';
-import { updateReceivingUI, registerReceivingHandlers } from './modules/receiving.js';
-import { updateReturnsUI, registerReturnsHandlers } from './modules/returns.js';
-import { registerSettingsHandlers } from './modules/settings.js';
+import { initCameraScanner as initScanner, stopCameraScanning as closeScanner } from './modules/scanner.js';
+import { updatePickingUI, initPicking as registerPickingHandlers } from './modules/picking.js';
+import { updateReceivingUI, initReceiving as registerReceivingHandlers } from './modules/receiving.js';
+import { updateReturnsUI, initReturns as registerReturnsHandlers } from './modules/returns.js';
+import { initSettings as registerSettingsHandlers } from './modules/settings.js';
 import { 
     loadBarcodeMappingFromStorage, 
     loadListsFromStorage, 
     loadSettings,
     loadItemWeights
 } from './modules/storage.js';
-import { showToast, hideToast } from './modules/utils.js';
+import { showToast } from './modules/utils.js';
+
+// Definerer hideToast som en alternativ løsning
+function hideToast() {
+    const toastEl = document.getElementById('toast');
+    if (toastEl) {
+        toastEl.style.display = 'none';
+    }
+}
 
 // Global app state
 export const appState = {

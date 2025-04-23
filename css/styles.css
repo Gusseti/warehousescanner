@@ -55,6 +55,10 @@ body {
     transition: background-color 0.3s ease, color 0.3s ease;
 }
 
+body.module-open .back-button {
+    display: block;
+}
+
 header {
     background-color: var(--primary);
     color: white;
