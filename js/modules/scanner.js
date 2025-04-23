@@ -179,7 +179,7 @@ async function startCameraScanning(cameraId = null, options = {}) {
     // Stopp eventuelle aktive skannere
     if (isScanning) {
         stopCameraScanning();
-        await new Promise(resolve => setTimeout(resolve, 300));
+        await new Promise(resolve => setTimeout(resolve, 500)); // Økt fra 300 til 500ms for å sikre at alt er stoppet
     }
     
     try {
@@ -200,6 +200,9 @@ async function startCameraScanning(cameraId = null, options = {}) {
         videoElement = document.getElementById(videoId);
         canvasElement = document.getElementById(canvasId);
         
+        console.log(`DEBUG-CAM001: Modulprfix=${modulePrefix}, Container=${containerId}, Video=${videoId}, Canvas=${canvasId}`);
+        console.log(`DEBUG-CAM002: Fant elementer: Container=${!!container}, Video=${!!videoElement}, Canvas=${!!canvasElement}`);
+        
         // Vis feilmelding og avbryt hvis elementer mangler
         if (!container || !videoElement || !canvasElement) {
             const missingElements = [];
@@ -219,10 +222,12 @@ async function startCameraScanning(cameraId = null, options = {}) {
         if (videoElement.srcObject) {
             try {
                 videoElement.srcObject.getTracks().forEach(track => track.stop());
+                videoElement.srcObject = null;
+                // Gi litt tid før vi starter på nytt
+                await new Promise(resolve => setTimeout(resolve, 300));
             } catch (e) {
                 showToast(`Advarsel: ${e.message}`, 'warning');
             }
-            videoElement.srcObject = null;
         }
         
         // Sett viktige attributter for iOS-kompatibilitet
@@ -231,7 +236,7 @@ async function startCameraScanning(cameraId = null, options = {}) {
         videoElement.setAttribute('muted', '');
         videoElement.muted = true;
         
-        // Sjekk for iOS-enhet
+        // Sjekk for iOS-enhet og legg til spesielle attributter
         const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
         if (isIOS) {
             videoElement.setAttribute('webkit-playsinline', '');
@@ -259,6 +264,8 @@ async function startCameraScanning(cameraId = null, options = {}) {
             constraints.video.facingMode = { ideal: "environment" };
         }
         
+        console.log('DEBUG-CAM003: Starter mediaDevices.getUserMedia med constraints:', JSON.stringify(constraints));
+        
         // Start kameraet
         try {
             const stream = await navigator.mediaDevices.getUserMedia(constraints);
@@ -267,17 +274,46 @@ async function startCameraScanning(cameraId = null, options = {}) {
             // Logg kamerainformasjon
             const videoTrack = stream.getVideoTracks()[0];
             if (videoTrack) {
+                console.log(`DEBUG-CAM004: Videotrack aktiv:`, videoTrack.label, videoTrack.readyState);
                 showToast(`Kamera aktivert: ${videoTrack.label || 'Ukjent kamera'}`, 'success');
             }
             
             // Tilkoble video til strøm
             videoElement.srcObject = stream;
             
-            // Forsøk å starte avspillingen manuelt
+            // Registrer callbacks for å sikre at video starter
+            let videoStartPromise = new Promise((resolve, reject) => {
+                // Tidsbegrensning for å vente på video start
+                const videoTimeout = setTimeout(() => {
+                    console.log('DEBUG-CAM005: Video start timeout utløpt');
+                    reject(new Error('Video start timeout'));
+                }, 5000);
+                
+                // Lytt på flere events for å sikre at video starter
+                const videoStarted = () => {
+                    console.log('DEBUG-CAM006: Video har startet avspilling');
+                    clearTimeout(videoTimeout);
+                    resolve();
+                };
+                
+                videoElement.oncanplay = videoStarted;
+                videoElement.onplaying = videoStarted;
+                
+                // Forsøk å starte avspillingen manuelt
+                videoElement.play().then(() => {
+                    console.log('DEBUG-CAM007: videoElement.play() succeeded');
+                }).catch(e => {
+                    console.log('DEBUG-CAM008: videoElement.play() feilet:', e.message);
+                    // Vi avbryter ikke her, lar events håndtere det i stedet
+                });
+            });
+            
             try {
-                await videoElement.play();
-            } catch (e) {
-                showToast(`Kunne ikke starte video: ${e.message}. Prøv å klikke på skjermen.`, 'warning');
+                await videoStartPromise;
+            } catch(e) {
+                console.error('DEBUG-CAM009: Timeout eller feil ved oppstart av video:', e);
+                showToast('Kunne ikke starte videostrøm. Prøv å klikke på skjermen eller last siden på nytt.', 'warning');
+                // Fortsett likevel, det kan fungere i noen tilfeller
             }
             
             // Sett opp canvas
@@ -291,10 +327,24 @@ async function startCameraScanning(cameraId = null, options = {}) {
             canvasElement.style.zIndex = '2';
             canvasElement.style.backgroundColor = 'transparent';
             
+            // Sjekk status for Quagga-objekt
+            console.log('DEBUG-CAM010: Quagga status før init:', typeof Quagga !== 'undefined' ? 'Definert' : 'Udefinert');
+            
             // Last Quagga2 hvis nødvendig
             if (typeof Quagga === 'undefined') {
                 showToast('Laster strekkodeleser...', 'info');
                 await loadQuaggaScript();
+                console.log('DEBUG-CAM011: Quagga lastet dynamisk');
+            }
+            
+            // Vent litt før Quagga initialiseres for å sikre at video er stabilisert
+            await new Promise(resolve => setTimeout(resolve, 500));
+            
+            console.log('DEBUG-CAM012: Initialiserer Quagga med video:', videoElement.videoWidth, 'x', videoElement.videoHeight);
+            
+            // Sjekk om video faktisk spiller
+            if (videoElement.videoWidth === 0 || videoElement.videoHeight === 0) {
+                console.warn('DEBUG-CAM013: Video har ingen dimensjoner, men fortsetter likevel');
             }
             
             // Initialiser Quagga2 med forbedret konfigurasjon
@@ -334,20 +384,33 @@ async function startCameraScanning(cameraId = null, options = {}) {
                 locate: true
             }, function(err) {
                 if (err) {
+                    console.error('DEBUG-CAM014: Quagga init feilet:', err);
                     showToast(`Feil ved start av strekkodeleser: ${err.message || 'Ukjent feil'}`, 'error');
                     return;
                 }
                 
+                console.log('DEBUG-CAM015: Quagga init vellykket, starter skanning');
+                
                 try {
-                    Quagga.start();
-                    isScanning = true;
-                    
-                    // Sett opp event handlers for Quagga2
+                    // Registrer deteksjonshandler FØR start
                     Quagga.onDetected((result) => {
                         if (result && result.codeResult) {
                             handleCameraScanResult(result);
                         }
                     });
+                    
+                    // Legg også til en feilhåndterer for å fange opp problemer
+                    Quagga.onProcessed((result) => {
+                        if (result && result.codeResult) {
+                            console.log('DEBUG-CAM016: Quagga prosessert resultat:', result.codeResult.code);
+                        }
+                    });
+                    
+                    // Start skanning
+                    Quagga.start();
+                    isScanning = true;
+                    
+                    console.log('DEBUG-CAM017: Quagga startet vellykket');
                     
                     // Oppdater status
                     if (scannerStatusCallback) {
@@ -356,9 +419,11 @@ async function startCameraScanning(cameraId = null, options = {}) {
                     
                     showToast('Kamera klar til skanning', 'success');
                 } catch (e) {
-                    console.error("Quagga2 start error:", e);
+                    console.error('DEBUG-CAM018: Quagga start feilet:', e);
                     showToast(`Kunne ikke starte strekkodeleser: ${e.message}`, 'error');
-                    stopCameraScanning();
+                    
+                    // Vi stopper ikke kameraet her - lar video kjøre
+                    // så brukeren i det minste kan se kameraet
                 }
             });
             
@@ -367,6 +432,8 @@ async function startCameraScanning(cameraId = null, options = {}) {
             // Vis detaljert feilmelding til brukeren
             const errorMsg = `Kunne ikke starte kamera: ${error.name || 'Ukjent feil'}`;
             const detailMsg = error.message || '';
+            
+            console.error('DEBUG-CAM019: getUserMedia feilet:', error);
             
             // Vis mer brukervennlige meldinger for vanlige feil
             if (error.name === 'NotAllowedError') {
@@ -379,8 +446,6 @@ async function startCameraScanning(cameraId = null, options = {}) {
                 showToast(`${errorMsg}: ${detailMsg}`, 'error');
             }
             
-            console.error("Kamera start feilet:", error);
-            
             if (scannerStatusCallback) {
                 scannerStatusCallback(false);
             }
@@ -388,6 +453,7 @@ async function startCameraScanning(cameraId = null, options = {}) {
         }
     } catch (error) {
         showToast(`Kamera kunne ikke startes: ${error.message}`, 'error');
+        console.error('DEBUG-CAM020: Generell feil i startCameraScanning:', error);
         throw error;
     }
 }
