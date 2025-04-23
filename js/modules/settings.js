@@ -41,6 +41,9 @@ export function initSettings() {
     
     // Initialiser dark mode
     initDarkMode();
+    
+    // Initialiser tab-funksjonalitet
+    initSettingsTabs();
 }
 
 /**

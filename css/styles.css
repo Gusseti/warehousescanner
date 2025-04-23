@@ -76,10 +76,6 @@ header {
 .header-left, .header-right {
     display: flex;
     align-items: center;
-    gap: 15px;
-}
-
-.app-brand {
     display: flex;
     align-items: center;
     gap: 10px;
