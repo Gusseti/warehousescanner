@@ -13,6 +13,7 @@ import {
     loadItemWeights
 } from './modules/storage.js';
 import { showToast } from './modules/utils.js';
+import { initDropdownSearch } from './modules/dropdown-search.js';
 
 // Definerer hideToast som en alternativ løsning
 function hideToast() {
@@ -156,6 +157,9 @@ async function initApp() {
     updateOnlineStatus();
     window.addEventListener('online', updateOnlineStatus);
     window.addEventListener('offline', updateOnlineStatus);
+    
+    // Initier dropdown-søk
+    initDropdownSearch();
     
     console.log('Applikasjonsinitialisering fullført');
 }

@@ -371,6 +371,7 @@ function parseProductLinesFromPDF(lines) {
         products = parseComplexProductLines(lines);
     }
     
+    // Legg til denne linjen for å returnere produktene
     return products;
 }
 

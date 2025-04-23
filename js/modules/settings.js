@@ -103,6 +103,65 @@ function setupSettingsEventListeners() {
             toggleDarkMode(this.checked);
         });
     }
+    
+    // Last applikasjonen på nytt-knapp
+    const forceRefreshBtn = document.getElementById('forceRefreshBtn');
+    if (forceRefreshBtn) {
+        forceRefreshBtn.addEventListener('click', function() {
+            // Vis en bekreftelsesmelding
+            if (confirm('Dette vil slette all data i applikasjonen, inkludert IndexedDB, localStorage, cookies og cache. Vil du fortsette?')) {
+                try {
+                    // Tøm localStorage
+                    localStorage.clear();
+                    
+                    // Tøm sessionStorage
+                    sessionStorage.clear();
+                    
+                    // Slett cookies
+                    document.cookie.split(";").forEach(function(c) {
+                        document.cookie = c.replace(/^ +/, "").replace(/=.*/, "=;expires=" + new Date().toUTCString() + ";path=/");
+                    });
+                    
+                    // Slett IndexedDB databaser
+                    const deleteIndexedDBs = async () => {
+                        const databases = await window.indexedDB.databases();
+                        databases.forEach(db => {
+                            window.indexedDB.deleteDatabase(db.name);
+                        });
+                    };
+                    
+                    // Slett cache via Service Worker API hvis tilgjengelig
+                    if ('caches' in window) {
+                        caches.keys().then(names => {
+                            names.forEach(name => {
+                                caches.delete(name);
+                            });
+                        });
+                    }
+                    
+                    // Prøv å slette IndexedDB-databaser
+                    deleteIndexedDBs().then(() => {
+                        // Last siden på nytt etter at all data er slettet
+                        setTimeout(() => {
+                            showToast('All data er slettet. Laster applikasjonen på nytt...', 'success');
+                            setTimeout(() => {
+                                window.location.href = 'login.html';
+                            }, 1500);
+                        }, 500);
+                    }).catch(error => {
+                        console.error('Feil ved sletting av IndexedDB:', error);
+                        // Uansett - last siden på nytt
+                        window.location.href = 'login.html';
+                    });
+                    
+                } catch (error) {
+                    console.error('Feil ved sletting av data:', error);
+                    // Hvis det skjer en feil, prøv å laste siden på nytt uansett
+                    window.location.href = 'login.html';
+                }
+            }
+        });
+    }
 }
 
 /**
@@ -268,5 +327,50 @@ function updateThemeColor(color) {
     let metaThemeColor = document.querySelector('meta[name="theme-color"]');
     if (metaThemeColor) {
         metaThemeColor.setAttribute('content', color);
+    }
+}
+
+/**
+ * Initialiserer tab-funksjonalitet i innstillinger-modulen
+ */
+function initSettingsTabs() {
+    // Finn alle tab-knapper
+    const tabButtons = document.querySelectorAll('.settings-tab-btn');
+    const tabContents = document.querySelectorAll('.settings-tab-content');
+    
+    // Hvis det ikke finnes noen tabs, avslutt tidlig
+    if (tabButtons.length === 0 || tabContents.length === 0) {
+        console.warn('Ingen tabs funnet i innstillinger-modulen');
+        return;
+    }
+    
+    // Legg til klikk-handler for hver tab-knapp
+    tabButtons.forEach(button => {
+        button.addEventListener('click', function() {
+            // Fjern .active fra alle knapper
+            tabButtons.forEach(btn => btn.classList.remove('active'));
+            
+            // Legg til .active på den klikkede knappen
+            this.classList.add('active');
+            
+            // Hent ID for tab-innholdet som skal vises
+            const tabId = this.getAttribute('data-tab');
+            
+            // Skjul alle tab-innhold
+            tabContents.forEach(content => content.classList.remove('active'));
+            
+            // Vis det valgte tab-innholdet
+            const activeTab = document.getElementById(tabId);
+            if (activeTab) {
+                activeTab.classList.add('active');
+            } else {
+                console.error(`Tab-innhold med ID ${tabId} ikke funnet`);
+            }
+        });
+    });
+    
+    // Aktiver første tab som standard hvis ingen er aktive
+    if (!document.querySelector('.settings-tab-btn.active')) {
+        tabButtons[0].click();
     }
 }

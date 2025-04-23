@@ -1,7 +1,7 @@
 :root {
-    --primary: #2196f3;
-    --primary-dark: #0c7cd5;
-    --primary-light: #64b5f6;
+    --primary: #47a54c;
+    --primary-dark: #10641e;
+    --primary-light: #51d658;
     --danger: #f44336;
     --success: #4caf50;
     --warning: #ff9800;
@@ -1531,5 +1531,37 @@ input:checked ~ .dark-icon {
         padding: 8px 12px;
         font-size: 0.9rem;
     }
+}
+
+/* Legg til disse stilene i styles.css */
+.dropdown-container {
+    position: relative;
+    width: 100%;
+}
+
+.dropdown-list {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    width: 100%;
+    max-height: 200px;
+    overflow-y: auto;
+    background-color: white;
+    border: 1px solid #ccc;
+    border-top: none;
+    z-index: 1000;
+    list-style-type: none;
+    margin: 0;
+    padding: 0;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+}
+
+.dropdown-list li {
+    padding: 8px 12px;
+    cursor: pointer;
+}
+
+.dropdown-list li:hover {
+    background-color: #f0f0f0;
 }
 

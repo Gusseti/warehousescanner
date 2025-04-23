@@ -39,63 +39,87 @@ export function initDropdownSearch() {
 }
 
 /**
- * Setter opp dropdown for et spesifikt inputfelt
+ * Setter opp dropdown for et inputfelt
  * @param {HTMLElement} inputElement - Input-elementet
- * @param {string} module - Modulnavn (picking, receiving, returns)
+ * @param {string} module - Modulnavnet (picking, receiving, returns)
  */
 function setupDropdownForInput(inputElement, module) {
-    // Lag dropdown-container
+    // Opprett container for dropdown
     const dropdownContainer = document.createElement('div');
-    dropdownContainer.className = 'search-dropdown';
-    dropdownContainer.style.display = 'none';
+    dropdownContainer.className = 'dropdown-container';
+    inputElement.parentNode.insertBefore(dropdownContainer, inputElement.nextSibling);
     
-    // Legg til i DOM rett etter inputfeltet
-    inputElement.parentNode.style.position = 'relative';
-    inputElement.parentNode.appendChild(dropdownContainer);
+    // Opprett dropdown-listen
+    const dropdownList = document.createElement('ul');
+    dropdownList.className = 'dropdown-list';
+    dropdownList.style.display = 'none';
+    dropdownContainer.appendChild(dropdownList);
     
-    // Legg til klasse på inputfeltet for styling
-    inputElement.classList.add('search-input');
-    
-    // Legg til fokus-event for å vise dropdown
-    inputElement.addEventListener('focus', function() {
-        // Oppdater dropdown-innhold basert på gjeldende lister
-        updateDropdownContent(dropdownContainer, inputElement.value, module);
-        dropdownContainer.style.display = 'block';
-    });
-    
-    // Legg til input-event for å filtrere dropdown
+    // Legg til input event for å vise matchende varer
     inputElement.addEventListener('input', function() {
-        updateDropdownContent(dropdownContainer, inputElement.value, module);
-        dropdownContainer.style.display = 'block';
+        const searchTerm = this.value.trim().toLowerCase();
+        if (searchTerm.length < 2) {
+            dropdownList.style.display = 'none';
+            return;
+        }
+        
+        // Finn matchende varer basert på modulen
+        let items = [];
+        if (module === 'picking') {
+            items = appState.pickListItems;
+        } else if (module === 'receiving') {
+            items = appState.receiveListItems;
+        } else if (module === 'returns') {
+            // For retur, bruk mappingen av strekkoder
+            items = Object.keys(appState.barcodeMapping).map(code => {
+                return {
+                    code: code,
+                    description: appState.barcodeMapping[code]
+                };
+            });
+        }
+        
+        // Filter items basert på søkeord
+        const matches = items.filter(item => 
+            (item.code && item.code.toLowerCase().includes(searchTerm)) || 
+            (item.description && item.description.toLowerCase().includes(searchTerm))
+        );
+        
+        // Oppdater dropdown-liste
+        dropdownList.innerHTML = '';
+        if (matches.length > 0) {
+            matches.forEach(item => {
+                const li = document.createElement('li');
+                li.textContent = `${item.code} - ${item.description || 'Ukjent'}`;
+                li.addEventListener('click', function() {
+                    inputElement.value = item.code;
+                    dropdownList.style.display = 'none';
+                    
+                    // Utløs registreringshendelse basert på modul
+                    const scanButton = module === 'picking' ? 
+                        document.getElementById('pickManualScanBtn') :
+                        module === 'receiving' ? 
+                            document.getElementById('receiveManualScanBtn') : 
+                            document.getElementById('returnManualScanBtn');
+                            
+                    if (scanButton) {
+                        scanButton.click();
+                    }
+                });
+                dropdownList.appendChild(li);
+            });
+            dropdownList.style.display = 'block';
+        } else {
+            dropdownList.style.display = 'none';
+        }
     });
     
-    // Legg til keydown-event for å navigere i dropdown med piltaster
-    inputElement.addEventListener('keydown', function(e) {
-        const items = dropdownContainer.querySelectorAll('.dropdown-item');
-        if (!items.length) return;
-        
-        let activeIndex = -1;
-        for (let i = 0; i < items.length; i++) {
-            if (items[i].classList.contains('active')) {
-                activeIndex = i;
-                break;
-            }
-        }
-        
-        if (e.key === 'ArrowDown') {
-            e.preventDefault();
-            activeIndex = (activeIndex < items.length - 1) ? activeIndex + 1 : 0;
-            setActiveItem(items, activeIndex);
-        } else if (e.key === 'ArrowUp') {
-            e.preventDefault();
-            activeIndex = (activeIndex > 0) ? activeIndex - 1 : items.length - 1;
-            setActiveItem(items, activeIndex);
-        } else if (e.key === 'Enter' && activeIndex >= 0) {
-            e.preventDefault();
-            items[activeIndex].click();
-        } else if (e.key === 'Escape') {
-            dropdownContainer.style.display = 'none';
-        }
+    // Skjul dropdown når inputfeltet mister fokus
+    inputElement.addEventListener('blur', function() {
+        // Kort forsinkelse for å tillate klikk på dropdown-elementet
+        setTimeout(() => {
+            dropdownList.style.display = 'none';
+        }, 200);
     });
 }
 
