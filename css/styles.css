@@ -121,7 +121,12 @@ header h1 {
     cursor: pointer;
     text-align: center;
     box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-    transition: transform 0.2s, box-shadow 0.2s;
+    transition: transform 0.2s, box-shadow 0.2s, background-color 0.3s;
+}
+
+/* Spesifikk stil for dark mode menyknapper */
+.dark-mode .menu-item {
+    background-color: var(--primary-dark);
 }
 
 .menu-item:hover {
