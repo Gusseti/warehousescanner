@@ -297,6 +297,10 @@ export function handleReturnScan(barcode, quantity = 1) {
         returnManualScanEl.value = '';
     }
     
+    // Normaliser strekkoden: Fjern eventuelle mellomrom og tegn som ikke er alfanumeriske
+    barcode = barcode.toString().trim().replace(/[^a-zA-Z0-9]/g, '');
+    console.log('Normalisert strekkode:', barcode);
+    
     // Sjekk om strekkoden finnes i barcode mapping
     let itemId = barcode;
     let description = 'Ukjent vare';
@@ -354,25 +358,38 @@ export function handleReturnScan(barcode, quantity = 1) {
     // Hent den valgte tilstanden fra dropdown
     const condition = returnItemConditionEl ? returnItemConditionEl.value : 'uåpnet';
     
-    // Vi lagrer hver kombinasjon av varenummer+tilstand som separate enheter
-    // Dette er en nøkkel som kombinerer varenummer og tilstand
-    const itemKey = `${itemId}-${condition}`;
+    // Sjekk om denne spesifikke varenummeren allerede finnes, uavhengig av tilstand
+    const existingItemsWithSameId = appState.returnListItems.filter(item => item.id === itemId);
     
-    // Sjekk om denne spesifikke varenummer+tilstand kombinasjonen allerede finnes
-    const existingItemIndex = appState.returnListItems.findIndex(
-        item => item.id === itemId && item.condition === condition
-    );
-    
-    if (existingItemIndex !== -1) {
-        // Øk antallet hvis varen allerede er i listen (med samme tilstand)
-        appState.returnListItems[existingItemIndex].quantity += quantity;
-        showToast(`Vare "${itemId}" (${condition}) antall økt til ${appState.returnListItems[existingItemIndex].quantity}!`, 'success');
+    if (existingItemsWithSameId.length > 0) {
+        // Vi har allerede en eller flere varer med dette varenummeret
+        // Finn den som har samme tilstand
+        const existingItemWithSameCondition = existingItemsWithSameId.find(item => item.condition === condition);
+        
+        if (existingItemWithSameCondition) {
+            // Øk antallet hvis varen allerede er i listen (med samme tilstand)
+            existingItemWithSameCondition.quantity += quantity;
+            showToast(`Vare "${itemId}" (${condition}) antall økt til ${existingItemWithSameCondition.quantity}!`, 'success');
+        } else {
+            // Legg til ny vare med ny tilstand
+            const newItem = {
+                id: itemId,
+                description: description,
+                condition: condition,
+                quantity: quantity,
+                weight: appState.itemWeights[itemId] || appState.settings.defaultItemWeight,
+                returnedAt: new Date()
+            };
+            
+            appState.returnListItems.push(newItem);
+            showToast(`Vare "${itemId}" (${condition}) lagt til som retur!`, 'success');
+        }
     } else {
         // Legg til ny vare i returlisten med tilstand
         const newItem = {
             id: itemId,
             description: description,
-            condition: condition, // Legg til tilstand
+            condition: condition,
             quantity: quantity,
             weight: appState.itemWeights[itemId] || appState.settings.defaultItemWeight,
             returnedAt: new Date()

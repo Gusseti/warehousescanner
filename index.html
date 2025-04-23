@@ -79,22 +79,32 @@
 </head>
 <body>
     <header>
-        <button id="backButton" class="back-button">
-            <i class="fas fa-arrow-left"></i>
-        </button>
-        <h1>SnapScan v0.01</h1>
+        <div class="header-left">
+            <button id="backButton" class="back-button">
+                <i class="fas fa-arrow-left"></i>
+            </button>
+            <div class="app-brand">
+                <i class="fas fa-qrcode app-logo"></i>
+                <div class="app-title">
+                    <h1>SnapScan</h1>
+                    <span class="app-version">v0.01</span>
+                </div>
+            </div>
+        </div>
         
-        <!-- Dark Mode Toggle Switch -->
-        <label class="theme-switch">
-            <input type="checkbox" id="themeToggle">
-            <span class="slider"></span>
-            <i class="fas fa-moon theme-icon dark-icon"></i>
-            <i class="fas fa-sun theme-icon light-icon"></i>
-        </label>
-        
-        <div id="scannerStatusHeader" class="scanner-status">
-            <div id="scannerIndicator" class="scanner-indicator"></div>
-            <span id="scannerStatus">Skanner: Ikke tilkoblet</span>
+        <div class="header-right">
+            <div id="scannerStatusHeader" class="scanner-status">
+                <div id="scannerIndicator" class="scanner-indicator"></div>
+                <span id="scannerStatus">Skanner: Ikke tilkoblet</span>
+            </div>
+            
+            <!-- Dark Mode Toggle Switch -->
+            <label class="theme-switch">
+                <input type="checkbox" id="themeToggle">
+                <span class="slider"></span>
+                <i class="fas fa-moon theme-icon dark-icon"></i>
+                <i class="fas fa-sun theme-icon light-icon"></i>
+            </label>
         </div>
     </header>
     
@@ -137,7 +147,7 @@
                             <span>Import</span>
                         </button>
                         <button id="connectScannerPick" class="action-button">
-                            <i class="fas fa-bluetooth"></i>
+                            <i class="fab fa-bluetooth-b"></i>
                             <span>Bluetooth</span>
                         </button>
                         <button id="cameraScannerPick" class="action-button">
@@ -253,7 +263,7 @@
                             <span>Import</span>
                         </button>
                         <button id="connectScannerReceive" class="action-button">
-                            <i class="fas fa-bluetooth"></i>
+                            <i class="fab fa-bluetooth-b"></i>
                             <span>Bluetooth</span>
                         </button>
                         <button id="cameraScannerReceive" class="action-button">
@@ -364,7 +374,7 @@
                     <!-- Toppknapper for bluetooth og kamera -->
                     <div class="top-action-buttons">
                         <button id="connectScannerReturn" class="action-button">
-                            <i class="fas fa-bluetooth"></i>
+                            <i class="fab fa-bluetooth-b"></i>
                             <span>Bluetooth</span>
                         </button>
                         <button id="cameraScannerReturn" class="action-button">

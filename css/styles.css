@@ -58,8 +58,8 @@ body {
 header {
     background-color: var(--primary);
     color: white;
-    padding: 1rem;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    padding: 0.8rem 1rem;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.2);
     position: sticky;
     top: 0;
     z-index: 100;
@@ -68,8 +68,48 @@ header {
     align-items: center;
 }
 
-header h1 {
-    font-size: 1.5rem;
+/* Header Elements */
+.header-left, .header-right {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+}
+
+.app-brand {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.app-logo {
+    font-size: 1.8rem;
+    color: white;
+    background-color: rgba(255,255,255,0.15);
+    width: 40px;
+    height: 40px;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 8px;
+}
+
+.app-title {
+    display: flex;
+    flex-direction: column;
+}
+
+.app-title h1 {
+    font-size: 1.3rem;
+    margin: 0;
+    line-height: 1.2;
+    font-weight: 600;
+}
+
+.app-version {
+    font-size: 0.7rem;
+    opacity: 0.8;
+    font-weight: 400;
 }
 
 .back-button {
@@ -79,6 +119,72 @@ header h1 {
     font-size: 1.2rem;
     cursor: pointer;
     display: none;
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    transition: background-color 0.2s;
+}
+
+.back-button:hover {
+    background-color: rgba(255,255,255,0.15);
+}
+
+/* Scanner Status in Header */
+.scanner-status {
+    display: flex;
+    align-items: center;
+    font-size: 0.85rem;
+    background-color: rgba(0,0,0,0.15);
+    padding: 5px 10px;
+    border-radius: 15px;
+    gap: 6px;
+}
+
+.scanner-indicator {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    margin-right: 0;
+    background-color: var(--danger);
+    transition: background-color 0.3s;
+}
+
+.scanner-indicator.connected {
+    background-color: var(--success);
+}
+
+/* For smaller screens */
+@media (max-width: 600px) {
+    .app-title h1 {
+        font-size: 1.2rem;
+    }
+    
+    .scanner-status {
+        font-size: 0.75rem;
+        padding: 4px 8px;
+    }
+    
+    .app-logo {
+        width: 35px;
+        height: 35px;
+        font-size: 1.5rem;
+    }
+}
+
+/* For very small screens */
+@media (max-width: 480px) {
+    .scanner-status span {
+        display: none;
+    }
+    
+    .scanner-status {
+        width: 25px;
+        justify-content: center;
+    }
+    
+    .scanner-indicator {
+        margin-right: 0;
+    }
 }
 
 .main-container {
@@ -1294,6 +1400,12 @@ input:checked ~ .dark-icon {
 .action-button i {
     font-size: 1.5rem;
     margin-bottom: 5px;
+    color: white;
+    display: inline-block;
+    width: 24px;
+    height: 24px;
+    line-height: 24px;
+    text-align: center;
 }
 
 .action-button span {
