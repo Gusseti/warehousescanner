@@ -619,7 +619,30 @@
                 });
             }
             
-            // Vent litt for å gi tid til at caches og service workers slettes
+            // Tøm localStorage og sessionStorage
+            try {
+                localStorage.clear();
+                console.log('localStorage tømt');
+                sessionStorage.clear();
+                console.log('sessionStorage tømt');
+            } catch (e) {
+                console.error('Feil ved tømming av storage:', e);
+            }
+            
+            // Slett alle cookies
+            try {
+                const cookies = document.cookie.split(";");
+                for (let cookie of cookies) {
+                    const eqPos = cookie.indexOf("=");
+                    const name = eqPos > -1 ? cookie.substr(0, eqPos).trim() : cookie.trim();
+                    document.cookie = name + "=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/";
+                    console.log('Cookie slettet:', name);
+                }
+            } catch (e) {
+                console.error('Feil ved sletting av cookies:', e);
+            }
+            
+            // Vent litt for å gi tid til at caches, cookies og storage slettes
             setTimeout(function() {
                 // Bruk location.reload(true) for å tvinge en full refresh
                 window.location.href = window.location.href + '?refresh=' + new Date().getTime();
