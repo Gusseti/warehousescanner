@@ -17,6 +17,14 @@ import { showToast } from './utils.js';
 let videoElement = null;
 let canvasElement = null;
 let scannerOverlay = null;
+let scanButtonElements = {}; // Holder "Utfør skann"-knapper
+let stickyContainers = {}; // Holder referanser til sticky-containere
+let stickyPlaceholders = {}; // Holder referanser til sticky plasshodere
+
+// Innstillinger
+let manualScanMode = true; // Sett til true for å kreve manuell skanning
+let lastDetectedCode = null; // Sist oppdagede strekkode (før bekreftelse)
+let isSticky = false; // Er kamera i sticky-modus
 
 let moduleCallbacks = {
     pick: null,
@@ -165,6 +173,165 @@ function initCameraScanner(videoEl, canvasEl, overlayEl, callback, statusCallbac
     switchCameraButtons.forEach(button => {
         button.addEventListener('click', switchCamera);
     });
+    
+    // Opprett skann-knapp for modulen hvis den ikke finnes
+    createScanButton(module);
+    
+    // Oppsett for sticky-funksjonalitet
+    setupStickyScanner(module);
+}
+
+/**
+ * Setter opp sticky-funksjonalitet for kamera-containeren
+ * @param {string} module - Modulnavn ('pick', 'receive', 'return')
+ */
+function setupStickyScanner(module) {
+    if (!module) return;
+    
+    const modulePrefix = getModulePrefix(module);
+    const containerId = `cameraScanner${modulePrefix}Container`;
+    const container = document.getElementById(containerId);
+    
+    if (!container) {
+        console.warn(`Kunne ikke finne kamera-container for ${module}-modul`);
+        return;
+    }
+    
+    // Lagre referanse til container
+    stickyContainers[module] = container;
+    
+    // Opprett en plassholder for å unngå "hopp" når container blir sticky
+    const placeholder = document.createElement('div');
+    placeholder.id = `cameraScanner${modulePrefix}Placeholder`;
+    placeholder.className = 'camera-scanner-placeholder';
+    placeholder.style.display = 'none';
+    container.parentNode.insertBefore(placeholder, container.nextSibling);
+    
+    // Lagre referanse til plassholder
+    stickyPlaceholders[module] = placeholder;
+    
+    // Legg til event listener for å oppdage scrolling
+    window.addEventListener('scroll', () => {
+        if (appState.currentModule !== getModuleFullName(module)) return;
+        if (!isScanning) return;
+        
+        const containerRect = container.getBoundingClientRect();
+        const shouldBeSticky = containerRect.top <= 0;
+        
+        if (shouldBeSticky && !isSticky) {
+            // Gjør containeren sticky
+            container.classList.add('sticky');
+            placeholder.classList.add('active');
+            isSticky = true;
+        } else if (!shouldBeSticky && isSticky) {
+            // Fjern sticky
+            container.classList.remove('sticky');
+            placeholder.classList.remove('active');
+            isSticky = false;
+        }
+    });
+}
+
+/**
+ * Konverterer et kort modulnavn til prefix for DOM-elementer
+ * @param {string} module - Kort modulnavn ('pick', 'receive', 'return')
+ * @returns {string} Prefix ('Pick', 'Receive', 'Return')
+ */
+function getModulePrefix(module) {
+    switch (module) {
+        case 'pick': return 'Pick';
+        case 'receive': return 'Receive';
+        case 'return': return 'Return';
+        default: return module.charAt(0).toUpperCase() + module.slice(1);
+    }
+}
+
+/**
+ * Konverterer et kort modulnavn til fullt modulnavn
+ * @param {string} module - Kort modulnavn ('pick', 'receive', 'return')
+ * @returns {string} Fullt modulnavn ('picking', 'receiving', 'returns')
+ */
+function getModuleFullName(module) {
+    switch (module) {
+        case 'pick': return 'picking';
+        case 'receive': return 'receiving';
+        case 'return': return 'returns';
+        default: return module;
+    }
+}
+
+/**
+ * Oppretter "Utfør skann"-knapp for en spesifikk modul
+ * @param {string} module - Modulnavn ('pick', 'receive', 'return')
+ */
+function createScanButton(module) {
+    if (!module) return;
+    
+    const modulePrefix = getModulePrefix(module);
+    const containerId = `cameraScanner${modulePrefix}Container`;
+    const container = document.getElementById(containerId);
+    
+    if (!container) {
+        console.warn(`Kunne ikke finne kamera-container for ${module}-modul`);
+        return;
+    }
+    
+    // Sjekk om knappen allerede finnes
+    const existingButton = container.querySelector(`.scan-button[data-module="${module}"]`);
+    if (existingButton) {
+        scanButtonElements[module] = existingButton;
+        return;
+    }
+    
+    // Opprett knapp
+    const button = document.createElement('button');
+    button.className = 'scan-button';
+    button.dataset.module = module;
+    button.textContent = 'Utfør skann';
+    button.title = 'Trykk for å skanne strekkoden i kameravisningen';
+    
+    // Legg til clickhandler
+    button.addEventListener('click', () => {
+        performManualScan(module);
+    });
+    
+    // Finn passende plasseringssted i containeren
+    const closeButton = container.querySelector('.scanner-close-btn');
+    
+    if (closeButton && closeButton.parentNode) {
+        // Legg knappen før lukke-knappen
+        closeButton.parentNode.insertBefore(button, closeButton);
+    } else {
+        // Legg til på slutten av containeren hvis vi ikke finner lukke-knappen
+        container.appendChild(button);
+    }
+    
+    // Lagre referanse til knappen
+    scanButtonElements[module] = button;
+}
+
+/**
+ * Utfører en manuell skanning for angitt modul
+ * @param {string} module - Modulnavn ('pick', 'receive', 'return')
+ */
+function performManualScan(module) {
+    if (!isScanning) {
+        showToast('Skanneren er ikke aktiv', 'warning');
+        return;
+    }
+    
+    if (!lastDetectedCode) {
+        showToast('Ingen strekkode detektert. Sikt kameraet mot strekkoden.', 'warning');
+        return;
+    }
+    
+    console.log(`Utfører manuell skanning for ${module} med kode: ${lastDetectedCode}`);
+    
+    // Behandle strekkoden
+    processScannedBarcode(lastDetectedCode);
+    
+    // Nullstill lastDetectedCode
+    lastDetectedCode = null;
 }
 
 /**
@@ -379,7 +546,7 @@ async function startCameraScanning(cameraId = null, options = {}) {
                 console.warn('DEBUG-CAM013: Video har ingen dimensjoner, men fortsetter likevel');
             }
             
-            // Initialiser Quagga2 med forbedret konfigurasjon
+            // Initialiser Quagga2 med forbedret konfigurasjon og strengere skannområde
             Quagga.init({
                 inputStream: {
                     name: "Live",
@@ -390,10 +557,11 @@ async function startCameraScanning(cameraId = null, options = {}) {
                         height:  { min: 480 }
                     },
                     area: { 
-                        top: "20%",    
-                        right: "20%",
-                        left: "20%",
-                        bottom: "20%"
+                        // Innskrenk skanningsområdet til sentrum av skjermen
+                        top: "30%",    
+                        right: "30%",
+                        left: "30%",
+                        bottom: "30%"
                     },
                     singleChannel: false // viktig for Quagga2
                 },
@@ -411,7 +579,18 @@ async function startCameraScanning(cameraId = null, options = {}) {
                         "upc_reader",
                         "upc_e_reader"
                     ],
-                    multiple: false
+                    multiple: false,
+                    // Øk frekvensen for mer presis deteksjon
+                    frequency: 10,
+                    debug: {
+                        showCanvas: true,
+                        showPatches: true,
+                        showFoundPatches: true,
+                        showSkeleton: true,
+                        showLabels: true,
+                        showPatchLabels: true,
+                        showRemainingPatchLabels: true
+                    }
                 },
                 locate: true
             }, function(err) {
@@ -648,30 +827,47 @@ function handleCameraScanResult(result) {
         
         // Valider at dette er en strekkode og ikke bare et tall
         if (validateBarcode(barcode)) {
-            // Oppdater sist skannede strekkode
+            // Oppdater sist oppdagede strekkode
+            lastDetectedCode = barcode;
             lastScannedCode = barcode;
-            
-            // Spill lyd for å indikere at strekkode er funnet
-            playSuccessSound();
             
             // Marker strekkoden på canvas
             if (canvasElement && result.box) {
                 const ctx = canvasElement.getContext('2d');
-                drawSuccessBox(ctx, result.box);
+                drawDetectedBox(ctx, result.box);
             }
             
-            // Finn mappet varenummer
-            let itemId = barcode;
-            if (appState.barcodeMapping && appState.barcodeMapping[barcode]) {
-                itemId = appState.barcodeMapping[barcode];
-                showToast(`Strekkode skannet: ${barcode} → ${itemId}`, 'success');
-                // Blink grønt ved vellykket skanning
-                blinkBackground('green');
-            } else {
-                showToast(`Strekkode skannet: ${barcode}`, 'success');
+            // Vis til brukeren at en strekkode er oppdaget
+            const detectedToastMsg = `Strekkode oppdaget: ${barcode}`;
+            showToast(detectedToastMsg, 'info', 2000);
+            
+            // Spill lyd for å indikere at strekkode er funnet
+            playDetectionSound();
+            
+            // Hvis vi er i manuell skannemodus, vent på at brukeren trykker på knappen
+            if (manualScanMode) {
+                const moduleType = getModuleType(appState.currentModule);
+                const scanButton = scanButtonElements[moduleType];
+                
+                if (scanButton) {
+                    // Gjør knappen mer fremtredende
+                    scanButton.classList.add('ready-to-scan');
+                    scanButton.textContent = `Bekreft skanning av "${barcode}"`;
+                    
+                    // Vis en blinkende grønn kant rundt skann-området
+                    if (canvasElement) {
+                        const scanArea = document.querySelector('.scan-area');
+                        if (scanArea) {
+                            scanArea.classList.add('detected');
+                        }
+                    }
+                }
+                
+                // Ikke prosesser videre - vent på manuell bekreftelse
+                return;
             }
             
-            // Send resultatet til sentral prosessering
+            // Hvis automatisk modus, fortsett med skanning som før
             processScannedBarcode(barcode);
             
             // Sett cooldown for å unngå gjentatte skanninger
@@ -686,37 +882,85 @@ function handleCameraScanResult(result) {
 }
 
 /**
- * Får bakgrunnen til å blinke i en bestemt farge
- * @param {string} color - Farge å blinke (f.eks. 'red', 'green')
+ * Tegner en deteksjons-boks rundt en identifisert strekkode (før bekreftelse)
+ * @param {CanvasRenderingContext2D} ctx - Canvas-kontekst
+ * @param {Array} box - Koordinater for strekkoden
  */
-export function blinkBackground(color) {
-    // Legg til et overlay-element hvis det ikke allerede finnes
-    let overlay = document.getElementById('blinkOverlay');
-    if (!overlay) {
-        overlay = document.createElement('div');
-        overlay.id = 'blinkOverlay';
-        overlay.style.position = 'fixed';
-        overlay.style.top = '0';
-        overlay.style.left = '0';
-        overlay.style.width = '100%';
-        overlay.style.height = '100%';
-        overlay.style.backgroundColor = 'transparent';
-        overlay.style.zIndex = '9999';
-        overlay.style.pointerEvents = 'none'; // Ikke blokker klikk
-        overlay.style.transition = 'background-color 0.3s';
-        document.body.appendChild(overlay);
+function drawDetectedBox(ctx, box) {
+    try {
+        if (!ctx || !box || box.length < 4) return;
+        
+        ctx.clearRect(0, 0, canvasElement.width, canvasElement.height);
+        
+        // Tegn fylt oransje boks med gjennomskinnelighet (ubekreftet)
+        ctx.fillStyle = 'rgba(255, 165, 0, 0.2)';
+        ctx.beginPath();
+        ctx.moveTo(box[0][0], box[0][1]);
+        for (let i = 1; i < box.length; i++) {
+            ctx.lineTo(box[i][0], box[i][1]);
+        }
+        ctx.closePath();
+        ctx.fill();
+        
+        // Tegn kant
+        ctx.strokeStyle = 'rgb(255, 165, 0)';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.moveTo(box[0][0], box[0][1]);
+        for (let i = 1; i < box.length; i++) {
+            ctx.lineTo(box[i][0], box[i][1]);
+        }
+        ctx.closePath();
+        ctx.stroke();
+        
+        // Tegn strekkode-symbol
+        const centerX = (box[0][0] + box[2][0]) / 2;
+        const centerY = (box[0][1] + box[2][1]) / 2;
+        
+        ctx.strokeStyle = 'white';
+        ctx.lineWidth = 2;
+        
+        // Tegn barcode-symbol
+        const barWidth = 4;
+        const barHeight = 15;
+        const startX = centerX - 15;
+        
+        for (let i = 0; i < 8; i++) {
+            const x = startX + i * barWidth;
+            const height = (i % 3 === 0) ? barHeight : barHeight * 0.7;
+            ctx.beginPath();
+            ctx.moveTo(x, centerY - height/2);
+            ctx.lineTo(x, centerY + height/2);
+            ctx.stroke();
+        }
+    } catch (error) {
+        // Ignorer feil ved tegning av deteksjons-boks
     }
-    
-    // Sett farge med litt gjennomsiktighet
-    overlay.style.backgroundColor = color === 'red' ? 'rgba(255, 0, 0, 0.3)' : 
-                                   color === 'green' ? 'rgba(0, 255, 0, 0.3)' : 
-                                   color === 'orange' ? 'rgba(255, 165, 0, 0.3)' : 
-                                   'rgba(0, 0, 0, 0.2)';
-    
-    // Fjern etter kort tid
-    setTimeout(() => {
-        overlay.style.backgroundColor = 'transparent';
-    }, 500);
+}
+
+/**
+ * Spiller en lyd for å indikere at en strekkode er oppdaget (men ikke skannet)
+ */
+function playDetectionSound() {
+    try {
+        const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        const oscillator = audioContext.createOscillator();
+        const gainNode = audioContext.createGain();
+        
+        oscillator.type = 'sine';
+        oscillator.frequency.value = 1200; // Middels frekvens for deteksjoner
+        gainNode.gain.value = 0.05; // Lavere volum enn for suksess
+        
+        oscillator.connect(gainNode);
+        gainNode.connect(audioContext.destination);
+        
+        oscillator.start();
+        setTimeout(() => {
+            oscillator.stop();
+        }, 100); // Kortere lyd enn success-lyden
+    } catch (error) {
+        // Ignorer feil
+    }
 }
 
 /**

@@ -111,6 +111,73 @@
     width: 100%;
 }
 
+/* Ny "Utfør skann"-knapp */
+.scan-button {
+    margin-top: 10px;
+    padding: 12px 24px;
+    background-color: var(--success);
+    color: white;
+    border: none;
+    border-radius: 4px;
+    font-size: 16px;
+    font-weight: bold;
+    cursor: pointer;
+    transition: background-color 0.3s ease;
+    width: 100%;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.scan-button:hover {
+    background-color: var(--success-dark, #3d8b40);
+}
+
+.scan-button:active {
+    transform: translateY(1px);
+}
+
+/* Sticky kameraskanner for mobil/tablet */
+.camera-scanner-container {
+    margin: 1rem 0;
+    padding: 1rem;
+    background-color: var(--bg-card);
+    border-radius: 8px;
+    border: 1px solid var(--primary-light);
+    transition: background-color 0.3s ease;
+}
+
+/* Når kameraet er i sticky-modus */
+.camera-scanner-container.sticky {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 1000;
+    width: 100%;
+    max-width: 100%;
+    margin: 0;
+    padding: 10px;
+    border-radius: 0 0 8px 8px;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+    transition: transform 0.3s ease;
+}
+
+/* Plassholderklasse for å unngå at siden "hopper" når kameraet blir sticky */
+.camera-scanner-placeholder {
+    display: none;
+    height: 0;
+}
+
+.camera-scanner-placeholder.active {
+    display: block;
+    height: 422px; /* Justering for kamera + kontroller, kan trenge finjustering */
+    transition: height 0.3s ease;
+}
+
+/* Kompakt kameravisning i sticky-modus */
+.camera-scanner-container.sticky .camera-wrapper {
+    height: 250px;
+}
+
 /* Animasjoner */
 @keyframes scan {
     0% { top: 0; }
@@ -130,19 +197,17 @@
     }
 }
 
-/* Kamera-skanner container - vis som en kapslet boks */
-.camera-scanner-container {
-    margin: 1rem 0;
-    padding: 1rem;
-    background-color: var(--bg-card);
-    border-radius: 8px;
-    border: 1px solid var(--primary-light);
-    transition: background-color 0.3s ease;
-}
-
 /* Forenklet visning for spesialtilpasninger */
 @media (max-width: 767px) {
     .camera-wrapper {
         height: 300px;
+    }
+    
+    .camera-scanner-container.sticky .camera-wrapper {
+        height: 200px;
+    }
+    
+    .camera-scanner-placeholder.active {
+        height: 322px; /* Justert for mindre kameravisning på mobil */
     }
 }
