@@ -185,10 +185,42 @@ async function startCameraScanning(cameraId = null, options = {}) {
     try {
         // Finn aktuell scanner-container basert på gjeldende modul
         let modulePrefix = '';
+        let moduleType = '';
         if (appState && appState.currentModule) {
-            if (appState.currentModule === 'picking') modulePrefix = 'Pick';
-            else if (appState.currentModule === 'receiving') modulePrefix = 'Receive';
-            else if (appState.currentModule === 'returns') modulePrefix = 'Return';
+            if (appState.currentModule === 'picking') {
+                modulePrefix = 'Pick';
+                moduleType = 'pick';
+            }
+            else if (appState.currentModule === 'receiving') {
+                modulePrefix = 'Receive';
+                moduleType = 'receive';
+            }
+            else if (appState.currentModule === 'returns') {
+                modulePrefix = 'Return';
+                moduleType = 'return';
+            }
+        }
+        
+        console.log(`DEBUG-CAM000: Starter skanning for modul: ${moduleType}`);
+        
+        // Sjekk om modultype er gyldig
+        if (!moduleType) {
+            showToast('Kan ikke starte kamera: Ukjent modultype', 'error');
+            throw new Error('Ukjent modultype');
+        }
+        
+        // Kontroller at callback-funksjonen er registrert
+        if (moduleType && !moduleCallbacks[moduleType]) {
+            console.warn(`DEBUG-CAM000B: Ingen callback registrert for ${moduleType}, forsøker å registrere fra global scope`);
+            
+            // Forsøk å registrere fra window-objektet
+            const handlerName = `handle${modulePrefix}Scan`;
+            if (typeof window[handlerName] === 'function') {
+                console.log(`DEBUG-CAM000C: Registrerer window.${handlerName} som callback for ${moduleType}`);
+                registerModuleCallback(moduleType, window[handlerName]);
+            } else {
+                console.error(`DEBUG-CAM000D: window.${handlerName} er ikke en funksjon, kan ikke registrere callback`);
+            }
         }
         
         // Finn elementer
@@ -355,7 +387,7 @@ async function startCameraScanning(cameraId = null, options = {}) {
                     target: videoElement,
                     constraints: {
                         width: { min: 640 },
-                        height: { min: 480 }
+                        height:  { min: 480 }
                     },
                     area: { 
                         top: "20%",    
@@ -594,11 +626,24 @@ function handleCameraScanResult(result) {
     if (scanCooldown) return; // Ignorer skann i cooldown-perioden
     
     if (result && result.codeResult && result.codeResult.code) {
-        const barcode = result.codeResult.code;
+        // Sikre at barkoden alltid er en string, ikke et objekt
+        const barcode = String(result.codeResult.code);
+        
+        console.log(`DEBUG-SCAN001: Rå strekkode fra skanner:`, result.codeResult.code, 
+                   `(type: ${typeof result.codeResult.code})`);
+        console.log(`DEBUG-SCAN002: Konvertert strekkode:`, barcode, 
+                   `(type: ${typeof barcode})`);
         
         // Sjekk om dette er samme strekkode som nettopp ble skannet
         if (barcode === lastScannedCode) {
             return; // Ignorer dupliserte skann
+        }
+        
+        // Skrøyt ut hvis strekkoden ser ut som [object Object]
+        if (barcode === "[object Object]") {
+            console.error(`DEBUG-SCAN003: Strekkoden konverteres feil til [object Object]!`);
+            showToast('Feil ved lesing av strekkode. Prøv igjen.', 'error');
+            return;
         }
         
         // Valider at dette er en strekkode og ikke bare et tall
@@ -827,21 +872,72 @@ function drawSuccessBox(ctx, box) {
 function loadQuaggaScript() {
     return new Promise((resolve, reject) => {
         if (typeof Quagga !== 'undefined') {
+            console.log('DEBUG-QUAGGA001: Quagga er allerede lastet');
             resolve();
             return;
         }
         
-        // Merk: Byttet til Quagga2
+        console.log('DEBUG-QUAGGA002: Forsøker å laste Quagga-biblioteket');
+        showToast('Laster strekkodebibliotek...', 'info');
+        
+        // Forsøk å rydde eksisterende skriptreferanser
+        const existingScripts = document.querySelectorAll('script[src*="quagga"]');
+        existingScripts.forEach(script => script.remove());
+        
+        // Merk: Bruker Quagga2 som er en forbedret versjon
         const script = document.createElement('script');
-        script.src = 'https://cdn.jsdelivr.net/npm/@ericblade/quagga2/dist/quagga.min.js';
+        script.src = 'https://cdn.jsdelivr.net/npm/@ericblade/quagga2@1.8.3/dist/quagga.min.js';
+        script.crossOrigin = 'anonymous';
+        
+        // Sett en timeout for å håndtere hengelåsing
+        const timeoutId = setTimeout(() => {
+            console.error('DEBUG-QUAGGA003: Tidsavbrudd ved lasting av Quagga');
+            showToast('Tidsavbrudd ved lasting av strekkodebibliotek, prøver backup-kilde...', 'warning');
+            
+            // Prøv en alternativ kilde hvis første kilde feiler
+            const backupScript = document.createElement('script');
+            backupScript.src = 'https://unpkg.com/@ericblade/quagga2@1.8.3/dist/quagga.min.js';
+            backupScript.crossOrigin = 'anonymous';
+            
+            backupScript.onload = () => {
+                console.log('DEBUG-QUAGGA004: Backup-kilde for Quagga lastet vellykket');
+                clearTimeout(backupTimeoutId);
+                resolve();
+            };
+            
+            backupScript.onerror = (err) => {
+                console.error('DEBUG-QUAGGA005: Kunne ikke laste Quagga fra backup-kilde', err);
+                showToast('Kunne ikke laste strekkodebibliotek. Prøv å laste siden på nytt.', 'error');
+                reject(new Error("Kunne ikke laste Quagga2-script fra backup-kilde"));
+            };
+            
+            document.head.appendChild(backupScript);
+            
+            // Sett en backup timeout
+            const backupTimeoutId = setTimeout(() => {
+                reject(new Error("Tidsavbrudd ved lasting av Quagga2 fra backup-kilde"));
+            }, 10000);
+        }, 10000);
         
         script.onload = () => {
+            console.log('DEBUG-QUAGGA006: Quagga lastet vellykket');
+            clearTimeout(timeoutId);
+            
+            // Verifiser at Quagga faktisk er definert etter lasting
+            if (typeof Quagga === 'undefined') {
+                console.error('DEBUG-QUAGGA007: Quagga er ikke definert etter vellykket skriptinnlasting');
+                showToast('Feil ved initialisering av strekkodebibliotek', 'error');
+                reject(new Error("Quagga er ikke definert etter skriptlasting"));
+                return;
+            }
+            
             resolve();
         };
         
         script.onerror = (err) => {
-            showToast('Kunne ikke laste strekkodebibliotek. Sjekk internettforbindelsen.', 'error');
-            reject(new Error("Kunne ikke laste Quagga2-script"));
+            console.error('DEBUG-QUAGGA008: Feil ved lasting av Quagga', err);
+            clearTimeout(timeoutId);
+            // Ikke avvis ennå, la timeout-handler prøve backup-kilden
         };
         
         document.head.appendChild(script);

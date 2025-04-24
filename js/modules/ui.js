@@ -123,6 +123,20 @@ export function showModule(module) {
  * @param {Object} details - Ytterligere detaljer om skanneren
  */
 export function updateScannerStatus(connected, details = {}) {
+    // Kontroller at DOM-elementene eksisterer før vi forsøker å manipulere dem
+    if (!scannerIndicatorEl || !scannerStatusEl) {
+        console.warn('SCANNER-STATUS-WARNING: Forsøker å oppdatere scanner-status, men DOM-elementer er ikke initialisert');
+        // Forsøk å hente elementene på nytt, i tilfelle de ikke var tilgjengelige under init
+        scannerIndicatorEl = document.getElementById('scannerIndicator');
+        scannerStatusEl = document.getElementById('scannerStatus');
+        
+        // Hvis de fortsatt ikke finnes, avbryt funksjonen
+        if (!scannerIndicatorEl || !scannerStatusEl) {
+            console.error('SCANNER-STATUS-ERROR: Kan ikke oppdatere scanner-status, DOM-elementer mangler');
+            return;
+        }
+    }
+    
     if (connected) {
         scannerIndicatorEl.classList.add('connected');
         
@@ -135,7 +149,13 @@ export function updateScannerStatus(connected, details = {}) {
             scannerStatusEl.textContent = 'Skanner: Tilkoblet';
         }
     } else {
-        scannerIndicatorEl.classList.remove('connected');
+        // Legg til sikkerhet i tilfelle classList ikke er tilgjengelig
+        if (scannerIndicatorEl.classList) {
+            scannerIndicatorEl.classList.remove('connected');
+        } else {
+            // Fallback for eldre nettlesere eller uventede situasjoner
+            scannerIndicatorEl.className = scannerIndicatorEl.className.replace(/\bconnected\b/, '');
+        }
         scannerStatusEl.textContent = 'Skanner: Ikke tilkoblet';
     }
 }

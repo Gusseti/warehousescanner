@@ -333,10 +333,44 @@ async function startPickCameraScanning() {
 
 /**
  * Håndterer skanning for plukk med utvidet feillogging
- * @param {string} barcode - Skannet strekkode
+ * @param {string|Object} barcode - Skannet strekkode
  */
 function handlePickScan(barcode) {
     console.log("PLUKKDEBUG-P100: handlePickScan() starter med strekkode:", barcode);
+    
+    // KRITISK FIX: Håndter tilfeller der barcode er et objekt
+    if (typeof barcode === 'object' && barcode !== null) {
+        console.warn("PLUKKDEBUG-P100B: Mottok objekt i stedet for streng. Konverterer til ID.");
+        
+        // Hvis objektet har ID-felt, bruk det
+        if (barcode.id) {
+            console.log(`PLUKKDEBUG-P100C: Konverterer objekt til ID: ${barcode.id}`);
+            barcode = barcode.id;
+        } else {
+            // Forsøk å finne en egnet identifikator i objektet
+            const possibleIdFields = ['productId', 'code', 'sku', 'barcode', 'ean'];
+            for (const field of possibleIdFields) {
+                if (barcode[field]) {
+                    console.log(`PLUKKDEBUG-P100D: Fant alternativ ID i felt '${field}': ${barcode[field]}`);
+                    barcode = barcode[field];
+                    break;
+                }
+            }
+            
+            // Hvis vi fortsatt har et objekt, prøv toString() eller konverter til JSON
+            if (typeof barcode === 'object') {
+                console.warn("PLUKKDEBUG-P100E: Kunne ikke finne ID-felt, bruker String()-konvertering");
+                barcode = String(barcode);
+                
+                // Hvis konverteringen ga [object Object], logg en advarsel
+                if (barcode === "[object Object]") {
+                    console.error("PLUKKFEIL-P000: Kunne ikke konvertere objekt til gyldig strekkode");
+                    showToast("Feil strekkodeformat mottatt. Kontakt systemadministrator.", "error");
+                    return;
+                }
+            }
+        }
+    }
     
     if (!barcode) {
         console.error("PLUKKFEIL-P001: Tomt strekkodeargument til handlePickScan");
