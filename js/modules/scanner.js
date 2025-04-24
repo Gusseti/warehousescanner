@@ -329,11 +329,30 @@ function performManualScan(module) {
         // Hvis vi allerede har en detektert strekkode, bruk den
         console.log(`Utfører manuell skanning for ${module} med eksisterende kode: ${lastDetectedCode}`);
         
-        // Behandle strekkoden
-        processScannedBarcode(lastDetectedCode);
+        // Lagre strekkoden før vi nullstiller den
+        const currentDetectedCode = lastDetectedCode;
         
-        // Nullstill lastDetectedCode
+        // Nå kan vi nullstille lastDetectedCode
         lastDetectedCode = null;
+        
+        // VIKTIG: Ved manuell skanning i return modus, bruk korrekt callback 
+        // istedenfor processScannedBarcode for å unngå automatisk prosessering
+        if (module === 'return') {
+            // For return-modulen, bruk spesifikk callback hvis den finnes
+            const quantityEl = document.getElementById('returnQuantity');
+            const quantity = quantityEl ? parseInt(quantityEl.value) || 1 : 1;
+            
+            if (typeof window.handleReturnScan === 'function') {
+                window.handleReturnScan(currentDetectedCode, quantity);
+            } else if (moduleCallbacks[module]) {
+                moduleCallbacks[module](currentDetectedCode, quantity);
+            } else {
+                simulateManualScan(module, currentDetectedCode, quantity);
+            }
+        } else {
+            // For pick og receive moduler, bruk standard prosessering
+            processScannedBarcode(currentDetectedCode);
+        }
         
         // Tilbakestill scan-button til normal tilstand
         const scanButton = scanButtonElements[module];
@@ -975,7 +994,14 @@ function handleCameraScanResult(result) {
                         scanButton.classList.add('ready-to-scan');
                         scanButton.classList.remove('disabled'); // Fjern disabled-klassen
                         scanButton.disabled = false; // Aktiver knappen
-                        scanButton.textContent = `Bekreft "${barcode}"${productInfo}`;
+                        
+                        // VIKTIG FIX: Begrens lengden på produktinfo i knappen
+                        let truncatedProductInfo = productInfo;
+                        if (truncatedProductInfo.length > 30) {
+                            truncatedProductInfo = truncatedProductInfo.substring(0, 27) + '...';
+                        }
+                        
+                        scanButton.textContent = `Bekreft "${barcode}"${truncatedProductInfo}`;
                         
                         // Vis en blinkende grønn kant rundt skann-området
                         if (canvasElement) {
@@ -1003,6 +1029,13 @@ function handleCameraScanResult(result) {
                 if (!isInMapping) {
                     return;
                 }
+            }
+            
+            // IKKE prosesser automatisk hvis vi er i manuell modus (vesentlig endring)
+            if (manualScanMode) {
+                // Vi lar brukeren klikke på knappen for å bekrefte skanningen
+                // så vi prosesserer ikke strekkoden automatisk her
+                return;
             }
             
             // Hvis automatisk modus, fortsett med skanning som før
@@ -1042,88 +1075,6 @@ function handleCameraScanResult(result) {
                 }, 2000);
             }
         }
-    }
-}
-
-/**
- * Tegner en deteksjons-boks rundt en identifisert strekkode (før bekreftelse)
- * @param {CanvasRenderingContext2D} ctx - Canvas-kontekst
- * @param {Array} box - Koordinater for strekkoden
- */
-function drawDetectedBox(ctx, box) {
-    try {
-        if (!ctx || !box || box.length < 4) return;
-        
-        ctx.clearRect(0, 0, canvasElement.width, canvasElement.height);
-        
-        // Tegn fylt oransje boks med gjennomskinnelighet (ubekreftet)
-        ctx.fillStyle = 'rgba(255, 165, 0, 0.2)';
-        ctx.beginPath();
-        ctx.moveTo(box[0][0], box[0][1]);
-        for (let i = 1; i < box.length; i++) {
-            ctx.lineTo(box[i][0], box[i][1]);
-        }
-        ctx.closePath();
-        ctx.fill();
-        
-        // Tegn kant
-        ctx.strokeStyle = 'rgb(255, 165, 0)';
-        ctx.lineWidth = 3;
-        ctx.beginPath();
-        ctx.moveTo(box[0][0], box[0][1]);
-        for (let i = 1; i < box.length; i++) {
-            ctx.lineTo(box[i][0], box[i][1]);
-        }
-        ctx.closePath();
-        ctx.stroke();
-        
-        // Tegn strekkode-symbol
-        const centerX = (box[0][0] + box[2][0]) / 2;
-        const centerY = (box[0][1] + box[2][1]) / 2;
-        
-        ctx.strokeStyle = 'white';
-        ctx.lineWidth = 2;
-        
-        // Tegn barcode-symbol
-        const barWidth = 4;
-        const barHeight = 15;
-        const startX = centerX - 15;
-        
-        for (let i = 0; i < 8; i++) {
-            const x = startX + i * barWidth;
-            const height = (i % 3 === 0) ? barHeight : barHeight * 0.7;
-            ctx.beginPath();
-            ctx.moveTo(x, centerY - height/2);
-            ctx.lineTo(x, centerY + height/2);
-            ctx.stroke();
-        }
-    } catch (error) {
-        // Ignorer feil ved tegning av deteksjons-boks
-    }
-}
-
-/**
- * Spiller en lyd for å indikere at en strekkode er oppdaget (men ikke skannet)
- */
-function playDetectionSound() {
-    try {
-        const audioContext = new (window.AudioContext || window.webkitAudioContext)();
-        const oscillator = audioContext.createOscillator();
-        const gainNode = audioContext.createGain();
-        
-        oscillator.type = 'sine';
-        oscillator.frequency.value = 1200; // Middels frekvens for deteksjoner
-        gainNode.gain.value = 0.05; // Lavere volum enn for suksess
-        
-        oscillator.connect(gainNode);
-        gainNode.connect(audioContext.destination);
-        
-        oscillator.start();
-        setTimeout(() => {
-            oscillator.stop();
-        }, 100); // Kortere lyd enn success-lyden
-    } catch (error) {
-        // Ignorer feil
     }
 }
 
@@ -1270,6 +1221,64 @@ function drawSuccessBox(ctx, box) {
         ctx.stroke();
     } catch (error) {
         // Ignorer feil ved tegning av suksess-boks
+    }
+}
+
+/**
+ * Tegner en deteksjons-boks rundt en identifisert strekkode (før bekreftelse)
+ * @param {CanvasRenderingContext2D} ctx - Canvas-kontekst
+ * @param {Array} box - Koordinater for strekkoden
+ */
+function drawDetectedBox(ctx, box) {
+    try {
+        if (!ctx || !box || box.length < 4) return;
+        
+        ctx.clearRect(0, 0, canvasElement.width, canvasElement.height);
+        
+        // Tegn fylt oransje boks med gjennomskinnelighet (ubekreftet)
+        ctx.fillStyle = 'rgba(255, 165, 0, 0.2)';
+        ctx.beginPath();
+        ctx.moveTo(box[0][0], box[0][1]);
+        for (let i = 1; i < box.length; i++) {
+            ctx.lineTo(box[i][0], box[i][1]);
+        }
+        ctx.closePath();
+        ctx.fill();
+        
+        // Tegn kant
+        ctx.strokeStyle = 'rgb(255, 165, 0)';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.moveTo(box[0][0], box[0][1]);
+        for (let i = 1; i < box.length; i++) {
+            ctx.lineTo(box[i][0], box[i][1]);
+        }
+        ctx.closePath();
+        ctx.stroke();
+        
+        // Tegn strekkode-symbol
+        const centerX = (box[0][0] + box[2][0]) / 2;
+        const centerY = (box[0][1] + box[2][1]) / 2;
+        
+        ctx.strokeStyle = 'white';
+        ctx.lineWidth = 2;
+        
+        // Tegn barcode-symbol
+        const barWidth = 4;
+        const barHeight = 15;
+        const startX = centerX - 15;
+        
+        for (let i = 0; i < 8; i++) {
+            const x = startX + i * barWidth;
+            const height = (i % 3 === 0) ? barHeight : barHeight * 0.7;
+            ctx.beginPath();
+            ctx.moveTo(x, centerY - height/2);
+            ctx.lineTo(x, centerY + height/2);
+            ctx.stroke();
+        }
+    } catch (error) {
+        // Ignorer feil ved tegning av deteksjons-boks
+        console.error("Feil ved tegning av deteksjons-boks:", error);
     }
 }
 
@@ -1866,6 +1875,43 @@ function hideBarcodeStatusMessage() {
     const statusEl = document.querySelector('.barcode-status');
     if (statusEl) {
         statusEl.classList.remove('visible');
+    }
+}
+
+/**
+ * Spiller en lyd for å gi tilbakemelding ved vellykket deteksjon av strekkode
+ */
+function playDetectionSound() {
+    try {
+        // Forsøk å bruke AudioContext for mest pålitelig lyd på tvers av enheter
+        const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        const oscillator = audioContext.createOscillator();
+        const gainNode = audioContext.createGain();
+        
+        oscillator.type = 'sine';
+        oscillator.frequency.value = 880; // A5 - en kort, klar tone
+        gainNode.gain.value = 0.1;
+        
+        oscillator.connect(gainNode);
+        gainNode.connect(audioContext.destination);
+        
+        oscillator.start();
+        
+        // Spill en kort, oppadgående tone
+        oscillator.frequency.exponentialRampToValueAtTime(1200, audioContext.currentTime + 0.1);
+        
+        setTimeout(() => {
+            oscillator.stop();
+        }, 150);
+    } catch (error) {
+        // Fallback til å vibrere enheten hvis tilgjengelig
+        try {
+            if (navigator.vibrate) {
+                navigator.vibrate(50);
+            }
+        } catch (e) {
+            // Ignorer feil her
+        }
     }
 }
 
