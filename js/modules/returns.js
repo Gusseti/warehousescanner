@@ -3,7 +3,7 @@ import { appState } from '../app.js';
 import { showToast } from './utils.js';
 import { saveListsToStorage } from './storage.js';
 import { updateScannerStatus } from './ui.js';
-import { initCameraScanner, startCameraScanning, stopCameraScanning, connectToBluetoothScanner } from './scanner.js';
+import { initCameraScanner, startCameraScanning, stopCameraScanning, bluetoothScanner } from './scanner.js';
 import { exportList, exportWithFormat, exportToPDF } from './import-export.js';
 import { openWeightModal } from './weights.js';
 import { handleScannedBarcode } from './barcode-handler.js';
@@ -260,7 +260,7 @@ export function updateReturnsUI() {
 async function connectToBluetoothReturnScanner() {
     try {
         showToast('Kobler til Bluetooth-skanner...', 'info');
-        await connectToBluetoothScanner();
+        await bluetoothScanner.connect();
     } catch (error) {
         showToast(error.message, 'error');
     }

@@ -1,8 +1,6 @@
 // scanner.js - Forbedret versjon med synlige feilmeldinger for brukeren
 
 // State variabler
-let bluetoothDevice = null;
-let isBluetoothConnected = false;
 let cameraStream = null;
 let isScanning = false;
 let currentCameraIndex = 0;
@@ -12,6 +10,7 @@ let scanCooldown = false;
 
 import { appState } from '../app.js';
 import { showToast } from './utils.js';
+import * as bluetoothScanner from './bluetooth-scanner.js';
 
 // DOM-elementer
 let videoElement = null;
@@ -36,9 +35,6 @@ let moduleCallbacks = {
 let onScanCallback = null;
 let scannerStatusCallback = null;
 
-// ========== BLUETOOTH SKANNER FUNKSJONALITET ==========
-
-
 /**
  * Registrerer en callback-funksjon for en spesifikk modul
  * @param {string} module - Modulnavn ('pick', 'receive', 'return')
@@ -52,85 +48,6 @@ function registerModuleCallback(module, callback) {
     
     moduleCallbacks[module] = callback;
     console.log(`Registrert callback for modul ${module}: ${callback.name || 'anonym funksjon'}`);
-}
-
-/**
- * Kobler til en Bluetooth-skanner
- * @returns {Promise} Løftebasert resultat av tilkoblingsforsøket
- */
-async function connectToBluetoothScanner() {
-    if (!navigator.bluetooth) {
-        showToast('Bluetooth støttes ikke i denne nettleseren. Vennligst bruk Chrome eller Edge.', 'error');
-        throw new Error('Bluetooth støttes ikke i denne nettleseren.');
-    }
-    
-    try {
-        bluetoothDevice = await navigator.bluetooth.requestDevice({
-            // Filtrer etter enheter som støtter serieport-profil eller HID
-            acceptAllDevices: true, 
-            optionalServices: ['battery_service', '0000ffe0-0000-1000-8000-00805f9b34fb']
-        });
-        
-        bluetoothDevice.addEventListener('gattserverdisconnected', onBluetoothDisconnected);
-        
-        const server = await bluetoothDevice.gatt.connect();
-        isBluetoothConnected = true;
-        
-        try {
-            const service = await server.getPrimaryService('0000ffe0-0000-1000-8000-00805f9b34fb');
-            const characteristic = await service.getCharacteristic('0000ffe1-0000-1000-8000-00805f9b34fb');
-            
-            // Slå på notifikasjoner for å motta data
-            await characteristic.startNotifications();
-            characteristic.addEventListener('characteristicvaluechanged', handleBluetoothScannerData);
-            
-            // Informer om statusendring
-            if (scannerStatusCallback) {
-                scannerStatusCallback(true, { deviceName: bluetoothDevice.name || 'Ukjent enhet', type: 'bluetooth' });
-            }
-            
-            return {
-                success: true,
-                deviceName: bluetoothDevice.name || 'Ukjent enhet'
-            };
-        } catch (error) {
-            showToast(`Kunne ikke koble til skanner-tjeneste: ${error.message}`, 'error');
-            isBluetoothConnected = false;
-            throw new Error('Kunne ikke koble til skanner-tjeneste. Sjekk at skanneren er på og støtter Bluetooth LE.');
-        }
-        
-    } catch (error) {
-        showToast(`Bluetooth-tilkobling feilet: ${error.message}`, 'error');
-        throw new Error('Bluetooth-tilkobling avbrutt eller feilet.');
-    }
-}
-
-/**
- * Håndterer frakobling av Bluetooth-skanner
- */
-function onBluetoothDisconnected() {
-    isBluetoothConnected = false;
-    
-    // Informer om statusendring
-    if (scannerStatusCallback) {
-        scannerStatusCallback(false);
-    }
-    
-    showToast('Bluetooth-skanner frakoblet', 'warning');
-}
-
-/**
- * Håndterer data mottatt fra Bluetooth-skanner
- * @param {Event} event - Event-objekt fra Bluetooth-karakteristikk
- */
-function handleBluetoothScannerData(event) {
-    const value = event.target.value;
-    const textDecoder = new TextDecoder('utf-8');
-    const barcode = textDecoder.decode(value).trim();
-    
-    if (barcode) {
-        processScannedBarcode(barcode);
-    }
 }
 
 // ========== KAMERA SKANNER FUNKSJONALITET ==========
@@ -159,6 +76,9 @@ function initCameraScanner(videoEl, canvasEl, overlayEl, callback, statusCallbac
     
     // Lagre status callback
     scannerStatusCallback = statusCallback;
+    
+    // Også sett bluetooth scanner status callback
+    bluetoothScanner.setBluetoothStatusCallback(statusCallback);
     
     // List opp tilgjengelige kameraer
     checkAvailableCameras().then(cameras => {
@@ -1522,7 +1442,7 @@ function validateBarcode(barcode) {
  * Sentralisert funksjon for håndtering av skannede strekkoder
  * @param {string} barcode - Skannede strekkode
  */
-function processScannedBarcode(barcode) {
+export function processScannedBarcode(barcode) {
     console.log("PROSESS-DEBUG-P100: processScannedBarcode starter med", barcode);
     
     // Sjekk om barcode er et objekt og konverter til streng
@@ -1806,7 +1726,7 @@ function playErrorSound() {
  * Får bakgrunnen til å blinke i en bestemt farge
  * @param {string} color - Farge å blinke (f.eks. 'red', 'green')
  */
-function blinkBackground(color) {
+export function blinkBackground(color) {
     // Legg til et overlay-element hvis det ikke allerede finnes
     let overlay = document.getElementById('blinkOverlay');
     if (!overlay) {
@@ -1926,14 +1846,11 @@ window.scannerDebug = {
 
 // Eksporter funksjoner
 export {
-    connectToBluetoothScanner,
     initCameraScanner,
     startCameraScanning,
     stopCameraScanning,
     switchCamera,
-    isBluetoothConnected,
+    bluetoothScanner,
     isScanning,
-    processScannedBarcode,
-    blinkBackground,  // Eksporterer blinkBackground-funksjonen
-    playErrorSound    // Eksporterer playErrorSound-funksjonen
+    playErrorSound
 };
