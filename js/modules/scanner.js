@@ -285,14 +285,18 @@ function createScanButton(module) {
     
     // Opprett knapp
     const button = document.createElement('button');
-    button.className = 'scan-button';
+    button.className = 'scan-button disabled'; // Start med disabled tilstand
     button.dataset.module = module;
-    button.textContent = 'Utfør skann';
-    button.title = 'Trykk for å skanne strekkoden i kameravisningen';
+    button.textContent = 'Venter på strekkode...';
+    button.title = 'Vent til en strekkode er oppdaget';
+    button.disabled = true; // Gjør knappen deaktivert ved oppstart
     
-    // Legg til clickhandler
+    // Legg til clickhandler som kun fungerer når knappen er klar
     button.addEventListener('click', () => {
-        performManualScan(module);
+        // Sjekk om knappen er i ready-to-scan tilstand
+        if (button.classList.contains('ready-to-scan')) {
+            performManualScan(module);
+        }
     });
     
     // Finn passende plasseringssted i containeren
@@ -871,30 +875,23 @@ function handleCameraScanResult(result) {
             return;
         }
         
-        // Valider at dette er en strekkode og ikke bare et tall
+        // Sjekk om strekkoden finnes i barcodeMapping (brukes for å finne varenummer)
+        const isValidMappedBarcode = appState.barcodeMapping && 
+                                    (barcode in appState.barcodeMapping);
+        
+        // Valider at dette er en strekkode
         if (validateBarcode(barcode)) {
-            // Oppdater sist oppdagede strekkode
-            lastDetectedCode = barcode;
-            lastScannedCode = barcode;
-            
             // Marker strekkoden på canvas
             if (canvasElement && result.box) {
                 const ctx = canvasElement.getContext('2d');
                 drawDetectedBox(ctx, result.box);
             }
             
-            // Vis til brukeren at en strekkode er oppdaget
-            const detectedToastMsg = `Strekkode oppdaget: ${barcode}`;
-            showToast(detectedToastMsg, 'info', 2000);
-            
-            // Spill lyd for å indikere at strekkode er funnet
-            playDetectionSound();
-            
-            // Sjekk om strekkoden finnes i barcode mapping og hent eventuelt varenummer
+            // Hent eventuelt varenummer fra barcodeMapping
             let itemId = barcode;
             let productInfo = "";
             
-            if (appState.barcodeMapping && appState.barcodeMapping[barcode]) {
+            if (isValidMappedBarcode) {
                 const mappedValue = appState.barcodeMapping[barcode];
                 
                 // Sjekk om mappedValue er et objekt eller en streng
@@ -910,52 +907,62 @@ function handleCameraScanResult(result) {
                     productInfo = ` (Varenr: ${itemId})`;
                     console.log(`DEBUG-SCAN007: Strekkode ${barcode} mappet til varenummer ${itemId}`);
                 }
+            } else {
+                // Ingen mapping funnet, bruk strekkoden direkte
+                productInfo = ` (Ingen varenummer funnet)`;
+                console.log(`DEBUG-SCAN008: Strekkode ${barcode} ikke funnet i mapping`);
             }
             
-            // Vis status direkte i kameravisningen med eventuelt varenummer
+            // VIKTIG ENDRING: Oppdater variablene som sporer gjenkjente strekkoder
+            // uansett om strekkoden er i mapping eller ikke
+            lastDetectedCode = barcode;
+            lastScannedCode = barcode;
+            
+            // Vis status direkte i kameravisningen
             showBarcodeStatusMessage(`Strekkode gjenkjent: ${barcode}${productInfo}`, true);
+            
+            // Vis til brukeren at en strekkode er oppdaget
+            const detectedToastMsg = `Strekkode oppdaget: ${barcode}`;
+            showToast(detectedToastMsg, 'info', 2000);
+            
+            // Spill lyd for å indikere at strekkode er funnet
+            playDetectionSound();
             
             // Hvis vi er i kontinuerlig skannemodus, prosesser strekkoden automatisk
             if (window.continuousScanning) {
                 console.log(`DEBUG-SCAN006: Auto-prosesserer strekkode ${barcode} i kontinuerlig modus`);
                 
-                // VIKTIG: Sjekk om strekkoden finnes i mappingen før den automatisk prosesseres
-                if (appState.barcodeMapping && appState.barcodeMapping[barcode]) {
-                    processScannedBarcode(barcode);
+                processScannedBarcode(barcode);
+                
+                // Tilbakestill kontinuerlig skannemodus
+                window.continuousScanning = false;
+                
+                // Tilbakestill scan-button til normal tilstand
+                const moduleType = getModuleType(appState.currentModule);
+                const scanButton = scanButtonElements[moduleType];
+                if (scanButton) {
+                    scanButton.classList.remove('scanning-active');
+                    scanButton.textContent = 'Utfør skann';
                     
-                    // Tilbakestill kontinuerlig skannemodus
-                    window.continuousScanning = false;
-                    
-                    // Tilbakestill scan-button til normal tilstand
-                    const moduleType = getModuleType(appState.currentModule);
-                    const scanButton = scanButtonElements[moduleType];
-                    if (scanButton) {
-                        scanButton.classList.remove('scanning-active');
-                        scanButton.textContent = 'Utfør skann';
-                        
-                        // Gjenopprett original klikkhandler
-                        scanButton.onclick = () => {
-                            performManualScan(moduleType);
-                        };
-                    }
-                    
-                    // Sett cooldown for å unngå gjentatte skanninger
-                    scanCooldown = true;
-                    
-                    // Start skanning igjen etter cooldown
-                    setTimeout(() => {
-                        scanCooldown = false;
-                    }, 2000); // 2 sekund cooldown mellom auto-skanninger
-                } else {
-                    console.log(`DEBUG-SCAN006B: Strekkode ${barcode} ikke funnet i mapping, venter på manuell bekreftelse`);
-                    // For ukjente strekkoder, behold kontinuerlig modus aktiv men gi brukeren info
-                    showToast(`Strekkode ${barcode} ikke funnet i databasen. Trykk "Bekreft" for å legge til.`, 'warning');
+                    // Gjenopprett original klikkhandler
+                    scanButton.onclick = () => {
+                        performManualScan(moduleType);
+                    };
                 }
+                
+                // Sett cooldown for å unngå gjentatte skanninger
+                scanCooldown = true;
+                
+                // Start skanning igjen etter cooldown
+                setTimeout(() => {
+                    scanCooldown = false;
+                }, 2000); // 2 sekund cooldown mellom auto-skanninger
                 
                 return;
             }
             
-            // Hvis vi er i manuell skannemodus, vent på at brukeren trykker på knappen
+            // VIKTIG ENDRING: Vis alltid lastDetectedCode i knappen for manuell bekreftelse,
+            // uavhengig av om den finnes i barcodeMapping eller ikke
             if (manualScanMode) {
                 const moduleType = getModuleType(appState.currentModule);
                 const scanButton = scanButtonElements[moduleType];
@@ -963,6 +970,8 @@ function handleCameraScanResult(result) {
                 if (scanButton) {
                     // Gjør knappen mer fremtredende og vis både strekkode og varenummer
                     scanButton.classList.add('ready-to-scan');
+                    scanButton.classList.remove('disabled'); // Fjern disabled-klassen
+                    scanButton.disabled = false; // Aktiver knappen
                     scanButton.textContent = `Bekreft "${barcode}"${productInfo}`;
                     
                     // Vis en blinkende grønn kant rundt skann-området
@@ -1006,8 +1015,14 @@ function handleCameraScanResult(result) {
                 
             }, 1000); // 1 sekund cooldown mellom skanninger
         } else {
-            // Viser melding om at strekkoden ikke ble gjenkjent/validert
-            showBarcodeStatusMessage("Strekkode ikke gjenkjent. Prøv igjen.", false);
+            // Viser melding om at strekkoden ikke ble gjenkjent/validert, men kun ved intervaller
+            if (!window.invalidBarcodeDebounce) {
+                showBarcodeStatusMessage("Strekkode ikke gjenkjent. Prøv igjen.", false);
+                window.invalidBarcodeDebounce = true;
+                setTimeout(() => {
+                    window.invalidBarcodeDebounce = false;
+                }, 2000);
+            }
         }
     }
 }
@@ -1360,82 +1375,122 @@ function validateBarcode(barcode) {
     
     console.log(`DEBUG-VALIDATE: Sjekker strekkode ${barcode}`);
     
-    // VIKTIG: Sjekk om strekkoden finnes direkte som nøkkel i barcodes.json
+    // FORBEDRING: Fjern eventuelle ledetegn som ofte legges til av skannere
+    const cleanedBarcode = barcode.replace(/^\w+:/i, ''); // Fjerner prefiks som "EAN:" eller "UPC:"
+    
+    // VIKTIG: Sjekk om strekkoden finnes direkte i barcodeMapping
     if (appState.barcodeMapping) {
         // Sjekk om strekkoden finnes direkte som nøkkel i objektet
-        if (Object.keys(appState.barcodeMapping).includes(barcode)) {
+        if (barcode in appState.barcodeMapping) {
             console.log(`DEBUG-VALIDATE: Strekkode ${barcode} finnes direkte i barcodeMapping`);
             return true;
         }
         
-        // Sjekk om strekkoden finnes som verdien til en ID i appState.barcodeMapping
-        if (barcode in appState.barcodeMapping) {
-            console.log(`DEBUG-VALIDATE: Strekkode ${barcode} matcher en nøkkel i barcodeMapping`);
+        // Sjekk med renset strekkode om nødvendig
+        if (barcode !== cleanedBarcode && cleanedBarcode in appState.barcodeMapping) {
+            console.log(`DEBUG-VALIDATE: Renset strekkode ${cleanedBarcode} finnes i barcodeMapping`);
             return true;
         }
-    }
-    
-    // Hvis vi har den aktive modulen og dens liste, sjekk om varenummeret finnes direkte
-    if (appState.currentModule) {
-        let items = [];
         
-        switch (appState.currentModule) {
-            case 'picking':
-                items = appState.pickListItems || [];
-                break;
-            case 'receiving':
-                items = appState.receiveListItems || [];
-                break;
-            case 'returns':
-                items = appState.returnListItems || [];
-                break;
+        // NYE FORBEDREDE SJEKKER FOR EAN-13 KODER
+        
+        // EAN-13 validering med kontrollsum-sjekk
+        if (/^\d{13}$/.test(barcode)) {
+            console.log(`DEBUG-VALIDATE: Sjekker EAN-13 strekkode: ${barcode}`);
+            
+            // Sjekk kontrollsum for EAN-13
+            const checkDigit = parseInt(barcode[12]);
+            let sum = 0;
+            
+            for (let i = 0; i < 12; i++) {
+                const digit = parseInt(barcode[i]);
+                sum += (i % 2 === 0) ? digit : digit * 3;
+            }
+            
+            const calculatedCheckDigit = (10 - (sum % 10)) % 10;
+            const isValidChecksum = (calculatedCheckDigit === checkDigit);
+            
+            if (isValidChecksum) {
+                console.log(`DEBUG-VALIDATE: EAN-13 strekkode ${barcode} har gyldig kontrollsum`);
+                
+                // Sjekk direkte mot alle strekkoder for å finne numeriske matcher
+                const allBarcodes = Object.keys(appState.barcodeMapping);
+                
+                // Sjekk for direkte prefiks-match (første 12 siffer)
+                const prefix = barcode.substring(0, 12);
+                const prefixMatches = allBarcodes.filter(key => key.startsWith(prefix));
+                
+                if (prefixMatches.length > 0) {
+                    console.log(`DEBUG-VALIDATE: EAN-13 strekkode ${barcode} matcher prefiks med: ${prefixMatches[0]}`);
+                    return true;
+                }
+                
+                // Sjekk om barcode finnes delvis i noen nøkler (håndterer tilfeller med forskjellige formater)
+                for (const key of allBarcodes) {
+                    if (key.includes(barcode) || barcode.includes(key)) {
+                        console.log(`DEBUG-VALIDATE: EAN-13 strekkode ${barcode} har delvis match med ${key}`);
+                        return true;
+                    }
+                }
+                
+                // For produktkoder, godkjenn alle EAN-13 med gyldig kontrollsum
+                // Endre dette hvis du vil stramme inn valideringen
+                return true;
+            }
         }
         
-        // Sjekk om barcode finnes som varenummer (id) i listen
-        const itemExists = items.some(item => item.id === barcode);
-        if (itemExists) {
-            console.log(`DEBUG-VALIDATE: Strekkode ${barcode} finnes som vareid i ${appState.currentModule}-listen`);
-            return true;
+        // Sjekk om det er en EAN-13 uten ledende null
+        if (/^\d{12}$/.test(barcode)) {
+            // Forsøk å legge til ledende null
+            const ean13 = '0' + barcode;
+            if (ean13 in appState.barcodeMapping) {
+                console.log(`DEBUG-VALIDATE: EAN-13 strekkode ${ean13} (med ledende null) finnes i mapping`);
+                return true;
+            }
+        }
+        
+        // For strekkoder med bare tall, tillat forskjellige lengder hvis det er en delvis match
+        if (/^\d+$/.test(barcode) && barcode.length >= 4) { // Redusert minimumslengde til 4 siffer
+            const allBarcodes = Object.keys(appState.barcodeMapping);
+            
+            // Sjekk om strekkoden er en del av en annen strekkode i mappingen
+            for (const key of allBarcodes) {
+                if (/^\d+$/.test(key)) { // Sjekk bare mot numeriske strekkoder
+                    if (key.includes(barcode) || barcode.includes(key)) {
+                        console.log(`DEBUG-VALIDATE: Strekkode ${barcode} er en delvis match med ${key}`);
+                        return true;
+                    }
+                }
+            }
+            
+            // NY FORBEDRING: For numeriske strekkoder på minst 8 siffer, godta dem som gyldige
+            // selv om de ikke er i mapping (sannsynligvis en gyldig produktkode)
+            if (barcode.length >= 8) {
+                console.log(`DEBUG-VALIDATE: Aksepterer numerisk strekkode ${barcode} (lengde=${barcode.length}) som gyldig format`);
+                return true;
+            }
         }
     }
     
-    // Hvis kontinuerlig skanning er aktivert, kreves match i barcodes.json
-    if (window.continuousScanning) {
-        console.log(`DEBUG-VALIDATE: Kontinuerlig skanning aktiv, strekkode ${barcode} ble ikke funnet`);
-        return false;
-    }
-    
-    // Sjekk for kjente strekkodeformater - brukes bare når ikke i kontinuerlig skanning
+    // Standard validering av strekkodeformater
     const isEAN13 = /^\d{13}$/.test(barcode);
     const isEAN8 = /^\d{8}$/.test(barcode);
     const isUPCA = /^\d{12}$/.test(barcode);
     const isCode128 = /^[A-Z0-9\-\.$/+%]{6,}$/.test(barcode);
     
+    // FORBEDRING: Legg til aksept for rene numeriske koder med minst 8 siffer
+    const isNumeric8Plus = /^\d{8,}$/.test(barcode);
+    
     // Sjekk for interne produktkoder
-    const isInternalCode = /^\d{3}-[A-Z][A-Z0-9]+-?[A-Z0-9]*$/.test(barcode) || // 000-XX-000 format
-                         /^[A-Z]{2}\d{5}$/.test(barcode) ||                    // XX00000 format
-                         /^BP\d{5}$/.test(barcode) ||                          // BP00000 format
-                         /^[A-Z][A-Z0-9]{4,}$/.test(barcode);                 // Andre alfanumeriske koder
+    const isInternalCode = /^\d{3}-[A-Z][A-Z0-9]+-?[A-Z0-9]*$/.test(barcode) || 
+                           /^[A-Z]{2}\d{5}$/.test(barcode) ||
+                           /^BP\d{5}$/.test(barcode) ||
+                           /^[A-Z][A-Z0-9]{4,}$/.test(barcode);
     
-    // Validér EAN-13 sjekksiffer hvis strekkoden er i det formatet
-    if (isEAN13) {
-        try {
-            // EAN-13 sjekksum validering
-            let sum = 0;
-            for (let i = 0; i < 12; i++) {
-                sum += parseInt(barcode[i]) * (i % 2 === 0 ? 1 : 3);
-            }
-            const checkDigit = (10 - (sum % 10)) % 10;
-            return parseInt(barcode[12]) === checkDigit;
-        } catch (e) {
-            showToast(`Skannet strekkode (${barcode}) har ugyldig format.`, 'warning');
-            return false;
-        }
-    }
-    
-    // Hvis strekkoden har et kjent format, anta at den er gyldig
-    return isEAN8 || isUPCA || isCode128 || isInternalCode;
+    // Endelig resultat - inkluder isNumeric8Plus
+    return isEAN13 || isEAN8 || isUPCA || isCode128 || isInternalCode || isNumeric8Plus;
 }
+
 /**
  * Sentralisert funksjon for håndtering av skannede strekkoder
  * @param {string} barcode - Skannede strekkode
@@ -1469,39 +1524,73 @@ function processScannedBarcode(barcode) {
     const moduleType = getModuleType(appState.currentModule);
     const moduleCallback = moduleCallbacks[moduleType];
     
-    if (moduleCallback) {
-        console.log(`PROSESS-DEBUG-P102: Bruker modulspesifikk callback for ${moduleType}`);
+    // Sjekk om strekkoden finnes i barcode mapping
+    let itemId = barcode;
+    let productInfo = "";
+    let isValidMappedBarcode = false;
+    
+    if (appState.barcodeMapping && appState.barcodeMapping[barcode]) {
+        isValidMappedBarcode = true;
+        const mappedValue = appState.barcodeMapping[barcode];
         
-        // Sjekk om strekkoden finnes i barcode mapping
-        let itemId = barcode;
-        if (appState.barcodeMapping && appState.barcodeMapping[barcode]) {
-            const mappedValue = appState.barcodeMapping[barcode];
+        // Sjekk om mappedValue er et objekt eller en streng
+        if (typeof mappedValue === 'object' && mappedValue !== null) {
+            // Hvis det er et objekt, hent ut id-propertyen
+            itemId = mappedValue.id || barcode;
+            const description = mappedValue.description ? ` (${mappedValue.description})` : '';
+            productInfo = ` (Varenr: ${itemId}${description})`;
+            console.log(`PROSESS-DEBUG-P103: Strekkode ${barcode} mappet til varenummer ${itemId} via objekt`);
+        } else {
+            // Hvis det er en streng, bruk verdien direkte
+            itemId = mappedValue;
+            productInfo = ` (Varenr: ${itemId})`;
+            console.log(`PROSESS-DEBUG-P103: Strekkode ${barcode} mappet til varenummer ${itemId}`);
+        }
+        
+        // Prosesser modulcallback kun hvis strekkoden finnes i mapping
+        if (moduleCallback) {
+            console.log(`PROSESS-DEBUG-P102: Bruker modulspesifikk callback for ${moduleType}`);
             
-            // Sjekk om mappedValue er et objekt eller en streng
-            if (typeof mappedValue === 'object' && mappedValue !== null) {
-                // Hvis det er et objekt, hent ut id-propertyen
-                itemId = mappedValue.id || barcode;
-                console.log(`PROSESS-DEBUG-P103: Strekkode ${barcode} mappet til varenummer ${itemId} via objekt`);
-            } else {
-                // Hvis det er en streng, bruk verdien direkte
-                itemId = mappedValue;
-                console.log(`PROSESS-DEBUG-P103: Strekkode ${barcode} mappet til varenummer ${itemId}`);
+            try {
+                moduleCallback(itemId);
+                console.log(`PROSESS-DEBUG-P104: Modulspesifikk callback utført vellykket`);
+                return;
+            } catch (error) {
+                console.error(`PROSESS-FEIL-P002: Feil i modulspesifikk callback:`, error);
+                alert(`Feil ved skanningshåndtering: ${error.message}`);
             }
         }
         
-        try {
-            moduleCallback(itemId);
-            console.log(`PROSESS-DEBUG-P104: Modulspesifikk callback utført vellykket`);
-            return;
-        } catch (error) {
-            console.error(`PROSESS-FEIL-P002: Feil i modulspesifikk callback:`, error);
-            alert(`Feil ved skanningshåndtering: ${error.message}`);
+        // Fallback til standard handleScan
+        console.log(`PROSESS-DEBUG-P105: Fallback til standard handleScan for ${moduleType}`);
+        handleScan(barcode, moduleType);
+    } else {
+        // ENDRING: Ikke tillat å legge til ukjente strekkoder
+        console.log(`PROSESS-DEBUG-P103C: Strekkode ${barcode} finnes ikke i barcodeMapping`);
+        showToast(`Strekkode ${barcode} er ikke registrert i systemet. Kan ikke brukes.`, 'error');
+        
+        // Marker skanningen som mislykket med rød bakgrunn og feilmelding
+        blinkBackground('red');
+        playErrorSound();
+        showBarcodeStatusMessage(`Ukjent strekkode: ${barcode}. Ikke registrert i systemet.`, false);
+        
+        // Nullstill lastDetectedCode og gjør knappen klar for ny skanning
+        lastDetectedCode = null;
+        lastScannedCode = null;
+        
+        // Tilbakestill scan-button til normal tilstand
+        const scanButton = scanButtonElements[moduleType];
+        if (scanButton) {
+            scanButton.classList.remove('ready-to-scan');
+            scanButton.textContent = 'Utfør skann';
+        }
+        
+        // Fjern 'detected' klassen fra scan-area
+        const scanArea = document.querySelector('.scan-area');
+        if (scanArea) {
+            scanArea.classList.remove('detected');
         }
     }
-    
-    // Fallback til standard handleScan
-    console.log(`PROSESS-DEBUG-P105: Fallback til standard handleScan for ${moduleType}`);
-    handleScan(barcode, moduleType);
 }
 
 /**
