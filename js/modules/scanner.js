@@ -961,30 +961,48 @@ function handleCameraScanResult(result) {
                 return;
             }
             
-            // VIKTIG ENDRING: Vis alltid lastDetectedCode i knappen for manuell bekreftelse,
-            // uavhengig av om den finnes i barcodeMapping eller ikke
+            // VIKTIG ENDRING: Vis BARE gyldige strekkoder i knappen, ingenting annet
             if (manualScanMode) {
                 const moduleType = getModuleType(appState.currentModule);
                 const scanButton = scanButtonElements[moduleType];
                 
+                // Sjekk om strekkoden finnes i barcodeMapping
+                const isInMapping = appState.barcodeMapping && (barcode in appState.barcodeMapping);
+                
                 if (scanButton) {
-                    // Gjør knappen mer fremtredende og vis både strekkode og varenummer
-                    scanButton.classList.add('ready-to-scan');
-                    scanButton.classList.remove('disabled'); // Fjern disabled-klassen
-                    scanButton.disabled = false; // Aktiver knappen
-                    scanButton.textContent = `Bekreft "${barcode}"${productInfo}`;
-                    
-                    // Vis en blinkende grønn kant rundt skann-området
-                    if (canvasElement) {
-                        const scanArea = document.querySelector('.scan-area');
-                        if (scanArea) {
-                            scanArea.classList.add('detected');
+                    if (isInMapping) {
+                        // Gjør knappen mer fremtredende og vis både strekkode og varenummer
+                        scanButton.classList.add('ready-to-scan');
+                        scanButton.classList.remove('disabled'); // Fjern disabled-klassen
+                        scanButton.disabled = false; // Aktiver knappen
+                        scanButton.textContent = `Bekreft "${barcode}"${productInfo}`;
+                        
+                        // Vis en blinkende grønn kant rundt skann-området
+                        if (canvasElement) {
+                            const scanArea = document.querySelector('.scan-area');
+                            if (scanArea) {
+                                scanArea.classList.add('detected');
+                            }
                         }
+                    } else {
+                        // Strekkoden finnes ikke i mapping - IKKE vis strekkoden på knappen
+                        scanButton.classList.remove('ready-to-scan');
+                        scanButton.classList.add('disabled');
+                        scanButton.disabled = true;
+                        scanButton.textContent = 'Venter på gyldig strekkode...';
+                        
+                        // Vis feilmelding i status (ikke i knappen)
+                        showBarcodeStatusMessage(`Ukjent strekkode: ${barcode}. Ikke i system.`, false);
+                        
+                        // Spill feil-lyd
+                        playErrorSound();
                     }
                 }
                 
-                // Ikke prosesser videre - vent på manuell bekreftelse
-                return;
+                // Ikke prosesser videre med ugyldige strekkoder - vent på en gyldig
+                if (!isInMapping) {
+                    return;
+                }
             }
             
             // Hvis automatisk modus, fortsett med skanning som før

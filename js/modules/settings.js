@@ -107,41 +107,91 @@ function setupSettingsEventListeners() {
     // Last applikasjonen på nytt-knapp
     const forceRefreshBtn = document.getElementById('forceRefreshBtn');
     if (forceRefreshBtn) {
-        forceRefreshBtn.addEventListener('click', function() {
+        forceRefreshBtn.addEventListener('click', async function() {
             // Vis en bekreftelsesmelding
-            if (confirm('Dette vil laste applikasjonen på nytt og tømme cache. Vil du fortsette?')) {
+            if (confirm('Dette vil slette ALLE applikasjonsdata, tømme cache og laste applikasjonen helt på nytt. Alt må settes opp på nytt. Vil du fortsette?')) {
                 try {
-                    showToast('Tømmer cache og laster applikasjonen på nytt...', 'info');
+                    showToast('Sletter alle data og laster applikasjonen på nytt...', 'warning');
+                    
+                    // Tøm absolutt all lagring
+                    const storageTypesToClear = [
+                        localStorage,
+                        sessionStorage
+                    ];
+                    
+                    // Tøm localStorage og sessionStorage
+                    storageTypesToClear.forEach(storage => {
+                        try {
+                            storage.clear();
+                            console.log(`Slettet all ${storage === localStorage ? 'localStorage' : 'sessionStorage'}`);
+                        } catch (e) {
+                            console.error(`Kunne ikke slette ${storage === localStorage ? 'localStorage' : 'sessionStorage'}:`, e);
+                        }
+                    });
+                    
+                    // Slett IndexedDB-databaser hvis de finnes
+                    if (window.indexedDB) {
+                        const databases = indexedDB.databases ? await indexedDB.databases() : [];
+                        for (const db of databases) {
+                            try {
+                                console.log(`Sletter IndexedDB-database: ${db.name}`);
+                                indexedDB.deleteDatabase(db.name);
+                            } catch (e) {
+                                console.error(`Kunne ikke slette IndexedDB-database ${db.name}:`, e);
+                            }
+                        }
+                    }
                     
                     // Tøm Service Worker cache hvis tilgjengelig
                     if ('caches' in window) {
-                        caches.keys().then(cacheNames => {
-                            return Promise.all(
-                                cacheNames.map(cacheName => {
-                                    return caches.delete(cacheName);
-                                })
-                            );
-                        });
+                        try {
+                            const cacheKeys = await caches.keys();
+                            for (const cacheName of cacheKeys) {
+                                console.log(`Sletter cache: ${cacheName}`);
+                                await caches.delete(cacheName);
+                            }
+                            console.log('Alle cacher er slettet');
+                        } catch (e) {
+                            console.error('Kunne ikke slette cacher:', e);
+                        }
                     }
                     
                     // Avregistrer service worker
                     if ('serviceWorker' in navigator) {
-                        navigator.serviceWorker.getRegistrations().then(registrations => {
+                        try {
+                            const registrations = await navigator.serviceWorker.getRegistrations();
                             for (let registration of registrations) {
-                                registration.unregister();
+                                console.log('Avregistrerer Service Worker');
+                                await registration.unregister();
                             }
-                        });
+                            console.log('Alle Service Workers er avregistrert');
+                        } catch (e) {
+                            console.error('Kunne ikke avregistrere Service Workers:', e);
+                        }
+                    }
+                    
+                    // Logg ut brukeren hvis innlogget
+                    if (window.currentUserData) {
+                        console.log('Logger ut brukeren');
+                        window.currentUserData = null;
                     }
                     
                     // Vent litt så toast-meldingen vises
                     setTimeout(() => {
-                        // Bruk spesielle flagg for å tvinge full reload uten cache
-                        window.location.href = window.location.href.split('?')[0] + 
-                            '?forcereload=' + Date.now();
-                    }, 1000);
+                        // Bruk spesielle flagg for å tvinge full reload og nullstilling
+                        const resetParams = new URLSearchParams({
+                            forcereload: Date.now(),
+                            fullreset: 'true',
+                            purge: 'all'
+                        });
+                        
+                        // Bygg URL med reset-parametre og redirect
+                        const baseUrl = window.location.href.split('?')[0];
+                        window.location.href = `${baseUrl}?${resetParams.toString()}`;
+                    }, 1500);
                     
                 } catch (error) {
-                    console.error('Feil ved oppdatering:', error);
+                    console.error('Feil ved total nullstilling:', error);
                     // Hvis det skjer en feil, prøv å laste siden på nytt uansett
                     window.location.reload(true);
                 }
