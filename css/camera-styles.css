@@ -135,14 +135,57 @@
     transform: translateY(1px);
 }
 
+/* Stiler for scan-button når den er klar til skanning */
+.scan-button.ready-to-scan {
+    background-color: #ffae00;
+    color: white;
+    animation: pulse-button 1.5s infinite;
+    font-weight: bold;
+    box-shadow: 0 0 15px rgba(255, 174, 0, 0.7);
+}
+
+.scan-button.ready-to-scan:hover {
+    background-color: #ff9500;
+}
+
+@keyframes pulse-button {
+    0% {
+        transform: scale(1);
+    }
+    50% {
+        transform: scale(1.05);
+    }
+    100% {
+        transform: scale(1);
+    }
+}
+
 /* Sticky kameraskanner for mobil/tablet */
 .camera-scanner-container {
-    margin: 1rem 0;
-    padding: 1rem;
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 1000;
+    width: 100%;
+    max-width: 100%;
+    margin: 0;
+    padding: 10px;
     background-color: var(--bg-card);
-    border-radius: 8px;
+    border-radius: 0 0 12px 12px;
     border: 1px solid var(--primary-light);
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+    animation: slide-down 0.3s ease-out;
     transition: background-color 0.3s ease;
+    /* Redusert høyde for å ikke dekke hele skjermen */
+    max-height: 50vh;
+    overflow: hidden;
+}
+
+/* Reduser størrelsen på kamera-wrapper for å passe i mindre popup */
+.camera-scanner-container .camera-wrapper {
+    height: 250px;
 }
 
 /* Når kameraet er i sticky-modus */
@@ -178,6 +221,25 @@
     height: 250px;
 }
 
+/* Scan area med deteksjon */
+.scan-area.detected {
+    border-color: #ffae00;
+    box-shadow: 0 0 20px rgba(255, 174, 0, 0.5);
+    animation: pulse-area 1.5s infinite;
+}
+
+@keyframes pulse-area {
+    0% {
+        box-shadow: 0 0 10px rgba(255, 174, 0, 0.5);
+    }
+    50% {
+        box-shadow: 0 0 20px rgba(255, 174, 0, 0.8);
+    }
+    100% {
+        box-shadow: 0 0 10px rgba(255, 174, 0, 0.5);
+    }
+}
+
 /* Animasjoner */
 @keyframes scan {
     0% { top: 0; }
@@ -197,6 +259,15 @@
     }
 }
 
+@keyframes slide-down {
+    from {
+        transform: translateY(-100%);
+    }
+    to {
+        transform: translateY(0);
+    }
+}
+
 /* Forenklet visning for spesialtilpasninger */
 @media (max-width: 767px) {
     .camera-wrapper {
@@ -209,5 +280,13 @@
     
     .camera-scanner-placeholder.active {
         height: 322px; /* Justert for mindre kameravisning på mobil */
+    }
+
+    .camera-scanner-container {
+        max-height: 60vh;
+    }
+    
+    .camera-scanner-container .camera-wrapper {
+        height: 200px;
     }
 }

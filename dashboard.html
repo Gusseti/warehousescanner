@@ -9,6 +9,7 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
     <link rel="stylesheet" href="css/styles.css">
     <link rel="stylesheet" href="css/dropdown-search.css">
+    <link rel="stylesheet" href="css/camera-styles.css">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <!-- VIKTIG: Kommenterer ut camera-styles.css for å unngå konflikt -->
@@ -386,20 +387,22 @@
                     
                     <div id="pickFileInfo" class="module-info-text">Ingen fil lastet inn</div>
                     
-                    <!-- Forenklet kameraskanner for plukk -->
-                    <div id="cameraScannerPickContainer" class="simple-camera-container" style="display: none;">
-                        <div class="simple-camera-wrapper">
-                            <video id="videoPickScanner" class="simple-video" autoplay playsinline muted></video>
-                            <canvas id="canvasPickScanner" class="simple-canvas"></canvas>
-                            <div id="scannerPickOverlay" class="simple-overlay">
-                                <div class="simple-scan-area"></div>
+                    <!-- Kameraskanner for plukk -->
+                    <div id="cameraScannerPickContainer" class="camera-scanner-container" style="display: none;">
+                        <div class="camera-wrapper">
+                            <video id="videoPickScanner" autoplay playsinline muted></video>
+                            <canvas id="canvasPickScanner"></canvas>
+                            <div id="scannerPickOverlay" class="camera-overlay">
+                                <div class="scan-area"><span></span>
+                                    <div class="scan-line"></div>
+                                </div>
                             </div>
                         </div>
                         <div class="scanner-controls">
                             <button id="switchCameraPick" class="btn btn-primary scanner-switch-btn">
                                 <i class="fas fa-sync"></i> Bytt kamera
                             </button>
-                            <button id="closePickScanner" class="btn btn-danger scanner-close-btn" style="width: 100%;">
+                            <button id="closePickScanner" class="btn btn-danger scanner-close-btn">
                                 <i class="fas fa-times"></i> Lukk skanner
                             </button>
                         </div>
@@ -485,10 +488,9 @@
                 <div class="module-section">
                     <!-- Toppknapper for import, bluetooth og kamera -->
                     <div class="top-action-buttons">
-                        <input type="file" id="importReceiveFile" accept=".csv,.txt,.json,.pdf" style="display: none;">
-                        <button id="importReceiveBtn" class="action-button">
-                            <i class="fas fa-file-import"></i>
-                            <span>Import</span>
+                        <button id="importDeliverySlipBtn" class="action-button">
+                            <i class="fas fa-file-invoice"></i>
+                            <span>Delivery Slip</span>
                         </button>
                         <button id="connectScannerReceive" class="action-button">
                             <i class="fab fa-bluetooth-b"></i>
@@ -502,20 +504,22 @@
                     
                     <div id="receiveFileInfo" class="module-info-text">Ingen fil lastet inn</div>
                     
-                    <!-- Forenklet kameraskanner for mottak -->
-                    <div id="cameraScannerReceiveContainer" class="simple-camera-container" style="display: none;">
-                        <div class="simple-camera-wrapper">
-                            <video id="videoReceiveScanner" class="simple-video" autoplay playsinline muted></video>
-                            <canvas id="canvasReceiveScanner" class="simple-canvas"></canvas>
-                            <div id="scannerReceiveOverlay" class="simple-overlay">
-                                <div class="simple-scan-area"></div>
+                    <!-- Kameraskanner for mottak -->
+                    <div id="cameraScannerReceiveContainer" class="camera-scanner-container" style="display: none;">
+                        <div class="camera-wrapper">
+                            <video id="videoReceiveScanner" autoplay playsinline muted></video>
+                            <canvas id="canvasReceiveScanner"></canvas>
+                            <div id="scannerReceiveOverlay" class="camera-overlay">
+                                <div class="scan-area"><span></span>
+                                    <div class="scan-line"></div>
+                                </div>
                             </div>
                         </div>
                         <div class="scanner-controls">
                             <button id="switchCameraReceive" class="btn btn-primary scanner-switch-btn">
                                 <i class="fas fa-sync"></i> Bytt kamera
                             </button>
-                            <button id="closeReceiveScanner" class="btn btn-danger scanner-close-btn" style="width: 100%;">
+                            <button id="closeReceiveScanner" class="btn btn-danger scanner-close-btn">
                                 <i class="fas fa-times"></i> Lukk skanner
                             </button>
                         </div>
@@ -611,20 +615,22 @@
                         </button>
                     </div>
 
-                    <!-- Forenklet kameraskanner for retur -->
-                    <div id="cameraScannerReturnContainer" class="simple-camera-container" style="display: none;">
-                        <div class="simple-camera-wrapper">
-                            <video id="videoReturnScanner" class="simple-video" autoplay playsinline muted></video>
-                            <canvas id="canvasReturnScanner" class="simple-canvas"></canvas>
-                            <div id="scannerReturnOverlay" class="simple-overlay">
-                                <div class="simple-scan-area"></div>
+                    <!-- Kameraskanner for retur -->
+                    <div id="cameraScannerReturnContainer" class="camera-scanner-container" style="display: none;">
+                        <div class="camera-wrapper">
+                            <video id="videoReturnScanner" autoplay playsinline muted></video>
+                            <canvas id="canvasReturnScanner"></canvas>
+                            <div id="scannerReturnOverlay" class="camera-overlay">
+                                <div class="scan-area"><span></span>
+                                    <div class="scan-line"></div>
+                                </div>
                             </div>
                         </div>
                         <div class="scanner-controls">
                             <button id="switchCameraReturn" class="btn btn-primary scanner-switch-btn">
                                 <i class="fas fa-sync"></i> Bytt kamera
                             </button>
-                            <button id="closeReturnScanner" class="btn btn-danger scanner-close-btn" style="width: 100%;">
+                            <button id="closeReturnScanner" class="btn btn-danger scanner-close-btn">
                                 <i class="fas fa-times"></i> Lukk skanner
                             </button>
                         </div>

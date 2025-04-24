@@ -554,210 +554,350 @@ function extractMetadataFromPDF(lines) {
 }
 
 /**
- * Parser produktlinjer fra PDF-tekst
+ * Parser produktlinjer fra PDF-tekst med forbedret sammenligning med barcodes.json
  * @param {Array} lines - Tekstlinjer fra PDF
  * @returns {Array} Liste med produkter
  */
 function parseProductLinesFromPDF(lines) {
-    // Prøv først med standard-metoden
-    let products = parseProductLines(lines);
+    console.log(`Starter parsing av ${lines.length} linjer fra PDF`);
     
-    // Hvis ingen produkter ble funnet, prøv den alternative metoden
-    if (products.length === 0) {
-        console.log('Standard parsing fant ingen produkter, prøver alternativ metode...');
-        products = parseComplexProductLines(lines);
-    }
-    
-    // Konsolider duplikate produkter ved å summere antallet
-    const consolidatedProducts = [];
-    const productMap = {}; // Et objekt for å spore produkter basert på ID
-    
-    for (const product of products) {
-        if (productMap[product.id]) {
-            // Hvis produktet allerede eksisterer, oppdater antallet
-            productMap[product.id].quantity += product.quantity;
-        } else {
-            // Hvis dette er første gang vi ser produktet, legg det til i kartet
-            productMap[product.id] = { ...product };
-        }
-    }
-    
-    // Konverter produktkartet tilbake til en array
-    for (const productId in productMap) {
-        consolidatedProducts.push(productMap[productId]);
-    }
-    
-    console.log(`Konsolidert ${products.length} produktlinjer til ${consolidatedProducts.length} unike produkter`);
-    
-    // Returner de konsoliderte produktene i stedet for de originale
-    return consolidatedProducts;
-}
-
-/**
- * Standard parser for produktlinjer
- * @param {Array} lines - Tekstlinjer
- * @returns {Array} Liste med produkter
- */
-function parseProductLines(lines) {
+    // Oppretter en tom produkt-array
     const products = [];
-    // Regex-mønster for varenumre
-    const productCodePattern = /^([A-Z0-9]{2,4}-[A-Z0-9]+-?[A-Z0-9]*|[A-Z]{2}\d{5}|[A-Z][A-Z0-9]{4,})/;
     
-    for (let i = 0; i < lines.length; i++) {
-        const line = lines[i].trim();
-        
-        // Sjekk om linjen starter med et produkt-ID-mønster
-        const match = line.match(productCodePattern);
-        if (match) {
-            const productId = match[1];
-            
-            // Sjekk om neste linje inneholder antall (et tall alene)
-            if (i + 1 < lines.length) {
-                const quantityLine = lines[i + 1].trim();
-                const quantityMatch = quantityLine.match(/^(\d+)$/);
-                
-                if (quantityMatch) {
-                    const quantity = parseInt(quantityMatch[1], 10);
-                    
-                    // Finn beskrivelsen som vanligvis kommer etter understreker
-                    // Vi hopper vanligvis 5-6 linjer frem for å finne beskrivelsen
-                    let description = "";
-                    let j = i + 5; // Start fra ca. 5 linjer frem (etter understrekene)
-                    
-                    // Let etter beskrivelsen i de neste linjene
-                    while (j < lines.length && j < i + 15) {
-                        const textLine = lines[j].trim();
-                        
-                        // Stopp hvis vi har nådd neste produkt eller en linje med bare tall i parentes
-                        if (textLine.match(productCodePattern) || textLine.match(/^\(\d+\)$/)) {
-                            break;
-                        }
-                        
-                        // Legg til denne linjen til beskrivelsen hvis den ikke er tom eller bare understrekninger
-                        if (textLine && !textLine.match(/^_+$/) && !textLine.match(/^Leveret$/)) {
-                            description += (description ? " " : "") + textLine;
-                        }
-                        
-                        j++;
-                    }
-                    
-                    // Rens beskrivelsen (fjern eventuelle parenteser med tall på slutten)
-                    description = description.replace(/\(\d+\)$/, '').trim();
-                    
-                    if (description) {
-                        products.push({
-                            id: productId,
-                            description: description,
-                            quantity: quantity
-                        });
-                    }
-                }
-            }
-        }
-    }
+    // Map til å holde styr på unike produkt-ID-er
+    const productMap = {};
     
-    return products;
-}
-
-/**
- * Alternativ parser for komplekse produktlinjer
- * @param {Array} lines - Tekstlinjer
- * @returns {Array} Liste med produkter
- */
-function parseComplexProductLines(lines) {
-    const products = [];
-    // Vi prøver ulike mønstre for å fange ulike varenummerformater
-    const patterns = [
-        /^(\d{3}-[A-Z][A-Z0-9]*-\d+)/,  // 000-XX-000 format
-        /^(\d{3}-[A-Z][A-Z0-9]*)/,      // 000-XX format
-        /^([A-Z]{2}\d{5})/,             // XX00000 format
-        /^(BP\d{5})/,                   // BP00000 format
-        /^([A-Z][A-Z0-9]{4,})/          // Andre alfanumeriske koder
+    // For debuggingsformål, logg de første 50 linjene
+    console.log("Første 50 linjer:");
+    lines.slice(0, 50).forEach((line, i) => console.log(`${i}: ${line}`));
+    
+    // Mønster for å finne varenumre - støtter flere formater
+    const productPatterns = [
+        /^(\d{3}-[A-Z0-9]+-?\d*)/,            // Standard Kvik format: 263-L01680, 000-X12345
+        /^([A-Z]{2}\d{5})/,                   // Format: BP12345, LA12345
+        /^(\d{3}-[A-Z][A-Z0-9]*)/,            // Format: 000-XX
+        /^(BP\d{5})/,                         // Format: BP00000 spesifikt
+        /^([A-Z][A-Z0-9]{4,})/                // Andre alfanumeriske koder
     ];
     
+    // Bygg først opp en map med normaliserte ID-er fra barcodes.json for raskere oppslag
+    const barcodesMap = {};
+    const normalizedBarcodesMap = {};
+    
+    console.log("Bygger opp sammenligningsmapping fra barcodes.json...");
+    for (const [barcode, data] of Object.entries(appState.barcodeMapping)) {
+        const productId = typeof data === 'object' ? data.id : data;
+        if (productId) {
+            // Lagre det originale produkt-ID for varenummer
+            barcodesMap[productId] = {
+                id: productId,
+                description: typeof data === 'object' ? data.description : null,
+                weight: typeof data === 'object' ? data.weight : null
+            };
+            
+            // Lagre også normaliserte versjoner for bedre matching
+            const normalizedId = normalizeProductId(productId);
+            normalizedBarcodesMap[normalizedId] = {
+                originalId: productId,
+                description: typeof data === 'object' ? data.description : null,
+                weight: typeof data === 'object' ? data.weight : null
+            };
+            
+            // Lagre uten bindestreker
+            const noDashesId = productId.replace(/-/g, '');
+            normalizedBarcodesMap[noDashesId] = {
+                originalId: productId,
+                description: typeof data === 'object' ? data.description : null,
+                weight: typeof data === 'object' ? data.weight : null
+            };
+        }
+    }
+    
+    console.log(`Bygget opp mapping med ${Object.keys(barcodesMap).length} produkter og ${Object.keys(normalizedBarcodesMap).length} normaliserte IDs`);
+    
+    // Logging av alle barcodes.json-produkter for debug
+    if (Object.keys(barcodesMap).length < 50) {
+        console.log("Produkter i barcodes.json:");
+        Object.keys(barcodesMap).forEach(id => console.log(`  - ${id}`));
+    }
+    
+    // Gå gjennom hver linje og se etter produkter
     for (let i = 0; i < lines.length; i++) {
         const line = lines[i].trim();
-        let productId = null;
+        if (!line) continue;
         
-        // Prøv hvert mønster for å finne produkt-ID
-        for (const pattern of patterns) {
+        // Prøv alle produkt-mønstrene
+        let productId = null;
+        let matchedPattern = null;
+        
+        for (const pattern of productPatterns) {
             const match = line.match(pattern);
             if (match) {
                 productId = match[1];
+                matchedPattern = pattern;
                 break;
             }
         }
         
+        // Hvis vi fant et varenummer, prøv å finne tilhørende informasjon
         if (productId) {
-            // Analyser resten av linjen eller neste linje for antall
-            let quantity = 1; // Standard hvis ikke spesifisert
-            let quantityFound = false;
-            let description = "";
+            console.log(`Fant produktID: ${productId} på linje ${i}: ${line}`);
             
-            // Sjekk først om antall er på samme linje
-            const quantitySameLineMatch = line.substring(productId.length).trim().match(/^(\d+)/);
-            if (quantitySameLineMatch) {
-                quantity = parseInt(quantitySameLineMatch[1], 10);
-                quantityFound = true;
+            // Standardverdier
+            let quantity = 1;
+            let description = "Ukjent beskrivelse";
+            let weight = appState.settings.defaultItemWeight || 1.0;
+            
+            // Finn den "beste" produkt-ID basert på sammenligning med barcodes.json
+            const bestProductId = findBestProductIdMatch(productId);
+            
+            // VIKTIG: Kun fortsett hvis vi fant en match i barcodes.json
+            if (bestProductId) {
+                if (bestProductId !== productId) {
+                    console.log(`  Matchet ${productId} til produkt i barcodes.json: ${bestProductId}`);
+                } else {
+                    console.log(`  Fant direkte match i barcodes.json: ${bestProductId}`);
+                }
                 
-                // Beskrivelsen kan være på samme linje etter antallet
-                const descStart = line.indexOf(quantitySameLineMatch[0]) + quantitySameLineMatch[0].length;
-                description = line.substring(descStart).trim();
-            } 
-            // Eller sjekk neste linje for antall
-            else if (i + 1 < lines.length) {
-                const nextLine = lines[i + 1].trim();
-                const quantityNextLineMatch = nextLine.match(/^(\d+)$/);
+                // Oppdater ID til den matchede verdien
+                productId = bestProductId;
                 
-                if (quantityNextLineMatch) {
-                    quantity = parseInt(quantityNextLineMatch[1], 10);
-                    quantityFound = true;
-                    i++; // Hopp over neste linje siden vi har behandlet den
+                // Prøv å hente beskrivelse og vekt fra barcodes.json
+                const barcodeMappingData = getProductDataFromBarcodes(productId);
+                if (barcodeMappingData) {
+                    if (barcodeMappingData.description) {
+                        description = barcodeMappingData.description;
+                        console.log(`  Bruker beskrivelse fra barcodes.json: ${description}`);
+                    }
                     
-                    // Beskrivelsen kommer typisk etter noen understreker
-                    let j = i + 5; // Start fra ca. 5 linjer frem
-                    
-                    while (j < lines.length && j < i + 15) {
-                        const textLine = lines[j].trim();
-                        let foundNextProduct = false;
-                        
-                        // Sjekk om vi har nådd neste produkt
-                        for (const pattern of patterns) {
-                            if (textLine.match(pattern)) {
-                                foundNextProduct = true;
-                                break;
-                            }
-                        }
-                        
-                        if (foundNextProduct || textLine.match(/^\(\d+\)$/)) {
-                            break;
-                        }
-                        
-                        // Legg til denne linjen til beskrivelsen
-                        if (textLine && !textLine.match(/^_+$/) && !textLine.match(/^Leveret$/)) {
-                            description += (description ? " " : "") + textLine;
-                        }
-                        
-                        j++;
+                    if (barcodeMappingData.weight) {
+                        weight = barcodeMappingData.weight;
+                        console.log(`  Bruker vekt fra barcodes.json: ${weight} kg`);
                     }
                 }
-            }
-            
-            // Rens beskrivelsen
-            description = description.replace(/\(\d+\)$/, '').trim();
-            
-            // Legg til produktet hvis vi har funnet antall og har en beskrivelse
-            if (quantityFound && (description || productId)) {
-                products.push({
-                    id: productId,
-                    description: description || "Ukjent beskrivelse",
-                    quantity: quantity
-                });
+                
+                // Sjekk etter antall - prøv ulike metoder
+                
+                // 1. Sjekk om antall er på samme linje etter varenummeret
+                const quantitySameLineMatch = line.substring(productId.length).trim().match(/^(\d+)/);
+                if (quantitySameLineMatch) {
+                    quantity = parseInt(quantitySameLineMatch[1], 10);
+                    console.log(`  Fant antall på samme linje: ${quantity}`);
+                } 
+                // 2. Sjekk om antall er på neste linje
+                else if (i + 1 < lines.length) {
+                    const nextLine = lines[i + 1].trim();
+                    const nextLineMatch = nextLine.match(/^(\d+)$/);
+                    if (nextLineMatch) {
+                        quantity = parseInt(nextLineMatch[1], 10);
+                        console.log(`  Fant antall på neste linje: ${quantity}`);
+                        i++; // Hopp over neste linje
+                    }
+                }
+                
+                // Finn beskrivelse - se i flere linjer fremover
+                let descLines = [];
+                
+                // Start 2-10 linjer frem, typisk der beskrivelsen finnes
+                for (let j = i + 2; j < Math.min(i + 20, lines.length); j++) {
+                    const textLine = lines[j].trim();
+                    
+                    // Stopp hvis vi finner et nytt produkt eller bare tall i parentes
+                    let isNewProduct = false;
+                    for (const pattern of productPatterns) {
+                        if (textLine.match(pattern)) {
+                            isNewProduct = true;
+                            break;
+                        }
+                    }
+                    
+                    if (isNewProduct || textLine.match(/^\(\d+\)$/) || textLine.match(/^_+$/)) {
+                        break;
+                    }
+                    
+                    // Ignorer visse ord som indikerer at vi ikke er i beskrivelsesdelen lenger
+                    if (textLine && 
+                        !textLine.includes("Leveret") &&
+                        !textLine.includes("Varenr.") &&
+                        !textLine.includes("Bestilt") &&
+                        !textLine.toLowerCase().includes("kunde") &&
+                        !textLine.toLowerCase().includes("ordre")) {
+                        descLines.push(textLine);
+                    }
+                }
+                
+                // Sett sammen beskrivelsen
+                if (descLines.length > 0) {
+                    // Bruk kun beskrivelsen fra PDF hvis vi ikke har den fra barcodes.json
+                    // eller hvis PDF-beskrivelsen er lengre/bedre
+                    const pdfDescription = descLines.join(" ").replace(/\(\d+\)$/, '').trim();
+                    
+                    if (!barcodeMappingData || !barcodeMappingData.description || 
+                        (pdfDescription.length > description.length && description === "Ukjent beskrivelse")) {
+                        description = pdfDescription;
+                        console.log(`  Bruker beskrivelse fra PDF: ${description}`);
+                    }
+                }
+                
+                console.log(`  Endelig beskrivelse: ${description}`);
+                console.log(`  Antall: ${quantity}`);
+                console.log(`  Vekt: ${weight} kg`);
+                
+                // Lag produkt-objekt
+                const productKey = productId; // Bruk produkt-ID som nøkkel
+                
+                // Sjekk om produktet allerede eksisterer i map
+                if (productMap[productKey]) {
+                    // Produkt eksisterer - legg til antallet
+                    productMap[productKey].quantity += quantity;
+                    console.log(`  Økte antall for eksisterende produkt til ${productMap[productKey].quantity}`);
+                    
+                    // Oppdater beskrivelse hvis den nye er bedre
+                    if (description && description !== "Ukjent beskrivelse" && 
+                        (productMap[productKey].description === "Ukjent beskrivelse" || 
+                         description.length > productMap[productKey].description.length)) {
+                        productMap[productKey].description = description;
+                        console.log(`  Oppdatert beskrivelse for eksisterende produkt`);
+                    }
+                } else {
+                    // Nytt produkt - legg det til i map
+                    productMap[productKey] = {
+                        id: productId,
+                        description: description,
+                        quantity: quantity,
+                        weight: weight
+                    };
+                    console.log(`  La til nytt produkt i map`);
+                }
+            } else {
+                // Produktet ble ikke funnet i barcodes.json
+                console.log(`  IGNORERT: Produktet ${productId} finnes ikke i barcodes.json`);
             }
         }
     }
     
+    // Konverter map til en array med produkter
+    for (const key in productMap) {
+        products.push(productMap[key]);
+    }
+    
+    console.log(`Parsing fullført. Fant ${products.length} gyldige produkter (som finnes i barcodes.json).`);
+    
+    // Hvis ingen produkter ble funnet, vis en advarsel i konsollen
+    if (products.length === 0) {
+        console.warn("ADVARSEL: Ingen produkter i PDF-en matcher med produkter i barcodes.json!");
+        console.warn("Sjekk at barcodes.json inneholder korrekte produktnumre.");
+    }
+    
     return products;
+    
+    // ==========================================
+    // HJELPEFUNKSJONER FOR PRODUKTSAMMENLIGNING
+    // ==========================================
+    
+    /**
+     * Finner beste match for et produkt-ID ved å sammenligne med barcodes.json
+     * @param {string} rawId - Rå produkt-ID fra PDF
+     * @returns {string|null} Beste match produkt-ID eller null hvis ingen match
+     */
+    function findBestProductIdMatch(rawId) {
+        if (!rawId) return null;
+        
+        // 1. Sjekk først for eksakt match
+        if (barcodesMap[rawId]) {
+            return rawId;
+        }
+        
+        // 2. Normaliser ID-en og sjekk for normalisert match
+        const normalizedId = normalizeProductId(rawId);
+        if (normalizedBarcodesMap[normalizedId]) {
+            return normalizedBarcodesMap[normalizedId].originalId;
+        }
+        
+        // 3. Prøv uten bindestreker
+        const noDashesId = rawId.replace(/-/g, '');
+        if (normalizedBarcodesMap[noDashesId]) {
+            return normalizedBarcodesMap[noDashesId].originalId;
+        }
+        
+        // 4. Sjekk for prefiks match (f.eks. 000-XX mot 000-XX1234)
+        for (const knownId in barcodesMap) {
+            if (knownId.startsWith(rawId) || rawId.startsWith(knownId)) {
+                return knownId;
+            }
+        }
+        
+        // 5. Spesialtilfelle for "LA" og "BP" prefiks
+        if (rawId.startsWith('LA') || rawId.startsWith('BP')) {
+            const prefix = rawId.substring(0, 2);
+            const numPart = rawId.substring(2);
+            
+            // Sjekk om det finnes produkter som starter med samme prefix
+            for (const knownId in barcodesMap) {
+                if (knownId.startsWith(prefix)) {
+                    const knownNumPart = knownId.substring(2);
+                    // Hvis talldelene er like, eller en av dem er prefiks for den andre
+                    if (knownNumPart === numPart || 
+                        knownNumPart.startsWith(numPart) || 
+                        numPart.startsWith(knownNumPart)) {
+                        return knownId;
+                    }
+                }
+            }
+        }
+        
+        // Ingen match funnet, returner null for å indikere at produktet skal ignoreres
+        return null;
+    }
+    
+    /**
+     * Henter produktdata fra barcodes.json
+     * @param {string} productId - Produkt-ID
+     * @returns {Object|null} Produktdata eller null hvis ikke funnet
+     */
+    function getProductDataFromBarcodes(productId) {
+        if (!productId) return null;
+        
+        // Direkte oppslag i barcodesMap først
+        if (barcodesMap[productId]) {
+            return barcodesMap[productId];
+        }
+        
+        // Sjekk i barcodeMapping direkte
+        for (const [barcode, data] of Object.entries(appState.barcodeMapping)) {
+            const barcodeProductId = typeof data === 'object' ? data.id : data;
+            
+            if (barcodeProductId === productId) {
+                return {
+                    id: productId,
+                    description: typeof data === 'object' ? data.description : null,
+                    weight: typeof data === 'object' ? data.weight : null
+                };
+            }
+        }
+        
+        return null;
+    }
+}
+
+/**
+ * Normaliserer et produkt-ID for sammenligning
+ * @param {string} id - Produkt-ID som skal normaliseres
+ * @returns {string} Normalisert ID
+ */
+function normalizeProductId(id) {
+    if (!id) return '';
+    
+    // Fjern mellomrom
+    let normalized = id.trim();
+    
+    // Fjern mellomrom rundt bindestreker
+    normalized = normalized.replace(/\s*-\s*/g, '-');
+    
+    // Konverter til små bokstaver for case-insensitiv sammenligning
+    normalized = normalized.toLowerCase();
+    
+    return normalized;
 }
 
 /**
@@ -1647,4 +1787,267 @@ function processReceiptLines(lines) {
     }
     
     return items;
+}
+
+/**
+ * Importerer data fra PDF-fil for mottak uten å nullstille den eksisterende listen
+ * @param {File} file - PDF-fil
+ * @param {boolean} appendMode - True hvis vi skal legge til i eksisterende liste, false for å erstatte
+ * @returns {Promise} Løftebasert resultat av importeringen
+ */
+export async function importReceivePDF(file, appendMode = true) {
+    try {
+        showToast('Leser PDF-fil...', 'info');
+        console.log(`Importerer PDF-fil med appendMode=${appendMode}: ${file.name}`);
+        
+        // Konverterer filen til en arraybuffer
+        const arrayBuffer = await file.arrayBuffer();
+        
+        // Sjekk om PDF.js er tilgjengelig
+        if (!window.pdfjsLib) {
+            console.error('PDF.js biblioteket er ikke lastet');
+            throw new Error('Feil: PDF-biblioteket er ikke tilgjengelig. Vennligst oppdater siden.');
+        }
+        
+        // Setter worker path
+        window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.7.107/pdf.worker.min.js';
+        
+        // Laster PDF-dokumentet
+        console.log('Starter lasting av PDF...');
+        const loadingTask = window.pdfjsLib.getDocument(arrayBuffer);
+        
+        // Legg til fremgangspåvisning
+        loadingTask.onProgress = function(progress) {
+            console.log(`PDF lasteprogresjon: ${Math.round((progress.loaded / progress.total) * 100)}%`);
+        };
+        
+        const pdf = await loadingTask.promise;
+        console.log(`PDF lastet. Antall sider: ${pdf.numPages}`);
+        
+        // Samle all tekst fra PDF-en
+        const allTextLines = [];
+        
+        // Ekstraherer tekst fra hver side
+        for (let i = 1; i <= pdf.numPages; i++) {
+            console.log(`Behandler side ${i}...`);
+            
+            try {
+                const page = await pdf.getPage(i);
+                const textContent = await page.getTextContent();
+                
+                // Konverter tekst-elementer til strenger
+                const textItems = textContent.items.map(item => item.str);
+                const pageText = textItems.join('\n');
+                
+                // Del opp teksten i linjer
+                const lines = pageText.split('\n')
+                    .map(line => line.trim())
+                    .filter(line => line.length > 0);
+                
+                console.log(`Side ${i}: Hentet ${lines.length} linjer`);
+                allTextLines.push(...lines);
+            } catch (error) {
+                console.error(`Feil ved behandling av side ${i}:`, error);
+            }
+        }
+        
+        console.log(`Ekstrahert totalt ${allTextLines.length} linjer fra PDF-en`);
+        
+        if (allTextLines.length === 0) {
+            throw new Error('Ingen tekst funnet i PDF-en. Sjekk at PDF-en ikke er skannet bilde eller passordbeskyttet.');
+        }
+        
+        // Ekstraher metadata fra PDF-teksten
+        const metadata = extractMetadataFromPDF(allTextLines);
+        console.log('Ekstrahert metadata fra PDF:', metadata);
+        
+        // Lagre det opprinnelige filnavnet i metadata
+        metadata.originalFilename = file.name;
+        
+        // Lagre metadata i appState for senere bruk ved eksport
+        appState.receiveListMetadata = metadata;
+        
+        // Bruk parseProductLinesWithFallback-funksjonen for å identifisere produkter
+        console.log('Starter parsing av produktlinjer...');
+        const parsedItems = parseProductLinesFromPDF(allTextLines);
+        console.log(`Identifisert ${parsedItems.length} produkter fra PDF-en`);
+        
+        // Konverter parsedItems til riktig format for mottakslisten
+        const newItems = parsedItems.map(item => ({
+            ...item,
+            weight: appState.itemWeights[item.id] || appState.settings.defaultItemWeight,
+            received: false,
+            receivedAt: null,
+            receivedCount: 0
+        }));
+        
+        // Hvis vi ikke er i appendMode, erstatt listen, ellers behold eksisterende varer
+        if (!appendMode) {
+            // Nullstill listen hvis vi skal erstatte
+            appState.receiveListItems = newItems;
+            appState.receivedItems = [];
+            appState.lastReceivedItem = null;
+        } else {
+            // Vi er i appendMode, så behold tidligere importerte varer 
+            // og legg til de nye varene
+            appState.receiveListItems = [...appState.receiveListItems, ...newItems];
+        }
+        
+        // Oppdater UI
+        const fileInfoElement = document.getElementById('receiveFileInfo');
+        if (fileInfoElement) {
+            fileInfoElement.textContent = `Lastet inn: ${file.name} (${appState.receiveListItems.length} varer)`;
+        }
+        
+        if (newItems.length > 0) {
+            showToast(`Importert ${newItems.length} varer fra PDF!`, 'success');
+        } else {
+            throw new Error('Ingen varer funnet i PDF-en. Prøv å importere som CSV i stedet.');
+        }
+        
+        // Lagre endringer til localStorage
+        saveListsToStorage();
+        
+        return { success: true, itemCount: newItems.length };
+    } catch (error) {
+        console.error('Feil ved import av PDF:', error);
+        throw error;
+    }
+}
+
+/**
+ * Importerer data fra Delivery slip.txt
+ * @param {string} content - Filinnhold
+ * @param {string} fileName - Filnavn
+ * @param {string} type - Type import (pick, receive)
+ */
+export function importFromDeliverySlip(content, fileName, type) {
+    try {
+        if (!content) {
+            showToast('Tomt innhold i filen.', 'error');
+            return;
+        }
+
+        console.log(`Starter import fra Delivery slip: ${fileName} for ${type}`);
+        
+        // Nullstill listene
+        if (type === 'pick') {
+            appState.pickListItems = [];
+            appState.pickedItems = [];
+            appState.lastPickedItem = null;
+        } else if (type === 'receive') {
+            appState.receiveListItems = [];
+            appState.receivedItems = [];
+            appState.lastReceivedItem = null;
+        }
+        
+        // Del opp i linjer
+        const lines = content.split('\n').map(line => line.trim()).filter(line => line.length > 0);
+        console.log(`Fant ${lines.length} linjer i filen.`);
+        
+        // Bruk et Map-objekt for å håndtere duplikater basert på varenummer
+        const itemsMap = new Map();
+        
+        // Gå gjennom hver linje
+        for (let i = 0; i < lines.length; i++) {
+            const line = lines[i].trim();
+            
+            // Hopp over overskrifter
+            if (line.startsWith('Nr.') || line === '') {
+                continue;
+            }
+            
+            // Sjekk om linjen inneholder varenummer og antall
+            const parts = line.split(/\s+/);
+            
+            if (parts.length >= 2) {
+                const id = parts[0].trim();
+                const quantity = parseInt(parts[1].trim(), 10) || 1;
+                
+                // Finn beskrivelse fra barcodes.json
+                const description = findDescriptionFromBarcodes(id);
+                const weight = appState.itemWeights[id] || appState.settings.defaultItemWeight || 1;
+                
+                // Sjekk om vi allerede har denne varen i map
+                if (itemsMap.has(id)) {
+                    // Hvis varen allerede finnes, oppdater antallet
+                    const existingItem = itemsMap.get(id);
+                    existingItem.quantity += quantity;
+                    console.log(`Oppdaterte eksisterende vare: ${id}, Nytt antall: ${existingItem.quantity}`);
+                } else {
+                    // Opprett et nytt element for varen
+                    const newItem = {
+                        id: id,
+                        description: description,
+                        quantity: quantity,
+                        weight: weight,
+                        // Legg til nødvendige felter basert på type
+                        ...(type === 'pick' ? {
+                            picked: false,
+                            pickedAt: null,
+                            pickedCount: 0
+                        } : {
+                            received: false,
+                            receivedAt: null,
+                            receivedCount: 0
+                        })
+                    };
+                    
+                    // Legg til varen i map
+                    itemsMap.set(id, newItem);
+                    console.log(`Lagt til ny vare: ${id}, Antall: ${quantity}, Beskrivelse: ${description}`);
+                }
+            }
+        }
+        
+        // Konverter map til array med varer
+        const items = Array.from(itemsMap.values());
+        
+        // Legg til i riktig liste basert på type
+        if (type === 'pick') {
+            appState.pickListItems = items;
+        } else if (type === 'receive') {
+            appState.receiveListItems = items;
+        }
+        
+        // Lagre endringer
+        saveListsToStorage();
+        
+        // Oppdater UI
+        const fileInfoElement = type === 'pick' ? 
+            document.getElementById('pickFileInfo') : 
+            document.getElementById('receiveFileInfo');
+        
+        if (fileInfoElement) {
+            const itemCount = items.length;
+            fileInfoElement.textContent = `Lastet inn: ${fileName} (${itemCount} varer)`;
+        }
+        
+        showToast(`Importert ${items.length} unike varer fra leveranseseddel!`, 'success');
+    } catch (error) {
+        console.error('Feil ved import fra Delivery slip:', error);
+        showToast('Feil ved import av Delivery slip.', 'error');
+    }
+}
+
+/**
+ * Finner beskrivelse fra barcodes.json basert på varenummer
+ * @param {string} itemId - Varenummer
+ * @returns {string} - Beskrivelse eller "Ukjent vare"
+ */
+function findDescriptionFromBarcodes(itemId) {
+    if (!itemId) return "Ukjent vare";
+    
+    // Sjekk først i barcode-mappingen for direkte samsvar på varenummer
+    for (const [barcode, data] of Object.entries(appState.barcodeMapping)) {
+        const productId = typeof data === 'object' ? data.id : data;
+        const description = typeof data === 'object' ? data.description : null;
+        
+        if (productId === itemId && description) {
+            return description;
+        }
+    }
+    
+    // Hvis det ikke finnes noen direkte match, returner standard beskrivelse
+    return `Vare ${itemId}`;
 }

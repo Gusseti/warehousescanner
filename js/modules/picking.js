@@ -285,6 +285,9 @@ function handlePickFileImport(event) {
                 // Sjekk filtypen basert på filendelse eller innhold
                 if (file.name.endsWith('.json')) {
                     importFromJSON(content, file.name, 'pick');
+                } else if (file.name === 'Delivery slip.txt' || file.name.toLowerCase().includes('delivery slip')) {
+                    // Spesialhåndtering for Delivery slip.txt
+                    importFromDeliverySlip(content, file.name, 'pick');
                 } else {
                     importFromCSV(content, file.name, 'pick');
                 }

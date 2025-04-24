@@ -1457,7 +1457,7 @@ function simulateManualScan(type, itemId, quantity = 1) {
 /**
  * Spiller en lyd for å gi tilbakemelding ved feil
  */
-export function playErrorSound() {
+function playErrorSound() {
     try {
         const audioContext = new (window.AudioContext || window.webkitAudioContext)();
         const oscillator = audioContext.createOscillator();
@@ -1489,6 +1489,41 @@ export function playErrorSound() {
         }
     }
 }
+
+/**
+ * Får bakgrunnen til å blinke i en bestemt farge
+ * @param {string} color - Farge å blinke (f.eks. 'red', 'green')
+ */
+function blinkBackground(color) {
+    // Legg til et overlay-element hvis det ikke allerede finnes
+    let overlay = document.getElementById('blinkOverlay');
+    if (!overlay) {
+        overlay = document.createElement('div');
+        overlay.id = 'blinkOverlay';
+        overlay.style.position = 'fixed';
+        overlay.style.top = '0';
+        overlay.style.left = '0';
+        overlay.style.width = '100%';
+        overlay.style.height = '100%';
+        overlay.style.backgroundColor = 'transparent';
+        overlay.style.zIndex = '9999';
+        overlay.style.pointerEvents = 'none'; // Ikke blokker klikk
+        overlay.style.transition = 'background-color 0.3s';
+        document.body.appendChild(overlay);
+    }
+    
+    // Sett farge med litt gjennomsiktighet
+    overlay.style.backgroundColor = color === 'red' ? 'rgba(255, 0, 0, 0.3)' : 
+                                   color === 'green' ? 'rgba(0, 255, 0, 0.3)' : 
+                                   color === 'orange' ? 'rgba(255, 165, 0, 0.3)' : 
+                                   'rgba(0, 0, 0, 0.2)';
+    
+    // Fjern etter kort tid
+    setTimeout(() => {
+        overlay.style.backgroundColor = 'transparent';
+    }, 500);
+}
+
 // Gjør debug-informasjon tilgjengelig globalt
 window.scannerDebug = {
     isScanning,
@@ -1502,10 +1537,12 @@ window.scannerDebug = {
 export {
     connectToBluetoothScanner,
     initCameraScanner,
-    startCameraScanning,   // Sørg for at denne er med
+    startCameraScanning,
     stopCameraScanning,
     switchCamera,
     isBluetoothConnected,
     isScanning,
-    processScannedBarcode
+    processScannedBarcode,
+    blinkBackground,  // Eksporterer blinkBackground-funksjonen
+    playErrorSound    // Eksporterer playErrorSound-funksjonen
 };
