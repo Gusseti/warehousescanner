@@ -1,4 +1,4 @@
-/* camera-styles.css - Stilsett for kameraskanningen */
+/* camera-styles.css - Redesignet kameravisning */
 
 /* Kamera-wrapper */
 .camera-wrapper {
@@ -8,13 +8,23 @@
     overflow: hidden;
     background-color: #000;
     border-radius: 8px;
-    margin-bottom: 1rem;
+    margin-bottom: 0;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
 }
 
 #camera-view {
     width: 100%;
     height: 100%;
     object-fit: cover;
+    object-position: center; /* Sentrerer bildet */
+}
+
+video {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    object-position: center center; /* Sikrer at alle videoelementer er sentrert */
+    transform: translateY(-15%); /* Flytter bildet litt opp for å vise mer av ansiktet */
 }
 
 /* Overlegg for kamera når det ikke er i bruk */
@@ -24,7 +34,7 @@
     left: 0;
     width: 100%;
     height: 100%;
-    background-color: rgba(0, 0, 0, 0.7);
+    background-color: rgba(0, 0, 0, 0.1); /* Enda lettere overlay for bedre sikt */
     display: flex;
     flex-direction: column;
     justify-content: center;
@@ -38,28 +48,47 @@
     margin-bottom: 1rem;
     text-align: center;
     padding: 0 1rem;
+    text-shadow: 0 0 5px rgba(0, 0, 0, 0.8); /* Bedre lesbarhet på tekst */
 }
 
-/* Skanningsområde */
+/* Skanningsområde - redesignet med bredere markering som matcher faktisk skanneområde */
 .scan-area {
     position: absolute;
     top: 50%;
     left: 50%;
     transform: translate(-50%, -50%);
-    width: 70%;
-    height: 30%;
-    max-width: 300px;
-    max-height: 150px;
-    border: 2px solid rgba(76, 175, 80, 0.5);
+    width: 70%; /* Utvidet fra 65% for å matche det faktiske skanneområdet */
+    height: 40%; /* Utvidet fra 25% for bedre vertikal dekning */
+    max-width: 350px; /* Økt fra 280px */
+    max-height: 180px; /* Økt fra 130px */
+    border: 2px dashed rgba(255, 255, 255, 0.7);
     z-index: 1;
+    box-shadow: 0 0 0 4px rgba(0, 0, 0, 0.3);
+    border-radius: 10px;
 }
 
-.scan-area::before, .scan-area::after, .scan-area > span::before, .scan-area > span::after {
+/* Overlaytekst for å vise instruksjoner */
+.scan-area::after {
+    content: "Plasser strekkode her";
+    position: absolute;
+    top: -30px;
+    left: 50%;
+    transform: translateX(-50%);
+    color: white;
+    font-size: 14px;
+    background-color: rgba(0, 0, 0, 0.5);
+    padding: 3px 8px;
+    border-radius: 4px;
+    white-space: nowrap;
+    text-shadow: 0 0 3px rgba(0, 0, 0, 0.8);
+}
+
+.scan-area::before, .scan-area > span::before, .scan-area > span::after {
     content: '';
     position: absolute;
-    width: 20px;
-    height: 20px;
-    border-color: var(--success);
+    width: 25px;
+    height: 25px;
+    border-color: rgba(255, 255, 255, 0.9);
     border-style: solid;
 }
 
@@ -67,27 +96,24 @@
     top: -3px;
     left: -3px;
     border-width: 3px 0 0 3px;
-}
-
-.scan-area::after {
-    top: -3px;
-    right: -3px;
-    border-width: 3px 3px 0 0;
+    border-radius: 8px 0 0 0;
 }
 
 .scan-area > span::before {
     bottom: -3px;
     left: -3px;
     border-width: 0 0 3px 3px;
+    border-radius: 0 0 0 8px;
 }
 
 .scan-area > span::after {
     bottom: -3px;
     right: -3px;
     border-width: 0 3px 3px 0;
+    border-radius: 0 0 8px 0;
 }
 
-/* Skanningslinje-effekt */
+/* Skanningslinje-effekt med forbedret synlighet */
 .scan-line {
     position: absolute;
     left: 0;
@@ -95,44 +121,58 @@
     width: 100%;
     height: 2px;
     background-color: var(--success);
-    box-shadow: 0 0 8px var(--success);
-    animation: scan 2s linear infinite;
+    box-shadow: 0 0 10px var(--success), 0 0 20px var(--success);
+    animation: scan 1.5s linear infinite;
 }
 
-/* Knappegruppe for kamerakontrollen */
+/* Knappegruppe for kamerakontrollen - redesignet som en transparent bar */
 .scanner-controls {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    width: 100%;
     display: flex;
-    flex-direction: column;
-    gap: 0.5rem;
-    margin-bottom: 0.5rem;
+    flex-direction: row;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 12px;
+    background: linear-gradient(to top, rgba(0, 0, 0, 0.8), rgba(0, 0, 0, 0.4) 70%, transparent);
+    z-index: 10;
 }
 
 .scanner-close-btn {
-    width: 100%;
+    flex: 1;
 }
 
-/* Ny "Utfør skann"-knapp */
+.scanner-switch-btn {
+    flex: 1;
+}
+
+/* Ny "Utfør skann"-knapp med tydeligere design */
 .scan-button {
-    margin-top: 10px;
+    flex: 2;
     padding: 12px 24px;
     background-color: var(--success);
     color: white;
     border: none;
-    border-radius: 4px;
+    border-radius: 6px;
     font-size: 16px;
     font-weight: bold;
     cursor: pointer;
-    transition: background-color 0.3s ease;
-    width: 100%;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+    transition: all 0.2s ease;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.4);
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
 }
 
 .scan-button:hover {
     background-color: var(--success-dark, #3d8b40);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.5);
 }
 
 .scan-button:active {
     transform: translateY(1px);
+    box-shadow: 0 1px 5px rgba(0, 0, 0, 0.3);
 }
 
 /* Stiler for scan-button når den er klar til skanning */
@@ -144,6 +184,29 @@
     box-shadow: 0 0 15px rgba(255, 174, 0, 0.7);
 }
 
+/* Ny stil for aktiv skanning */
+.scan-button.scanning-active {
+    background-color: #2196F3;
+    color: white;
+    animation: pulse-scan 1.5s infinite;
+    box-shadow: 0 0 15px rgba(33, 150, 243, 0.5);
+}
+
+@keyframes pulse-scan {
+    0% {
+        background-color: #2196F3;
+        box-shadow: 0 0 10px rgba(33, 150, 243, 0.5);
+    }
+    50% {
+        background-color: #1976D2;
+        box-shadow: 0 0 20px rgba(33, 150, 243, 0.8);
+    }
+    100% {
+        background-color: #2196F3;
+        box-shadow: 0 0 10px rgba(33, 150, 243, 0.5);
+    }
+}
+
 .scan-button.ready-to-scan:hover {
     background-color: #ff9500;
 }
@@ -151,12 +214,15 @@
 @keyframes pulse-button {
     0% {
         transform: scale(1);
+        box-shadow: 0 0 10px rgba(255, 174, 0, 0.5);
     }
     50% {
         transform: scale(1.05);
+        box-shadow: 0 0 20px rgba(255, 174, 0, 0.8);
     }
     100% {
         transform: scale(1);
+        box-shadow: 0 0 10px rgba(255, 174, 0, 0.5);
     }
 }
 
@@ -179,13 +245,13 @@
     animation: slide-down 0.3s ease-out;
     transition: background-color 0.3s ease;
     /* Redusert høyde for å ikke dekke hele skjermen */
-    max-height: 50vh;
+    max-height: 60vh;
     overflow: hidden;
 }
 
 /* Reduser størrelsen på kamera-wrapper for å passe i mindre popup */
 .camera-scanner-container .camera-wrapper {
-    height: 250px;
+    height: 300px;
 }
 
 /* Når kameraet er i sticky-modus */
@@ -212,31 +278,35 @@
 
 .camera-scanner-placeholder.active {
     display: block;
-    height: 422px; /* Justering for kamera + kontroller, kan trenge finjustering */
+    height: 350px; /* Justert høyde siden knappene nå er overlay */
     transition: height 0.3s ease;
 }
 
 /* Kompakt kameravisning i sticky-modus */
 .camera-scanner-container.sticky .camera-wrapper {
-    height: 250px;
+    height: 280px;
 }
 
-/* Scan area med deteksjon */
+/* Scan area med deteksjon - forbedret synlighet */
 .scan-area.detected {
     border-color: #ffae00;
-    box-shadow: 0 0 20px rgba(255, 174, 0, 0.5);
+    border-style: solid;
+    box-shadow: 0 0 20px rgba(255, 174, 0, 0.5), inset 0 0 10px rgba(255, 174, 0, 0.3);
     animation: pulse-area 1.5s infinite;
 }
 
 @keyframes pulse-area {
     0% {
-        box-shadow: 0 0 10px rgba(255, 174, 0, 0.5);
+        box-shadow: 0 0 10px rgba(255, 174, 0, 0.5), inset 0 0 10px rgba(255, 174, 0, 0.3);
+        border-color: #ffae00;
     }
     50% {
-        box-shadow: 0 0 20px rgba(255, 174, 0, 0.8);
+        box-shadow: 0 0 20px rgba(255, 174, 0, 0.8), inset 0 0 15px rgba(255, 174, 0, 0.5);
+        border-color: #ff8c00;
     }
     100% {
-        box-shadow: 0 0 10px rgba(255, 174, 0, 0.5);
+        box-shadow: 0 0 10px rgba(255, 174, 0, 0.5), inset 0 0 10px rgba(255, 174, 0, 0.3);
+        border-color: #ffae00;
     }
 }
 
@@ -249,13 +319,13 @@
 
 @keyframes pulse {
     0% {
-        box-shadow: 0 0 0 2000px rgba(0, 0, 0, 0.5), 0 0 0 0 rgba(76, 175, 80, 0.7);
+        box-shadow: 0 0 0 2000px rgba(0, 0, 0, 0.3), 0 0 0 0 rgba(76, 175, 80, 0.7);
     }
     70% {
-        box-shadow: 0 0 0 2000px rgba(0, 0, 0, 0.5), 0 0 0 15px rgba(76, 175, 80, 0);
+        box-shadow: 0 0 0 2000px rgba(0, 0, 0, 0.3), 0 0 0 15px rgba(76, 175, 80, 0);
     }
     100% {
-        box-shadow: 0 0 0 2000px rgba(0, 0, 0, 0.5), 0 0 0 0 rgba(76, 175, 80, 0);
+        box-shadow: 0 0 0 2000px rgba(0, 0, 0, 0.3), 0 0 0 0 rgba(76, 175, 80, 0);
     }
 }
 
@@ -268,6 +338,28 @@
     }
 }
 
+/* Status melding om gjenkjent strekkode */
+.barcode-status {
+    position: absolute;
+    top: 10px;
+    left: 50%;
+    transform: translateX(-50%);
+    background-color: rgba(0, 0, 0, 0.7);
+    color: white;
+    padding: 5px 10px;
+    border-radius: 4px;
+    font-size: 14px;
+    max-width: 90%;
+    text-align: center;
+    z-index: 10;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+}
+
+.barcode-status.visible {
+    opacity: 1;
+}
+
 /* Forenklet visning for spesialtilpasninger */
 @media (max-width: 767px) {
     .camera-wrapper {
@@ -275,18 +367,29 @@
     }
     
     .camera-scanner-container.sticky .camera-wrapper {
-        height: 200px;
+        height: 250px;
     }
     
     .camera-scanner-placeholder.active {
-        height: 322px; /* Justert for mindre kameravisning på mobil */
+        height: 300px; /* Justert for mindre kameravisning på mobil */
     }
 
     .camera-scanner-container {
-        max-height: 60vh;
+        max-height: 65vh;
     }
     
     .camera-scanner-container .camera-wrapper {
-        height: 200px;
+        height: 250px;
+    }
+    
+    /* Mindre tekst på knapper på små skjermer */
+    .scanner-controls .btn {
+        font-size: 14px;
+        padding: 8px;
+    }
+    
+    .scan-button {
+        font-size: 14px;
+        padding: 10px;
     }
 }

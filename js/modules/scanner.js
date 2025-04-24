@@ -320,18 +320,73 @@ function performManualScan(module) {
         return;
     }
     
-    if (!lastDetectedCode) {
-        showToast('Ingen strekkode detektert. Sikt kameraet mot strekkoden.', 'warning');
+    // Sjekk om lastDetectedCode finnes allerede
+    if (lastDetectedCode) {
+        // Hvis vi allerede har en detektert strekkode, bruk den
+        console.log(`Utfører manuell skanning for ${module} med eksisterende kode: ${lastDetectedCode}`);
+        
+        // Behandle strekkoden
+        processScannedBarcode(lastDetectedCode);
+        
+        // Nullstill lastDetectedCode
+        lastDetectedCode = null;
+        
+        // Tilbakestill scan-button til normal tilstand
+        const scanButton = scanButtonElements[module];
+        if (scanButton) {
+            scanButton.classList.remove('ready-to-scan');
+            scanButton.textContent = 'Utfør skann';
+        }
+        
+        // Fjern 'detected' klassen fra scan-area
+        const scanArea = document.querySelector('.scan-area');
+        if (scanArea) {
+            scanArea.classList.remove('detected');
+        }
+        
         return;
     }
     
-    console.log(`Utfører manuell skanning for ${module} med kode: ${lastDetectedCode}`);
+    // Hvis ingen strekkode er oppdaget, aktiver kontinuerlig skannemodus
+    console.log("Starter kontinuerlig skanning for å finne gyldig strekkode");
     
-    // Behandle strekkoden
-    processScannedBarcode(lastDetectedCode);
-    
-    // Nullstill lastDetectedCode
-    lastDetectedCode = null;
+    // Aktiver kontinuerlig skannemodus - fortsett å skanne til vi finner en gyldig kode
+    const scanButton = scanButtonElements[module];
+    if (scanButton) {
+        // Bytt tekst og stil for å indikere at kontinuerlig skanning er aktiv
+        scanButton.classList.add('scanning-active');
+        scanButton.textContent = 'Skanner... Klikk for å avbryte';
+        
+        // Sett en variabel for å holde styr på om vi er i kontinuerlig skannemodus
+        window.continuousScanning = true;
+        
+        // Vis en veiledningsmelding
+        showBarcodeStatusMessage("Plasser strekkode i skanningsområdet");
+        
+        // Tilbakestill status etter en stund hvis ingen strekkode er funnet
+        setTimeout(() => {
+            // Sjekk om vi fortsatt er i kontinuerlig skannmodus
+            if (window.continuousScanning) {
+                showToast('Søker etter gyldig strekkode...', 'info');
+            }
+        }, 3000);
+        
+        // Legg til klikkhandler for å avbryte skanning
+        scanButton.onclick = () => {
+            window.continuousScanning = false;
+            scanButton.classList.remove('scanning-active');
+            scanButton.textContent = 'Utfør skann';
+            showToast('Kontinuerlig skanning avbrutt', 'warning');
+            hideBarcodeStatusMessage();
+            
+            // Gjenopprett original klikkhandler
+            scanButton.onclick = () => {
+                performManualScan(module);
+            };
+        };
+    } else {
+        showToast('Kunne ikke starte kontinuerlig skanning', 'error');
+    }
 }
 
 /**
@@ -350,6 +405,19 @@ async function startCameraScanning(cameraId = null, options = {}) {
     }
     
     try {
+        // Last inn Quagga-biblioteket hvis det ikke er lastet inn
+        if (typeof Quagga === 'undefined') {
+            console.log('DEBUG-CAM021: Quagga ikke definert, laster biblioteket');
+            try {
+                await loadQuaggaScript();
+                console.log('DEBUG-CAM022: Quagga-bibliotek lastet inn vellykket');
+            } catch (quaggaLoadError) {
+                console.error('DEBUG-CAM023: Kunne ikke laste Quagga:', quaggaLoadError);
+                showToast('Kunne ikke laste strekkodebibliotek. Prøv å laste siden på nytt.', 'error');
+                throw quaggaLoadError;
+            }
+        }
+        
         // Finn aktuell scanner-container basert på gjeldende modul
         let modulePrefix = '';
         let moduleType = '';
@@ -500,40 +568,18 @@ async function startCameraScanning(cameraId = null, options = {}) {
                 
                 // Forsøk å starte avspillingen manuelt
                 videoElement.play().then(() => {
-                    console.log('DEBUG-CAM007: videoElement.play() succeeded');
+                    console.log('DEBUG-CAM007: Video play() vellykket');
                 }).catch(e => {
-                    console.log('DEBUG-CAM008: videoElement.play() feilet:', e.message);
-                    // Vi avbryter ikke her, lar events håndtere det i stedet
+                    console.error('DEBUG-CAM008: Video play() feilet:', e);
                 });
             });
             
             try {
                 await videoStartPromise;
-            } catch(e) {
-                console.error('DEBUG-CAM009: Timeout eller feil ved oppstart av video:', e);
-                showToast('Kunne ikke starte videostrøm. Prøv å klikke på skjermen eller last siden på nytt.', 'warning');
-                // Fortsett likevel, det kan fungere i noen tilfeller
-            }
-            
-            // Sett opp canvas
-            canvasElement.width = 640;
-            canvasElement.height = 480;
-            canvasElement.style.position = 'absolute';
-            canvasElement.style.top = '0';
-            canvasElement.style.left = '0';
-            canvasElement.style.width = '100%';
-            canvasElement.style.height = '100%';
-            canvasElement.style.zIndex = '2';
-            canvasElement.style.backgroundColor = 'transparent';
-            
-            // Sjekk status for Quagga-objekt
-            console.log('DEBUG-CAM010: Quagga status før init:', typeof Quagga !== 'undefined' ? 'Definert' : 'Udefinert');
-            
-            // Last Quagga2 hvis nødvendig
-            if (typeof Quagga === 'undefined') {
-                showToast('Laster strekkodeleser...', 'info');
-                await loadQuaggaScript();
-                console.log('DEBUG-CAM011: Quagga lastet dynamisk');
+                console.log('DEBUG-CAM009: Video er klar til bruk');
+            } catch (error) {
+                console.error('DEBUG-CAM010: Feil ved initialisering av video:', error);
+                // Fortsett likevel - noen enheter rapporterer feil, men fungerer likevel
             }
             
             // Vent litt før Quagga initialiseres for å sikre at video er stabilisert
@@ -546,7 +592,7 @@ async function startCameraScanning(cameraId = null, options = {}) {
                 console.warn('DEBUG-CAM013: Video har ingen dimensjoner, men fortsetter likevel');
             }
             
-            // Initialiser Quagga2 med forbedret konfigurasjon og strengere skannområde
+            // Initialiser Quagga2 med forbedret konfigurasjon uten begrenset skanneområde
             Quagga.init({
                 inputStream: {
                     name: "Live",
@@ -556,13 +602,7 @@ async function startCameraScanning(cameraId = null, options = {}) {
                         width: { min: 640 },
                         height:  { min: 480 }
                     },
-                    area: { 
-                        // Innskrenk skanningsområdet til sentrum av skjermen
-                        top: "30%",    
-                        right: "30%",
-                        left: "30%",
-                        bottom: "30%"
-                    },
+                    area: null, // Fjernet begrensning for skanneområde, bruker hele bildet
                     singleChannel: false // viktig for Quagga2
                 },
                 locator: {
@@ -818,6 +858,12 @@ function handleCameraScanResult(result) {
             return; // Ignorer dupliserte skann
         }
         
+        // Sjekk om strekkoden er i skanningsområdet (box)
+        if (!result.box) {
+            console.log(`DEBUG-SCAN004: Strekkode oppdaget, men utenfor skanningsområdet`);
+            return; // Ignorer strekkoder som er oppdaget utenfor skanningsområdet
+        }
+        
         // Skrøyt ut hvis strekkoden ser ut som [object Object]
         if (barcode === "[object Object]") {
             console.error(`DEBUG-SCAN003: Strekkoden konverteres feil til [object Object]!`);
@@ -844,15 +890,80 @@ function handleCameraScanResult(result) {
             // Spill lyd for å indikere at strekkode er funnet
             playDetectionSound();
             
+            // Sjekk om strekkoden finnes i barcode mapping og hent eventuelt varenummer
+            let itemId = barcode;
+            let productInfo = "";
+            
+            if (appState.barcodeMapping && appState.barcodeMapping[barcode]) {
+                const mappedValue = appState.barcodeMapping[barcode];
+                
+                // Sjekk om mappedValue er et objekt eller en streng
+                if (typeof mappedValue === 'object' && mappedValue !== null) {
+                    // Hvis det er et objekt, hent ut id-propertyen
+                    itemId = mappedValue.id || barcode;
+                    const description = mappedValue.description ? ` (${mappedValue.description})` : '';
+                    productInfo = ` (Varenr: ${itemId}${description})`;
+                    console.log(`DEBUG-SCAN007: Strekkode ${barcode} mappet til varenummer ${itemId} via objekt`);
+                } else {
+                    // Hvis det er en streng, bruk verdien direkte
+                    itemId = mappedValue;
+                    productInfo = ` (Varenr: ${itemId})`;
+                    console.log(`DEBUG-SCAN007: Strekkode ${barcode} mappet til varenummer ${itemId}`);
+                }
+            }
+            
+            // Vis status direkte i kameravisningen med eventuelt varenummer
+            showBarcodeStatusMessage(`Strekkode gjenkjent: ${barcode}${productInfo}`, true);
+            
+            // Hvis vi er i kontinuerlig skannemodus, prosesser strekkoden automatisk
+            if (window.continuousScanning) {
+                console.log(`DEBUG-SCAN006: Auto-prosesserer strekkode ${barcode} i kontinuerlig modus`);
+                
+                // VIKTIG: Sjekk om strekkoden finnes i mappingen før den automatisk prosesseres
+                if (appState.barcodeMapping && appState.barcodeMapping[barcode]) {
+                    processScannedBarcode(barcode);
+                    
+                    // Tilbakestill kontinuerlig skannemodus
+                    window.continuousScanning = false;
+                    
+                    // Tilbakestill scan-button til normal tilstand
+                    const moduleType = getModuleType(appState.currentModule);
+                    const scanButton = scanButtonElements[moduleType];
+                    if (scanButton) {
+                        scanButton.classList.remove('scanning-active');
+                        scanButton.textContent = 'Utfør skann';
+                        
+                        // Gjenopprett original klikkhandler
+                        scanButton.onclick = () => {
+                            performManualScan(moduleType);
+                        };
+                    }
+                    
+                    // Sett cooldown for å unngå gjentatte skanninger
+                    scanCooldown = true;
+                    
+                    // Start skanning igjen etter cooldown
+                    setTimeout(() => {
+                        scanCooldown = false;
+                    }, 2000); // 2 sekund cooldown mellom auto-skanninger
+                } else {
+                    console.log(`DEBUG-SCAN006B: Strekkode ${barcode} ikke funnet i mapping, venter på manuell bekreftelse`);
+                    // For ukjente strekkoder, behold kontinuerlig modus aktiv men gi brukeren info
+                    showToast(`Strekkode ${barcode} ikke funnet i databasen. Trykk "Bekreft" for å legge til.`, 'warning');
+                }
+                
+                return;
+            }
+            
             // Hvis vi er i manuell skannemodus, vent på at brukeren trykker på knappen
             if (manualScanMode) {
                 const moduleType = getModuleType(appState.currentModule);
                 const scanButton = scanButtonElements[moduleType];
                 
                 if (scanButton) {
-                    // Gjør knappen mer fremtredende
+                    // Gjør knappen mer fremtredende og vis både strekkode og varenummer
                     scanButton.classList.add('ready-to-scan');
-                    scanButton.textContent = `Bekreft skanning av "${barcode}"`;
+                    scanButton.textContent = `Bekreft "${barcode}"${productInfo}`;
                     
                     // Vis en blinkende grønn kant rundt skann-området
                     if (canvasElement) {
@@ -876,7 +987,27 @@ function handleCameraScanResult(result) {
             // Start skanning igjen etter cooldown
             setTimeout(() => {
                 scanCooldown = false;
+                
+                // Tilbakestill scan-button og scan-area hvis vi er i manuell modus
+                const moduleType = getModuleType(appState.currentModule);
+                const scanButton = scanButtonElements[moduleType];
+                if (scanButton) {
+                    scanButton.classList.remove('ready-to-scan');
+                    scanButton.textContent = 'Utfør skann';
+                }
+                
+                const scanArea = document.querySelector('.scan-area');
+                if (scanArea) {
+                    scanArea.classList.remove('detected');
+                }
+                
+                // Fjern statusmeldingen
+                hideBarcodeStatusMessage();
+                
             }, 1000); // 1 sekund cooldown mellom skanninger
+        } else {
+            // Viser melding om at strekkoden ikke ble gjenkjent/validert
+            showBarcodeStatusMessage("Strekkode ikke gjenkjent. Prøv igjen.", false);
         }
     }
 }
@@ -1227,12 +1358,54 @@ function validateBarcode(barcode) {
         return false;
     }
     
-    // Sjekk om strekkoden er i vår kjente strekkodeoversikt
-    if (appState.barcodeMapping && barcode in appState.barcodeMapping) {
-        return true;
+    console.log(`DEBUG-VALIDATE: Sjekker strekkode ${barcode}`);
+    
+    // VIKTIG: Sjekk om strekkoden finnes direkte som nøkkel i barcodes.json
+    if (appState.barcodeMapping) {
+        // Sjekk om strekkoden finnes direkte som nøkkel i objektet
+        if (Object.keys(appState.barcodeMapping).includes(barcode)) {
+            console.log(`DEBUG-VALIDATE: Strekkode ${barcode} finnes direkte i barcodeMapping`);
+            return true;
+        }
+        
+        // Sjekk om strekkoden finnes som verdien til en ID i appState.barcodeMapping
+        if (barcode in appState.barcodeMapping) {
+            console.log(`DEBUG-VALIDATE: Strekkode ${barcode} matcher en nøkkel i barcodeMapping`);
+            return true;
+        }
     }
     
-    // Sjekk for kjente strekkodeformater
+    // Hvis vi har den aktive modulen og dens liste, sjekk om varenummeret finnes direkte
+    if (appState.currentModule) {
+        let items = [];
+        
+        switch (appState.currentModule) {
+            case 'picking':
+                items = appState.pickListItems || [];
+                break;
+            case 'receiving':
+                items = appState.receiveListItems || [];
+                break;
+            case 'returns':
+                items = appState.returnListItems || [];
+                break;
+        }
+        
+        // Sjekk om barcode finnes som varenummer (id) i listen
+        const itemExists = items.some(item => item.id === barcode);
+        if (itemExists) {
+            console.log(`DEBUG-VALIDATE: Strekkode ${barcode} finnes som vareid i ${appState.currentModule}-listen`);
+            return true;
+        }
+    }
+    
+    // Hvis kontinuerlig skanning er aktivert, kreves match i barcodes.json
+    if (window.continuousScanning) {
+        console.log(`DEBUG-VALIDATE: Kontinuerlig skanning aktiv, strekkode ${barcode} ble ikke funnet`);
+        return false;
+    }
+    
+    // Sjekk for kjente strekkodeformater - brukes bare når ikke i kontinuerlig skanning
     const isEAN13 = /^\d{13}$/.test(barcode);
     const isEAN8 = /^\d{8}$/.test(barcode);
     const isUPCA = /^\d{12}$/.test(barcode);
@@ -1270,6 +1443,19 @@ function validateBarcode(barcode) {
 function processScannedBarcode(barcode) {
     console.log("PROSESS-DEBUG-P100: processScannedBarcode starter med", barcode);
     
+    // Sjekk om barcode er et objekt og konverter til streng
+    if (typeof barcode === 'object' && barcode !== null) {
+        console.log("PROSESS-DEBUG-P100B: barcode er et objekt:", barcode);
+        if (barcode.id) {
+            console.log(`PROSESS-DEBUG-P100C: Bruker objekt.id (${barcode.id}) som barcode`);
+            barcode = barcode.id;
+        } else {
+            console.error("PROSESS-FEIL-P000: Kunne ikke konvertere objekt til gyldig strekkode");
+            showToast("Feil strekkodeformat mottatt. Kontakt systemadministrator.", "error");
+            return;
+        }
+    }
+    
     // Sjekk hvilken modul som er aktiv
     if (!appState.currentModule) {
         console.error("PROSESS-FEIL-P001: Ingen aktiv modul");
@@ -1289,8 +1475,18 @@ function processScannedBarcode(barcode) {
         // Sjekk om strekkoden finnes i barcode mapping
         let itemId = barcode;
         if (appState.barcodeMapping && appState.barcodeMapping[barcode]) {
-            itemId = appState.barcodeMapping[barcode];
-            console.log(`PROSESS-DEBUG-P103: Strekkode ${barcode} mappet til varenummer ${itemId}`);
+            const mappedValue = appState.barcodeMapping[barcode];
+            
+            // Sjekk om mappedValue er et objekt eller en streng
+            if (typeof mappedValue === 'object' && mappedValue !== null) {
+                // Hvis det er et objekt, hent ut id-propertyen
+                itemId = mappedValue.id || barcode;
+                console.log(`PROSESS-DEBUG-P103: Strekkode ${barcode} mappet til varenummer ${itemId} via objekt`);
+            } else {
+                // Hvis det er en streng, bruk verdien direkte
+                itemId = mappedValue;
+                console.log(`PROSESS-DEBUG-P103: Strekkode ${barcode} mappet til varenummer ${itemId}`);
+            }
         }
         
         try {
@@ -1522,6 +1718,48 @@ function blinkBackground(color) {
     setTimeout(() => {
         overlay.style.backgroundColor = 'transparent';
     }, 500);
+}
+
+/**
+ * Viser en statusmelding direkte i kameravisningen
+ * @param {string} message - Meldingen som skal vises
+ * @param {boolean} isSuccess - Om dette er en suksessmelding (grønn) eller feilmelding (rød)
+ */
+function showBarcodeStatusMessage(message, isSuccess = false) {
+    // Finn eller opprett statusboks
+    let statusEl = document.querySelector('.barcode-status');
+    if (!statusEl) {
+        statusEl = document.createElement('div');
+        statusEl.className = 'barcode-status';
+        
+        // Legg til i kameravisningen
+        const container = document.querySelector('.camera-wrapper');
+        if (container) {
+            container.appendChild(statusEl);
+        }
+    }
+    
+    // Sett melding og stil
+    statusEl.textContent = message;
+    statusEl.style.backgroundColor = isSuccess ? 'rgba(76, 175, 80, 0.8)' : 'rgba(0, 0, 0, 0.7)';
+    
+    // Vis meldingen
+    statusEl.classList.add('visible');
+    
+    // Fjern meldingen etter en stund
+    setTimeout(() => {
+        if (statusEl) statusEl.classList.remove('visible');
+    }, 3000);
+}
+
+/**
+ * Skjuler statusmeldingen
+ */
+function hideBarcodeStatusMessage() {
+    const statusEl = document.querySelector('.barcode-status');
+    if (statusEl) {
+        statusEl.classList.remove('visible');
+    }
 }
 
 // Gjør debug-informasjon tilgjengelig globalt

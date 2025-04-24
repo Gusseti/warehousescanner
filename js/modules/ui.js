@@ -41,6 +41,28 @@ export function initUi() {
     backButtonEl.addEventListener('click', function() {
         showMainMenu();
     });
+    
+    // Sikre at scanner-indikator-elementene alltid oppdateres når DOM er lastet fullstendig
+    window.addEventListener('DOMContentLoaded', function() {
+        scannerIndicatorEl = document.getElementById('scannerIndicator');
+        scannerStatusEl = document.getElementById('scannerStatus');
+        if (!scannerIndicatorEl || !scannerStatusEl) {
+            console.warn('Scanner-indikator-elementer ikke funnet etter DOMContentLoaded');
+        }
+    });
+    
+    // Observer for å håndtere dynamisk DOM-endringer
+    const observer = new MutationObserver(function(mutations) {
+        if (!scannerIndicatorEl || !scannerStatusEl) {
+            scannerIndicatorEl = document.getElementById('scannerIndicator');
+            scannerStatusEl = document.getElementById('scannerStatus');
+        }
+    });
+    
+    // Start observing
+    if (document.body) {
+        observer.observe(document.body, { childList: true, subtree: true });
+    }
 }
 
 /**

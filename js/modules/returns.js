@@ -292,6 +292,31 @@ export function handleReturnScan(barcode, quantity = 1) {
     
     if (!barcode) return;
     
+    // KRITISK FIX: Håndterer tilfeller der barcode er et objekt
+    if (typeof barcode === 'object' && barcode !== null) {
+        console.log('Barcode er et objekt, konverterer til riktig format', barcode);
+        
+        // Hvis objektet har ID-felt, bruk det
+        if (barcode.id) {
+            console.log(`Konverterer objekt til ID: ${barcode.id}`);
+            barcode = barcode.id;
+        } else {
+            // Forsøk å finne en egnet identifikator i objektet, eller omgjør til string
+            console.warn('Barcode-objekt mangler id-felt, bruker string-konvertering');
+            try {
+                barcode = String(barcode);
+                if (barcode === '[object Object]') {
+                    console.error('Kunne ikke konvertere objekt til gyldig strekkode');
+                    showToast('Feil strekkodeformat mottatt. Kontakt systemadministrator.', 'error');
+                    return;
+                }
+            } catch (e) {
+                console.error('Feil ved konvertering av objekt til strekkode:', e);
+                return;
+            }
+        }
+    }
+    
     // Tøm input etter skanning
     if (returnManualScanEl) {
         returnManualScanEl.value = '';
@@ -335,6 +360,7 @@ export function handleReturnScan(barcode, quantity = 1) {
     // STEG 2: Hvis ikke funnet, sjekk om det er et varenummer
     else {
         console.log('Fant ikke strekkode. Prøver å søke etter varenummer...');
+        
         // Sjekk om det som ble skannet er et varenummer (ikke strekkode)
         let foundProduct = false;
         
