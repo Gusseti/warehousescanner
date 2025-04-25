@@ -7,920 +7,497 @@
     <title>SnapScan Dashboard</title>
     <link rel="manifest" href="manifest.json">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
-    <link rel="stylesheet" href="css/styles.css">
-    <link rel="stylesheet" href="css/dropdown-search.css">
-    <link rel="stylesheet" href="css/camera-styles.css">
+    <link rel="stylesheet" href="css/new-styles.css">
+    <link rel="stylesheet" href="css/modules/test-module.css">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-
-    <!-- Styling for components - this will later be moved to its own CSS file -->
-    <style>
-        /* Component styling */
-        .component-container {
-            width: 100%;
-            margin-bottom: 1rem;
-        }
-
-        /* Dark mode support */
-        body.dark-mode .component-container {
-            color: #e0e0e0;
-        }
-
-        /* Generic component styles */
-        .app-component {
-            border-radius: 8px;
-            overflow: hidden;
-            transition: all 0.3s ease;
-        }
-
-        /* Improved Dashboard Styling */
-        .dashboard-header {
-            background-color: #2196f3;
-            color: white;
-            padding: 15px 0;
-            box-shadow: 0 3px 10px rgba(0, 0, 0, 0.1);
-            position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            z-index: 1000;
-        }
-
-        .header-container {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            max-width: 1200px;
-            margin: 0 auto;
-            padding: 0 20px;
-        }
-
-        .header-left {
-            display: flex;
-            align-items: center;
-        }
-
-        .app-brand {
-            display: flex;
-            align-items: center;
-        }
-
-        .app-logo {
-            font-size: 1.8rem;
-            margin-right: 10px;
-        }
-
-        .app-title h1 {
-            margin: 0;
-            font-size: 1.4rem;
-            letter-spacing: 0.5px;
-        }
-
-        .app-version {
-            font-size: 0.7rem;
-            opacity: 0.7;
-        }
-
-        .header-right {
-            display: flex;
-            align-items: center;
-            gap: 20px;
-        }
-
-        .scanner-status {
-            display: flex;
-            align-items: center;
-            font-size: 0.8rem;
-            background: rgba(255, 255, 255, 0.1);
-            padding: 5px 10px;
-            border-radius: 20px;
-        }
-
-        .scanner-indicator {
-            width: 10px;
-            height: 10px;
-            border-radius: 50%;
-            background-color: #ff5252;
-            margin-right: 8px;
-        }
-
-        .scanner-indicator.connected {
-            background-color: #4caf50;
-        }
-
-        .theme-switch {
-            position: relative;
-            display: inline-block;
-            width: 50px;
-            height: 26px;
-        }
-
-        .theme-switch input {
-            opacity: 0;
-            width: 0;
-            height: 0;
-        }
-
-        .slider {
-            position: absolute;
-            cursor: pointer;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background-color: #ccc;
-            transition: .4s;
-            border-radius: 34px;
-        }
-
-        .slider:before {
-            position: absolute;
-            content: "";
-            height: 18px;
-            width: 18px;
-            left: 4px;
-            bottom: 4px;
-            background-color: white;
-            transition: .4s;
-            border-radius: 50%;
-        }
-
-        input:checked + .slider {
-            background-color: #333;
-        }
-
-        input:checked + .slider:before {
-            transform: translateX(24px);
-        }
-
-        .theme-icon {
-            position: absolute;
-            top: 5px;
-            font-size: 0.8rem;
-            transition: .4s;
-        }
-
-        .light-icon {
-            right: 5px;
-            color: #f1c40f;
-        }
-
-        .dark-icon {
-            left: 5px;
-            color: #34495e;
-        }
-
-        .user-profile {
-            display: flex;
-            align-items: center;
-            cursor: pointer;
-            position: relative;
-        }
-
-        .user-avatar {
-            width: 32px;
-            height: 32px;
-            border-radius: 50%;
-            background-color: #1a75c5;
-            color: white;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-weight: bold;
-            margin-right: 8px;
-            font-size: 1rem;
-        }
-
-        .user-name {
-            font-size: 0.9rem;
-            font-weight: 500;
-        }
-
-        .user-dropdown {
-            position: absolute;
-            top: 44px;
-            right: 0;
-            background-color: white;
-            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
-            border-radius: 8px;
-            min-width: 180px;
-            z-index: 1000;
-            display: none;
-        }
-
-        .user-profile:hover .user-dropdown {
-            display: block;
-        }
-
-        .user-dropdown-item {
-            padding: 12px 15px;
-            color: #333;
-            transition: background-color 0.2s;
-            display: flex;
-            align-items: center;
-        }
-
-        .user-dropdown-item:hover {
-            background-color: #f5f5f5;
-        }
-
-        .user-dropdown-item i {
-            margin-right: 10px;
-            width: 16px;
-            text-align: center;
-        }
-
-        /* Dashboard Main Content */
-        .dashboard-content {
-            margin-top: 80px;
-            padding: 20px;
-            max-width: 1200px;
-            margin-left: auto;
-            margin-right: auto;
-        }
-
-        .dashboard-title {
-            margin-bottom: 30px;
-            padding-bottom: 15px;
-            border-bottom: 1px solid #eee;
-        }
-
-        .dashboard-title h2 {
-            font-size: 1.8rem;
-            color: #333;
-            margin: 0;
-        }
-
-        .dashboard-title p {
-            color: #777;
-            margin: 5px 0 0 0;
-        }
-
-        .module-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
-            gap: 20px;
-            margin-bottom: 40px;
-        }
-
-        .module-card {
-            background-color: white;
-            border-radius: 10px;
-            overflow: hidden;
-            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.05);
-            transition: transform 0.3s, box-shadow 0.3s;
-            cursor: pointer;
-        }
-
-        .module-card:hover {
-            transform: translateY(-5px);
-            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.1);
-        }
-
-        .module-icon {
-            height: 120px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            background-color: #2196f3;
-            color: white;
-        }
-
-        .module-icon i {
-            font-size: 3rem;
-        }
-
-        .module-info {
-            padding: 20px;
-        }
-
-        .module-info h3 {
-            margin: 0 0 10px 0;
-            color: #333;
-            font-size: 1.2rem;
-        }
-
-        .module-info p {
-            color: #777;
-            margin: 0;
-            font-size: 0.9rem;
-        }
-
-        .stats-section {
-            margin-bottom: 40px;
-        }
-
-        .stats-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-            gap: 20px;
-        }
-
-        .stat-card {
-            background-color: white;
-            border-radius: 10px;
-            padding: 20px;
-            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.05);
-        }
-
-        .stat-card h3 {
-            margin: 0 0 5px 0;
-            font-size: 1rem;
-            color: #777;
-        }
-
-        .stat-card .value {
-            font-size: 2rem;
-            font-weight: bold;
-            color: #2196f3;
-        }
-
-        .stat-card .change {
-            display: flex;
-            align-items: center;
-            font-size: 0.8rem;
-            margin-top: 5px;
-        }
-
-        .stat-card .change.positive {
-            color: #4caf50;
-        }
-
-        .stat-card .change.negative {
-            color: #f44336;
-        }
-
-        .recent-section {
-            margin-bottom: 40px;
-        }
-
-        .recent-activities {
-            background-color: white;
-            border-radius: 10px;
-            padding: 20px;
-            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.05);
-        }
-
-        .activity-item {
-            padding: 15px 0;
-            border-bottom: 1px solid #f0f0f0;
-            display: flex;
-            align-items: center;
-        }
-
-        .activity-item:last-child {
-            border-bottom: none;
-        }
-
-        .activity-icon {
-            width: 40px;
-            height: 40px;
-            border-radius: 50%;
-            background-color: #e3f2fd;
-            color: #2196f3;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            margin-right: 15px;
-        }
-
-        .activity-info {
-            flex: 1;
-        }
-
-        .activity-info h4 {
-            margin: 0 0 5px 0;
-            font-size: 1rem;
-        }
-
-        .activity-info p {
-            margin: 0;
-            font-size: 0.85rem;
-            color: #777;
-        }
-
-        .activity-time {
-            font-size: 0.8rem;
-            color: #999;
-        }
-
-        /* Dark Mode Styles */
-        body.dark-mode {
-            background-color: #121212;
-            color: #e0e0e0;
-        }
-
-        body.dark-mode .dashboard-header {
-            background-color: #1a1a1a;
-            box-shadow: 0 3px 10px rgba(0, 0, 0, 0.2);
-        }
-
-        body.dark-mode .scanner-status {
-            background: rgba(255, 255, 255, 0.05);
-        }
-
-        body.dark-mode .module-card,
-        body.dark-mode .stat-card,
-        body.dark-mode .recent-activities {
-            background-color: #1e1e1e;
-            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
-        }
-
-        body.dark-mode .module-info h3,
-        body.dark-mode .stat-card h3 {
-            color: #e0e0e0;
-        }
-
-        body.dark-mode .module-info p,
-        body.dark-mode .activity-info p,
-        body.dark-mode .dashboard-title p {
-            color: #aaa;
-        }
-
-        body.dark-mode .dashboard-title {
-            border-bottom-color: #333;
-        }
-
-        body.dark-mode .dashboard-title h2 {
-            color: #e0e0e0;
-        }
-
-        body.dark-mode .activity-item {
-            border-bottom-color: #333;
-        }
-
-        body.dark-mode .activity-icon {
-            background-color: #333;
-        }
-
-        body.dark-mode .user-dropdown {
-            background-color: #1e1e1e;
-        }
-
-        body.dark-mode .user-dropdown-item {
-            color: #e0e0e0;
-        }
-
-        body.dark-mode .user-dropdown-item:hover {
-            background-color: #2a2a2a;
-        }
-
-        /* Mobile Responsive Adjustments */
-        @media (max-width: 768px) {
-            .header-container {
-                padding: 0 10px;
-            }
-
-            .scanner-status {
-                display: none;
-            }
-
-            .app-title h1 {
-                font-size: 1.2rem;
-            }
-
-            .dashboard-content {
-                padding: 15px;
-            }
-
-            .module-grid, .stats-grid {
-                grid-template-columns: 1fr;
-            }
-        }
-    </style>
 </head>
 <body>
-    <div id="appRoot">
-        <!-- Dashboard Header -->
-        <header class="dashboard-header">
-            <div class="header-container">
-                <div class="header-left">
-                    <button id="backButton" class="back-button">
-                        <i class="fas fa-arrow-left"></i>
-                    </button>
-                    <div class="app-brand">
-                        <i class="fas fa-qrcode app-logo"></i>
-                        <div class="app-title">
-                            <h1>SnapScan</h1>
-                            <span class="app-version">v1.0</span>
-                        </div>
-                    </div>
-                </div>
-                
-                <div class="header-right">
-                    <div id="scannerStatusHeader" class="scanner-status">
-                        <div id="scannerIndicator" class="scanner-indicator"></div>
-                        <span id="scannerStatus">Skanner: Ikke tilkoblet</span>
-                    </div>
-                    
-                    <!-- Dark Mode Toggle Switch -->
-                    <label class="theme-switch">
-                        <input type="checkbox" id="themeToggle">
-                        <span class="slider"></span>
-                        <i class="fas fa-moon theme-icon dark-icon"></i>
-                        <i class="fas fa-sun theme-icon light-icon"></i>
-                    </label>
-
-                    <!-- Bruker profil -->
-                    <div class="user-profile" id="userProfile">
-                        <div class="user-avatar" id="userAvatar">K</div>
-                        <span class="user-name" id="userName">Kristian</span>
-                        <div class="user-dropdown" id="userDropdown">
-                            <div class="user-dropdown-item" id="userProfile" data-module="profile">
-                                <i class="fas fa-user-cog"></i> Min profil
-                            </div>
-                            <div class="user-dropdown-item" id="userSettings" data-module="settings">
-                                <i class="fas fa-cog"></i> Innstillinger
-                            </div>
-                            <div class="user-dropdown-item" id="logoutBtn">
-                                <i class="fas fa-sign-out-alt"></i> Logg ut
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </header>
-
-        <!-- Main Dashboard Content -->
-        <main id="mainDashboard" class="dashboard-content">
-            <div class="dashboard-title">
-                <h2>Velkommen til SnapScan</h2>
-                <p>Velg en modul nedenfor for å komme i gang</p>
-            </div>
-
-            <!-- Modules Grid -->
-            <section>
-                <div class="module-grid">
-                    <div class="module-card" data-module="picking">
-                        <div class="module-icon" style="background-color: #4caf50;">
-                            <i class="fas fa-clipboard-list"></i>
-                        </div>
-                        <div class="module-info">
-                            <h3>Plukk</h3>
-                            <p>Håndter plukking av varer fra lager</p>
-                        </div>
-                    </div>
-
-                    <div class="module-card" data-module="receiving">
-                        <div class="module-icon" style="background-color: #2196f3;">
-                            <i class="fas fa-truck-loading"></i>
-                        </div>
-                        <div class="module-info">
-                            <h3>Mottak</h3>
-                            <p>Registrer og håndter varemottak</p>
-                        </div>
-                    </div>
-
-                    <div class="module-card" data-module="returns">
-                        <div class="module-icon" style="background-color: #ff9800;">
-                            <i class="fas fa-undo-alt"></i>
-                        </div>
-                        <div class="module-info">
-                            <h3>Retur</h3>
-                            <p>Behandle og registrer returvarer</p>
-                        </div>
-                    </div>
-
-                    <div class="module-card" data-module="settings">
-                        <div class="module-icon" style="background-color: #607d8b;">
-                            <i class="fas fa-cogs"></i>
-                        </div>
-                        <div class="module-info">
-                            <h3>Innstillinger</h3>
-                            <p>Konfigurer applikasjonen</p>
-                        </div>
-                    </div>
-                </div>
-            </section>
-
-            <!-- Recent Activities Section -->
-            <section class="recent-section">
-                <h3>Siste aktiviteter</h3>
-                <div class="recent-activities">
-                    <div class="activity-item">
-                        <div class="activity-icon">
-                            <i class="fas fa-clipboard-check"></i>
-                        </div>
-                        <div class="activity-info">
-                            <h4>Plukkliste fullført</h4>
-                            <p>Plukkliste #12345 fullført med 23 varer</p>
-                        </div>
-                        <div class="activity-time">
-                            I dag, 14:32
-                        </div>
-                    </div>
-
-                    <div class="activity-item">
-                        <div class="activity-icon">
-                            <i class="fas fa-truck-loading"></i>
-                        </div>
-                        <div class="activity-info">
-                            <h4>Nytt varemottak</h4>
-                            <p>Varemottak registrert fra leverandør Elektro AS</p>
-                        </div>
-                        <div class="activity-time">
-                            I dag, 10:15
-                        </div>
-                    </div>
-
-                    <div class="activity-item">
-                        <div class="activity-icon">
-                            <i class="fas fa-undo-alt"></i>
-                        </div>
-                        <div class="activity-info">
-                            <h4>Retur behandlet</h4>
-                            <p>3 varer returnert fra kunde #87652</p>
-                        </div>
-                        <div class="activity-time">
-                            I går, 16:45
-                        </div>
-                    </div>
-                </div>
-            </section>
-        </main>
-
-        <!-- Loading screen will be shown until app is fully loaded -->
-        <div class="loading-screen">
-            <div class="spinner"></div>
-            <p>Laster SnapScan...</p>
-        </div>
+    <!-- Loading Screen -->
+    <div class="loading-screen" id="loadingScreen">
+        <div class="loading-spinner"></div>
+        <p class="loading-text">Laster SnapScan...</p>
     </div>
 
-    <!-- Templates from the original file (unmodified) -->
-    <template id="headerTemplate">
-        <header>
-            <div class="header-left">
-                <button id="backButton" class="back-button">
-                    <i class="fas fa-arrow-left"></i>
-                </button>
+    <!-- Header -->
+    <header class="app-header">
+        <div class="container">
+            <div class="header-content">
                 <div class="app-brand">
+                    <button id="backToHome" class="back-button" style="display: none;">
+                        <i class="fas fa-arrow-left"></i>
+                    </button>
                     <i class="fas fa-qrcode app-logo"></i>
-                    <div class="app-title">
-                        <h1>SnapScan</h1>
+                    <div>
+                        <span class="brand-name">SnapScan</span>
                         <span class="app-version">v1.0</span>
                     </div>
                 </div>
+                
+                <div class="header-actions">
+                    <div class="scanner-status" id="scannerStatus">
+                        <div class="scanner-indicator" id="scannerIndicator"></div>
+                        <span>Skanner: Ikke tilkoblet</span>
+                    </div>
+                    
+                    <label class="theme-switch">
+                        <input type="checkbox" id="themeToggle">
+                        <span class="slider"></span>
+                    </label>
+                    
+                    <div class="user-dropdown" id="userDropdown">
+                        <div class="user-info">
+                            <div class="user-avatar" id="userAvatar">K</div>
+                            <span class="user-name" id="userName">Kristian</span>
+                        </div>
+                        <div class="dropdown-menu">
+                            <a href="#" class="dropdown-item" data-module="profile">
+                                <i class="fas fa-user-circle"></i>
+                                <span>Min profil</span>
+                            </a>
+                            <a href="#" class="dropdown-item" data-module="settings">
+                                <i class="fas fa-cog"></i>
+                                <span>Innstillinger</span>
+                            </a>
+                            <a href="#" class="dropdown-item" id="logoutBtn">
+                                <i class="fas fa-sign-out-alt"></i>
+                                <span>Logg ut</span>
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Dashboard -->
+    <main class="dashboard" id="dashboardMain">
+        <div class="container">
+            <div class="dashboard-welcome">
+                <h1 class="welcome-title">Velkommen tilbake, <span id="welcomeUserName">Kristian</span>!</h1>
+                <p class="welcome-subtitle">Velg en modul nedenfor for å komme i gang, eller se siste aktiviteter.</p>
             </div>
             
-            <div class="header-right">
-                <div id="scannerStatusHeader" class="scanner-status">
-                    <div id="scannerIndicator" class="scanner-indicator"></div>
-                    <span id="scannerStatus">Skanner: Ikke tilkoblet</span>
+            <!-- Stats Overview -->
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-card-icon" style="background-color: var(--success);">
+                        <i class="fas fa-clipboard-check"></i>
+                    </div>
+                    <div class="stat-card-value">23</div>
+                    <div class="stat-card-title">Varer plukket</div>
                 </div>
                 
-                <!-- Dark Mode Toggle Switch -->
-                <label class="theme-switch">
-                    <input type="checkbox" id="themeToggle">
-                    <span class="slider"></span>
-                    <i class="fas fa-moon theme-icon dark-icon"></i>
-                    <i class="fas fa-sun theme-icon light-icon"></i>
-                </label>
-
-                <!-- Bruker profil -->
-                <div class="user-profile" id="userProfile">
-                    <div class="user-avatar" id="userAvatar"></div>
-                    <span class="user-name" id="userName">Bruker</span>
-                    <div class="user-dropdown" id="userDropdown">
-                        <div class="user-dropdown-item" id="userSettings">
-                            <i class="fas fa-user-cog"></i> Min profil
-                        </div>
-                        <div class="user-dropdown-item" id="logoutBtn">
-                            <i class="fas fa-sign-out-alt"></i> Logg ut
+                <div class="stat-card">
+                    <div class="stat-card-icon" style="background-color: var(--primary);">
+                        <i class="fas fa-truck-loading"></i>
+                    </div>
+                    <div class="stat-card-value">12</div>
+                    <div class="stat-card-title">Varer mottatt</div>
+                </div>
+                
+                <div class="stat-card">
+                    <div class="stat-card-icon" style="background-color: var(--warning);">
+                        <i class="fas fa-undo-alt"></i>
+                    </div>
+                    <div class="stat-card-value">5</div>
+                    <div class="stat-card-title">Varer returnert</div>
+                </div>
+                
+                <div class="stat-card">
+                    <div class="stat-card-icon" style="background-color: var(--gray-600);">
+                        <i class="fas fa-clock"></i>
+                    </div>
+                    <div class="stat-card-value">18</div>
+                    <div class="stat-card-title">Timer spart</div>
+                </div>
+            </div>
+            
+            <!-- Modules Grid -->
+            <div class="modules-grid">
+                <!-- Picking Module -->
+                <div class="module-card" data-module="picking">
+                    <div class="module-header module-picking">
+                        <i class="fas fa-clipboard-list module-icon"></i>
+                    </div>
+                    <div class="module-body">
+                        <h3 class="module-title">Plukk</h3>
+                        <p class="module-description">Håndter plukking av varer fra lager med strekkodeskanning.</p>
+                        <div class="module-stats">
+                            <div class="stat">
+                                <div class="stat-value">23</div>
+                                <div class="stat-label">Varer</div>
+                            </div>
+                            <div class="stat">
+                                <div class="stat-value">5</div>
+                                <div class="stat-label">Lister</div>
+                            </div>
                         </div>
                     </div>
                 </div>
-            </div>
-        </header>
-    </template>
-
-    <template id="mainMenuTemplate">
-        <div id="mainMenu" class="main-menu">
-            <div class="menu-grid">
-                <div class="menu-item" data-module="picking">
-                    <i class="fas fa-clipboard-list"></i>
-                    <span>Plukk</span>
+                
+                <!-- Receiving Module -->
+                <div class="module-card" data-module="receiving">
+                    <div class="module-header module-receiving">
+                        <i class="fas fa-truck-loading module-icon"></i>
+                    </div>
+                    <div class="module-body">
+                        <h3 class="module-title">Mottak</h3>
+                        <p class="module-description">Registrer og håndter varemottak på en effektiv måte.</p>
+                        <div class="module-stats">
+                            <div class="stat">
+                                <div class="stat-value">12</div>
+                                <div class="stat-label">Varer</div>
+                            </div>
+                            <div class="stat">
+                                <div class="stat-value">3</div>
+                                <div class="stat-label">Mottak</div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
-                <div class="menu-item" data-module="receiving">
-                    <i class="fas fa-truck-loading"></i>
-                    <span>Mottak</span>
+                
+                <!-- Returns Module -->
+                <div class="module-card" data-module="returns">
+                    <div class="module-header module-returns">
+                        <i class="fas fa-undo-alt module-icon"></i>
+                    </div>
+                    <div class="module-body">
+                        <h3 class="module-title">Retur</h3>
+                        <p class="module-description">Behandle og registrer returvarer med detaljert informasjon.</p>
+                        <div class="module-stats">
+                            <div class="stat">
+                                <div class="stat-value">5</div>
+                                <div class="stat-label">Varer</div>
+                            </div>
+                            <div class="stat">
+                                <div class="stat-value">2</div>
+                                <div class="stat-label">Returer</div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
-                <div class="menu-item" data-module="returns">
-                    <i class="fas fa-undo-alt"></i>
-                    <span>Retur</span>
+                
+                <!-- Settings Module -->
+                <div class="module-card" data-module="settings">
+                    <div class="module-header module-settings">
+                        <i class="fas fa-cogs module-icon"></i>
+                    </div>
+                    <div class="module-body">
+                        <h3 class="module-title">Innstillinger</h3>
+                        <p class="module-description">Tilpass applikasjonen og administrer brukerprofil.</p>
+                    </div>
                 </div>
-                <div class="menu-item" data-module="settings">
-                    <i class="fas fa-cogs"></i>
-                    <span>Innstillinger</span>
-                </div>
-            </div>
-        </div>
-    </template>
 
-    <template id="modalTemplate">
-        <div class="modal">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h2 class="modal-title"></h2>
-                    <span class="close">&times;</span>
-                </div>
-                <div class="modal-body">
-                    <!-- Content will be injected here -->
-                </div>
-                <div class="modal-footer">
-                    <!-- Buttons will be injected here -->
-                </div>
-            </div>
-        </div>
-    </template>
-
-    <template id="tableComponentTemplate">
-        <div class="list-container">
-            <table>
-                <thead>
-                    <tr>
-                        <!-- Headers will be injected here -->
-                    </tr>
-                </thead>
-                <tbody>
-                    <!-- Rows will be injected here -->
-                </tbody>
-            </table>
-        </div>
-    </template>
-
-    <template id="buttonComponentTemplate">
-        <button class="btn">
-            <i class="fas"></i>
-            <span></span>
-        </button>
-    </template>
-
-    <template id="dropdownComponentTemplate">
-        <div class="dropdown">
-            <button class="btn dropdown-toggle">
-                <i class="fas"></i>
-                <span></span>
-            </button>
-            <div class="dropdown-content">
-                <!-- Dropdown items will be injected here -->
-            </div>
-        </div>
-    </template>
-
-    <template id="scanInputComponentTemplate">
-        <div class="scan-input-group">
-            <div class="scan-input-container">
-                <input type="text" class="form-control" placeholder="Skann eller skriv inn varenummer">
-                <button class="btn btn-primary scan-button">
-                    <i class="fas fa-barcode"></i> Registrer
-                </button>
-            </div>
-        </div>
-    </template>
-
-    <template id="progressBarComponentTemplate">
-        <div class="progress-container">
-            <div class="status-bar">
-                <div class="status-picked" style="width: 0%"></div>
-                <div class="status-remaining" style="width: 100%"></div>
-            </div>
-            <div class="status-text">0 av 0 varer plukket (0%)</div>
-        </div>
-    </template>
-
-    <template id="weightModalComponentTemplate">
-        <div class="form-group">
-            <div class="field-label">Varenummer:</div>
-            <span class="modal-item-id"></span>
-        </div>
-        <div class="form-group">
-            <label for="itemWeight">Vekt (kg):</label>
-            <input type="number" id="itemWeight" class="form-control" step="0.01" min="0" value="1">
-        </div>
-    </template>
-
-    <template id="quantityModalComponentTemplate">
-        <div class="form-group">
-            <div class="field-label">Varenummer:</div>
-            <span class="modal-item-id"></span>
-        </div>
-        <div class="form-group">
-            <label for="itemQuantity">Antall:</label>
-            <input type="number" id="itemQuantity" class="form-control" min="1" value="1">
-        </div>
-    </template>
-
-    <template id="cameraScannerComponentTemplate">
-        <div class="camera-scanner-container" style="display: none;">
-            <div class="camera-wrapper">
-                <video autoplay playsinline muted></video>
-                <canvas></canvas>
-                <div class="camera-overlay">
-                    <div class="scan-area"><span></span>
-                        <div class="scan-line"></div>
+                <!-- Test Module -->
+                <div class="module-card" data-module="test">
+                    <div class="module-header" style="background-color: #9c27b0;">
+                        <i class="fas fa-flask module-icon"></i>
+                    </div>
+                    <div class="module-body">
+                        <h3 class="module-title">Test</h3>
+                        <p class="module-description">En testmodul for å demonstrere modulstrukturen.</p>
                     </div>
                 </div>
             </div>
-            <div class="scanner-controls">
-                <button class="btn btn-primary scanner-switch-btn">
-                    <i class="fas fa-sync"></i> Bytt kamera
-                </button>
-                <button class="btn btn-danger scanner-close-btn">
-                    <i class="fas fa-times"></i> Lukk skanner
-                </button>
+            
+            <!-- Recent Activities Section -->
+            <section class="activities-section">
+                <div class="section-header">
+                    <h2 class="section-title">Siste aktiviteter</h2>
+                    <a href="#" class="btn btn-sm btn-outline">Se alle</a>
+                </div>
+                
+                <div class="activities-list">
+                    <div class="activity-item">
+                        <div class="activity-icon activity-icon-picking">
+                            <i class="fas fa-clipboard-check"></i>
+                        </div>
+                        <div class="activity-content">
+                            <h4 class="activity-title">Plukkliste fullført</h4>
+                            <p class="activity-description">Plukkliste #12345 fullført med 23 varer</p>
+                        </div>
+                        <div class="activity-time">I dag, 14:32</div>
+                    </div>
+                    
+                    <div class="activity-item">
+                        <div class="activity-icon activity-icon-receiving">
+                            <i class="fas fa-truck-loading"></i>
+                        </div>
+                        <div class="activity-content">
+                            <h4 class="activity-title">Nytt varemottak</h4>
+                            <p class="activity-description">Varemottak registrert fra leverandør Elektro AS</p>
+                        </div>
+                        <div class="activity-time">I dag, 10:15</div>
+                    </div>
+                    
+                    <div class="activity-item">
+                        <div class="activity-icon activity-icon-returns">
+                            <i class="fas fa-undo-alt"></i>
+                        </div>
+                        <div class="activity-content">
+                            <h4 class="activity-title">Retur behandlet</h4>
+                            <p class="activity-description">3 varer returnert fra kunde #87652</p>
+                        </div>
+                        <div class="activity-time">I går, 16:45</div>
+                    </div>
+                    
+                    <div class="activity-item">
+                        <div class="activity-icon activity-icon-picking">
+                            <i class="fas fa-clipboard-list"></i>
+                        </div>
+                        <div class="activity-content">
+                            <h4 class="activity-title">Plukkliste importert</h4>
+                            <p class="activity-description">Ny plukkliste med 17 varer importert fra system</p>
+                        </div>
+                        <div class="activity-time">I går, 09:22</div>
+                    </div>
+                </div>
+            </section>
+        </div>
+    </main>
+    
+    <!-- Module Containers (initially hidden) -->
+    <div id="moduleContainers" style="display: none;">
+        <!-- Picking Module Container -->
+        <div class="module-container" id="pickingModule" style="display: none;">
+            <div class="container">
+                <!-- Module content will be injected by the app -->
             </div>
         </div>
-    </template>
-
-    <template id="unknownBarcodeModalTemplate">
-        <div class="form-group">
-            <div class="field-label">Ukjent strekkode:</div>
-            <span class="modal-barcode"></span>
+        
+        <!-- Receiving Module Container -->
+        <div class="module-container" id="receivingModule" style="display: none;">
+            <div class="container">
+                <!-- Module content will be injected by the app -->
+            </div>
         </div>
-        <div class="form-group">
-            <label for="itemDescription">Beskrivelse:</label>
-            <input type="text" id="itemDescription" class="form-control" placeholder="Varebeskrivelse">
+        
+        <!-- Returns Module Container -->
+        <div class="module-container" id="returnsModule" style="display: none;">
+            <div class="container">
+                <!-- Module content will be injected by the app -->
+            </div>
         </div>
-        <div class="form-group">
-            <label for="itemWeight">Vekt (kg):</label>
-            <input type="number" id="itemWeight" class="form-control" step="0.01" min="0" value="1">
+        
+        <!-- Settings Module Container -->
+        <div class="module-container" id="settingsModule" style="display: none;">
+            <div class="container">
+                <!-- Module content will be injected by the app -->
+            </div>
         </div>
-    </template>
+        
+        <!-- Profile Module Container -->
+        <div class="module-container" id="profileModule" style="display: none;">
+            <div class="container">
+                <!-- Module content will be injected by the app -->
+            </div>
+        </div>
+        
+        <!-- Test Module Container -->
+        <div class="module-container" id="testModule" style="display: none;">
+            <!-- Content will be injected by test-module.js -->
+        </div>
+    </div>
 
-    <!-- JavaScript med moduler og komponenter -->
-    <script src="js/modules/load-libraries.js" type="module"></script>
-    <script src="js/app.js" type="module"></script>
+    <!-- Footer -->
+    <footer class="app-footer">
+        <div class="container">
+            <div class="footer-content">
+                <div class="footer-brand">
+                    <i class="fas fa-qrcode app-logo"></i>
+                    <div>
+                        <span class="brand-name">SnapScan</span>
+                        <span class="app-version">v1.0</span>
+                    </div>
+                </div>
+                
+                <div class="footer-links">
+                    <div class="footer-section">
+                        <h5>Moduler</h5>
+                        <ul>
+                            <li><a href="#" data-module="picking">Plukk</a></li>
+                            <li><a href="#" data-module="receiving">Mottak</a></li>
+                            <li><a href="#" data-module="returns">Retur</a></li>
+                            <li><a href="#" data-module="settings">Innstillinger</a></li>
+                        </ul>
+                    </div>
+                    
+                    <div class="footer-section">
+                        <h5>Support</h5>
+                        <ul>
+                            <li><a href="#">Hjelp</a></li>
+                            <li><a href="#">Kontakt oss</a></li>
+                            <li><a href="#">Dokumentasjon</a></li>
+                        </ul>
+                    </div>
+                    
+                    <div class="footer-section">
+                        <h5>Juridisk</h5>
+                        <ul>
+                            <li><a href="#">Personvern</a></li>
+                            <li><a href="#">Vilkår</a></li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="footer-bottom">
+                <p>&copy; 2025 SnapScan. Alle rettigheter reservert.</p>
+            </div>
+        </div>
+    </footer>
 
-    <!-- Dashboard-specific JavaScript -->
+    <!-- Main JavaScript -->
     <script>
         document.addEventListener('DOMContentLoaded', function() {
-            // Hide loading screen when DOM is loaded
+            // Vis innhold når siden er ferdig lastet
             setTimeout(() => {
-                document.querySelector('.loading-screen').style.display = 'none';
+                document.getElementById('loadingScreen').style.display = 'none';
             }, 1000);
-
-            // Event listeners for module cards
+            
+            // Lytt etter module card klikk
             document.querySelectorAll('.module-card').forEach(card => {
                 card.addEventListener('click', function() {
                     const moduleId = this.getAttribute('data-module');
-                    // Hide dashboard and show the selected module
-                    document.getElementById('mainDashboard').style.display = 'none';
-                    // This will trigger the existing module activation logic in app.js
-                    if (window.app && typeof window.app.showModule === 'function') {
+                    if (moduleId && typeof window.app !== 'undefined' && window.app.showModule) {
+                        // Skjul dashboard og vis modul
+                        document.getElementById('dashboardMain').style.display = 'none';
+                        
+                        // Vis tilbakeknappen
+                        document.getElementById('backToHome').style.display = 'block';
+                        
                         window.app.showModule(moduleId);
+                    } else {
+                        console.log('Valgt modul:', moduleId);
+                        
+                        // Alternativ fallback hvis app.showModule ikke finnes
+                        document.getElementById('dashboardMain').style.display = 'none';
+                        document.getElementById('moduleContainers').style.display = 'block';
+                        
+                        // Vis tilbakeknappen
+                        document.getElementById('backToHome').style.display = 'block';
+                        
+                        // Skjul alle modulcontainere først
+                        document.querySelectorAll('.module-container').forEach(container => {
+                            container.style.display = 'none';
+                        });
+                        
+                        // Vis den valgte modulen
+                        const moduleContainer = document.getElementById(moduleId + 'Module');
+                        if (moduleContainer) {
+                            moduleContainer.style.display = 'block';
+                        }
                     }
                 });
             });
-
-            // Back button to show dashboard
-            document.getElementById('backButton').addEventListener('click', function() {
-                // Check if we're in a module view
-                if (document.getElementById('mainDashboard').style.display === 'none') {
-                    // We're in a module, go back to dashboard
-                    document.getElementById('mainDashboard').style.display = 'block';
-                    // Hide any active modules
-                    document.querySelectorAll('.module-container').forEach(container => {
-                        container.style.display = 'none';
-                    });
-                } else {
-                    // We're already at dashboard, ask if user wants to exit
+            
+            // Tilbakeknapp til dashboard
+            document.getElementById('backToHome').addEventListener('click', function() {
+                // Skjul alle moduler
+                document.querySelectorAll('.module-container').forEach(container => {
+                    container.style.display = 'none';
+                });
+                document.getElementById('moduleContainers').style.display = 'none';
+                
+                // Skjul tilbakeknappen
+                this.style.display = 'none';
+                
+                // Vis dashbordet igjen
+                document.getElementById('dashboardMain').style.display = 'block';
+                
+                // Hvis window.app har en deactivateModule-funksjon, kall den
+                if (typeof window.app !== 'undefined' && window.app.deactivateModule) {
+                    window.app.deactivateModule();
+                }
+            });
+            
+            // Footer modul-lenker
+            document.querySelectorAll('.footer-links a[data-module]').forEach(link => {
+                link.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    const moduleId = this.getAttribute('data-module');
+                    const moduleCard = document.querySelector(`.module-card[data-module="${moduleId}"]`);
+                    if (moduleCard) {
+                        moduleCard.click();
+                    }
+                });
+            });
+            
+            // Logg-ut knapp
+            const logoutBtn = document.getElementById('logoutBtn');
+            if (logoutBtn) {
+                logoutBtn.addEventListener('click', function(e) {
+                    e.preventDefault();
                     if (confirm('Er du sikker på at du vil logge ut?')) {
-                        // Log out logic
+                        // Fjern brukerdata fra localStorage
                         localStorage.removeItem('snapscan_user');
+                        // Omdiriger til login-siden
                         window.location.href = 'login.html';
                     }
-                }
-            });
-
-            // Handle logout button
-            document.getElementById('logoutBtn').addEventListener('click', function() {
-                if (confirm('Er du sikker på at du vil logge ut?')) {
-                    localStorage.removeItem('snapscan_user');
-                    window.location.href = 'login.html';
-                }
-            });
-
-            // Handle theme toggle
-            const themeToggle = document.getElementById('themeToggle');
-            const prefersDarkScheme = window.matchMedia('(prefers-color-scheme: dark)');
-            
-            // Set initial theme based on user preference or system preference
-            const savedTheme = localStorage.getItem('theme');
-            if (savedTheme === 'dark' || (!savedTheme && prefersDarkScheme.matches)) {
-                document.body.classList.add('dark-mode');
-                themeToggle.checked = true;
+                });
             }
             
-            themeToggle.addEventListener('change', function() {
-                if (this.checked) {
+            // Last brukerinformasjon
+            loadUserInfo();
+            
+            // Aktiver tema-veksling
+            const themeToggle = document.getElementById('themeToggle');
+            if (themeToggle) {
+                // Sjekk lagret tema
+                const savedTheme = localStorage.getItem('theme');
+                if (savedTheme === 'dark') {
                     document.body.classList.add('dark-mode');
-                    localStorage.setItem('theme', 'dark');
-                } else {
-                    document.body.classList.remove('dark-mode');
-                    localStorage.setItem('theme', 'light');
+                    themeToggle.checked = true;
                 }
-            });
+                
+                // Lytt etter endringer
+                themeToggle.addEventListener('change', function() {
+                    if (this.checked) {
+                        document.body.classList.add('dark-mode');
+                        localStorage.setItem('theme', 'dark');
+                    } else {
+                        document.body.classList.remove('dark-mode');
+                        localStorage.setItem('theme', 'light');
+                    }
+                });
+            }
+            
+            // Funksjon for å laste brukerinformasjon
+            function loadUserInfo() {
+                // Hent brukerdata fra localStorage
+                const userData = localStorage.getItem('snapscan_user');
+                if (userData) {
+                    try {
+                        const user = JSON.parse(userData);
+                        
+                        // Oppdater avatar og brukernavn i header
+                        const userAvatar = document.getElementById('userAvatar');
+                        const userName = document.getElementById('userName');
+                        const welcomeUserName = document.getElementById('welcomeUserName');
+                        
+                        if (userAvatar && user.name) {
+                            userAvatar.textContent = user.name.charAt(0).toUpperCase();
+                        }
+                        
+                        if (userName && user.name) {
+                            userName.textContent = user.name;
+                        }
+                        
+                        if (welcomeUserName && user.name) {
+                            welcomeUserName.textContent = user.name;
+                        }
+                    } catch (e) {
+                        console.error('Feil ved parsing av brukerdata:', e);
+                    }
+                } else {
+                    // Redirect to login page if no user data found
+                    window.location.href = 'login.html';
+                }
+            }
         });
     </script>
+    <script src="js/app.js"></script>
+    <script src="js/modules/test-module.js"></script>
 </body>
 </html>
