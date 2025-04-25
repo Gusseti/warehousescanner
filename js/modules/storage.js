@@ -1,9 +1,147 @@
-// storage.js - Håndtering av lokallagring
-import { appState } from '../app.js';
+// storage.js - Module for handling storage operations
+import eventBus from './event-bus.js';
 import { showToast } from './utils.js';
+
+// Applikasjonstilstand som vil bli tilgjengelig etter initialisering
+let appState = {}; 
 
 // Innebygde strekkoder vil bli lastet fra barcodes.json
 let defaultBarcodes = {};
+
+/**
+ * Singleton-instans av StorageManager
+ */
+let storageManagerInstance = null;
+
+/**
+ * StorageManager klasse - wrapper rundt lagringsfunksjoner
+ * @class
+ */
+class StorageManager {
+    constructor() {
+        // Bruk appState fra modulen
+        this.appState = appState;
+    }
+    
+    /**
+     * Henter verdi fra localStorage
+     * @param {string} key - Nøkkel for verdien
+     * @returns {*} Verdien eller null hvis den ikke finnes
+     */
+    getItem(key) {
+        try {
+            const item = localStorage.getItem(key);
+            return item ? JSON.parse(item) : null;
+        } catch (error) {
+            console.error(`Feil ved henting av ${key}:`, error);
+            return null;
+        }
+    }
+    
+    /**
+     * Lagrer verdi til localStorage
+     * @param {string} key - Nøkkel
+     * @param {*} value - Verdien som skal lagres
+     * @returns {boolean} True hvis lagring var vellykket
+     */
+    setItem(key, value) {
+        try {
+            localStorage.setItem(key, JSON.stringify(value));
+            return true;
+        } catch (error) {
+            console.error(`Feil ved lagring av ${key}:`, error);
+            return false;
+        }
+    }
+    
+    /**
+     * Fjerner verdi fra localStorage
+     * @param {string} key - Nøkkel
+     */
+    removeItem(key) {
+        try {
+            localStorage.removeItem(key);
+            return true;
+        } catch (error) {
+            console.error(`Feil ved fjerning av ${key}:`, error);
+            return false;
+        }
+    }
+    
+    /**
+     * Hent appState (alias for tilgang til appState-objektet)
+     * @returns {Object} appState-objektet
+     */
+    getState() {
+        return appState;
+    }
+    
+    /**
+     * Sett appState
+     * @param {Object} newState - Nytt appState-objekt
+     */
+    setState(newState) {
+        appState = newState;
+    }
+    
+    /**
+     * Funksjon for å lagre alle data
+     * @returns {boolean} True hvis lagring var vellykket
+     */
+    saveAll() {
+        return saveListsToStorage() && saveBarcodeMapping() && saveItemWeights() && saveSettings();
+    }
+    
+    /**
+     * Funksjon for å laste alle data
+     * @returns {boolean} True hvis innlasting var vellykket
+     */
+    loadAll() {
+        loadFromStorage();
+        loadBarcodeMapping();
+        loadItemWeights();
+        loadSettings();
+        return true;
+    }
+}
+
+/**
+ * Hent singleton-instans av StorageManager
+ * @returns {StorageManager} StorageManager-instansen
+ */
+export function getStorageManager() {
+    if (!storageManagerInstance) {
+        storageManagerInstance = new StorageManager();
+    }
+    return storageManagerInstance;
+}
+
+/**
+ * Initialize the storage module
+ * @param {Object} state - Referanse til applikasjonstilstanden
+ */
+export function initStorage(state) {
+    if (state) {
+        appState = state;
+    } else {
+        // Fallback hvis ingen tilstand er gitt - koble til globalt objekt
+        appState = window.appState || {};
+        // Sørg for at vi alltid har et objekt å jobbe med
+        if (!window.appState) {
+            window.appState = appState;
+        }
+    }
+    
+    loadFromStorage();
+    loadBarcodeMapping();
+    loadItemWeights();
+    loadSettings();
+    
+    // Reset singleton instansen, i tilfelle appState har endret seg
+    storageManagerInstance = null;
+    
+    return getStorageManager();
+}
 
 /**
  * Laster inn barcode.json fra rotmappen
@@ -23,6 +161,112 @@ export async function loadBarcodesFromJson() {
     } catch (error) {
         console.error('Feil ved lasting av barcodes.json:', error);
         return {};
+    }
+}
+
+/**
+ * Load all lists from local storage
+ */
+export function loadFromStorage() {
+    try {
+        // Load pick list
+        const pickListItems = localStorage.getItem('pickListItems');
+        if (pickListItems) {
+            appState.pickListItems = JSON.parse(pickListItems);
+        }
+        
+        // Load picked items
+        const pickedItems = localStorage.getItem('pickedItems');
+        if (pickedItems) {
+            appState.pickedItems = JSON.parse(pickedItems);
+        }
+        
+        // Load last picked item
+        const lastPickedItem = localStorage.getItem('lastPickedItem');
+        if (lastPickedItem) {
+            appState.lastPickedItem = JSON.parse(lastPickedItem);
+        }
+        
+        // Load receive list
+        const receiveListItems = localStorage.getItem('receiveListItems');
+        if (receiveListItems) {
+            appState.receiveListItems = JSON.parse(receiveListItems);
+        }
+        
+        // Load received items
+        const receivedItems = localStorage.getItem('receivedItems');
+        if (receivedItems) {
+            appState.receivedItems = JSON.parse(receivedItems);
+        }
+        
+        // Load last received item
+        const lastReceivedItem = localStorage.getItem('lastReceivedItem');
+        if (lastReceivedItem) {
+            appState.lastReceivedItem = JSON.parse(lastReceivedItem);
+        }
+        
+        // Load return list
+        const returnListItems = localStorage.getItem('returnListItems');
+        if (returnListItems) {
+            appState.returnListItems = JSON.parse(returnListItems);
+        }
+        
+        // Load last returned item
+        const lastReturnedItem = localStorage.getItem('lastReturnedItem');
+        if (lastReturnedItem) {
+            appState.lastReturnedItem = JSON.parse(lastReturnedItem);
+        }
+        
+        console.log('Storage loaded successfully');
+    } catch (error) {
+        console.error('Error loading from storage:', error);
+    }
+}
+
+// The duplicate saveListsToStorage function has been removed
+// The more comprehensive implementation is used instead (around line 529)
+
+
+/**
+ * Clear all lists from storage
+ */
+export function clearStorage() {
+    try {
+        // Clear pick list
+        localStorage.removeItem('pickListItems');
+        appState.pickListItems = [];
+        
+        // Clear picked items
+        localStorage.removeItem('pickedItems');
+        appState.pickedItems = [];
+        
+        // Clear last picked item
+        localStorage.removeItem('lastPickedItem');
+        appState.lastPickedItem = null;
+        
+        // Clear receive list
+        localStorage.removeItem('receiveListItems');
+        appState.receiveListItems = [];
+        
+        // Clear received items
+        localStorage.removeItem('receivedItems');
+        appState.receivedItems = [];
+        
+        // Clear last received item
+        localStorage.removeItem('lastReceivedItem');
+        appState.lastReceivedItem = null;
+        
+        // Clear return list
+        localStorage.removeItem('returnListItems');
+        appState.returnListItems = [];
+        
+        // Clear last returned item
+        localStorage.removeItem('lastReturnedItem');
+        appState.lastReturnedItem = null;
+        
+        console.log('Storage cleared successfully');
+    } catch (error) {
+        console.error('Error clearing storage:', error);
     }
 }
 
@@ -109,6 +353,65 @@ export async function loadBarcodeMappingFromStorage() {
 }
 
 /**
+ * Load barcode mapping from local storage
+ */
+export function loadBarcodeMapping() {
+    try {
+        const barcodeMapping = localStorage.getItem('barcodeMapping');
+        if (barcodeMapping) {
+            appState.barcodeMapping = JSON.parse(barcodeMapping);
+        } else {
+            appState.barcodeMapping = {};
+        }
+        
+        console.log('Barcode mapping loaded successfully');
+    } catch (error) {
+        console.error('Error loading barcode mapping:', error);
+        appState.barcodeMapping = {};
+    }
+}
+
+// The first implementation of findSimilarBarcodes has been removed
+// Using the more comprehensive implementation at line ~797 instead
+
+/**
+ * Calculate Levenshtein distance between two strings
+ * @param {string} a - First string
+ * @param {string} b - Second string
+ * @returns {number} - Levenshtein distance
+ */
+function levenshteinDistance(a, b) {
+    // Create matrix
+    const matrix = [];
+    
+    // Initialize matrix
+    for (let i = 0; i <= b.length; i++) {
+        matrix[i] = [i];
+    }
+    
+    for (let j = 0; j <= a.length; j++) {
+        matrix[0][j] = j;
+    }
+    
+    // Fill matrix
+    for (let i = 1; i <= b.length; i++) {
+        for (let j = 1; j <= a.length; j++) {
+            if (b.charAt(i - 1) === a.charAt(j - 1)) {
+                matrix[i][j] = matrix[i - 1][j - 1];
+            } else {
+                matrix[i][j] = Math.min(
+                    matrix[i - 1][j - 1] + 1, // substitution
+                    matrix[i][j - 1] + 1,     // insertion
+                    matrix[i - 1][j] + 1      // deletion
+                );
+            }
+        }
+    }
+    
+    return matrix[b.length][a.length];
+}
+
+/**
  * Lagrer innstillinger til brukerens lagring
  */
 export function saveSettings() {
@@ -129,9 +432,25 @@ export function saveSettings() {
 }
 
 /**
- * Laster inn innstillinger fra brukerens lagring
+ * Load user settings from local storage
  */
 export function loadSettings() {
+    try {
+        const settings = localStorage.getItem('settings');
+        if (settings) {
+            appState.settings = { ...appState.settings, ...JSON.parse(settings) };
+        }
+        
+        console.log('Settings loaded successfully');
+    } catch (error) {
+        console.error('Error loading settings:', error);
+    }
+}
+
+/**
+ * Laster inn innstillinger fra brukerens lagring
+ */
+export function loadSettingsFromStorage() {
     try {
         let userSettings = null;
         
@@ -199,9 +518,28 @@ export function saveItemWeights() {
 }
 
 /**
- * Laster inn vektdata fra brukerens lagring
+ * Load item weights from local storage
  */
 export function loadItemWeights() {
+    try {
+        const itemWeights = localStorage.getItem('itemWeights');
+        if (itemWeights) {
+            appState.itemWeights = JSON.parse(itemWeights);
+        } else {
+            appState.itemWeights = {};
+        }
+        
+        console.log('Item weights loaded successfully');
+    } catch (error) {
+        console.error('Error loading item weights:', error);
+        appState.itemWeights = {};
+    }
+}
+
+/**
+ * Laster inn vektdata fra brukerens lagring
+ */
+export function loadItemWeightsFromStorage() {
     try {
         let userWeights = null;
         
@@ -590,4 +928,148 @@ function calculateStringSimilarity(str1, str2) {
     
     // Normaliser til en verdi mellom 0 og 1
     return lcs / Math.max(str1.length, str2.length);
+}
+
+/**
+ * Export data to JSON file
+ * @param {string} type - Type of data to export (all, picks, receives, returns)
+ * @returns {Object} - JSON data object
+ */
+export function exportDataToJson(type = 'all') {
+    let data = {};
+    
+    switch (type) {
+        case 'picks':
+            data = {
+                pickListItems: appState.pickListItems,
+                pickedItems: appState.pickedItems,
+                lastPickedItem: appState.lastPickedItem
+            };
+            break;
+            
+        case 'receives':
+            data = {
+                receiveListItems: appState.receiveListItems,
+                receivedItems: appState.receivedItems,
+                lastReceivedItem: appState.lastReceivedItem
+            };
+            break;
+            
+        case 'returns':
+            data = {
+                returnListItems: appState.returnListItems,
+                lastReturnedItem: appState.lastReturnedItem
+            };
+            break;
+            
+        case 'barcodes':
+            data = {
+                barcodeMapping: appState.barcodeMapping
+            };
+            break;
+            
+        case 'weights':
+            data = {
+                itemWeights: appState.itemWeights
+            };
+            break;
+            
+        case 'settings':
+            data = {
+                settings: appState.settings
+            };
+            break;
+            
+        case 'all':
+        default:
+            data = {
+                pickListItems: appState.pickListItems,
+                pickedItems: appState.pickedItems,
+                lastPickedItem: appState.lastPickedItem,
+                receiveListItems: appState.receiveListItems,
+                receivedItems: appState.receivedItems,
+                lastReceivedItem: appState.lastReceivedItem,
+                returnListItems: appState.returnListItems,
+                lastReturnedItem: appState.lastReturnedItem,
+                barcodeMapping: appState.barcodeMapping,
+                itemWeights: appState.itemWeights,
+                settings: appState.settings
+            };
+            break;
+    }
+    
+    return data;
+}
+
+/**
+ * Import data from JSON object
+ * @param {Object} data - JSON data object
+ * @param {string} type - Type of data to import (all, picks, receives, returns)
+ * @returns {boolean} - Success status
+ */
+export function importDataFromJson(data, type = 'all') {
+    try {
+        if (!data) return false;
+        
+        switch (type) {
+            case 'picks':
+                if (data.pickListItems) appState.pickListItems = data.pickListItems;
+                if (data.pickedItems) appState.pickedItems = data.pickedItems;
+                if (data.lastPickedItem) appState.lastPickedItem = data.lastPickedItem;
+                break;
+                
+            case 'receives':
+                if (data.receiveListItems) appState.receiveListItems = data.receiveListItems;
+                if (data.receivedItems) appState.receivedItems = data.receivedItems;
+                if (data.lastReceivedItem) appState.lastReceivedItem = data.lastReceivedItem;
+                break;
+                
+            case 'returns':
+                if (data.returnListItems) appState.returnListItems = data.returnListItems;
+                if (data.lastReturnedItem) appState.lastReturnedItem = data.lastReturnedItem;
+                break;
+                
+            case 'barcodes':
+                if (data.barcodeMapping) appState.barcodeMapping = data.barcodeMapping;
+                break;
+                
+            case 'weights':
+                if (data.itemWeights) appState.itemWeights = data.itemWeights;
+                break;
+                
+            case 'settings':
+                if (data.settings) {
+                    appState.settings = { ...appState.settings, ...data.settings };
+                }
+                break;
+                
+            case 'all':
+            default:
+                if (data.pickListItems) appState.pickListItems = data.pickListItems;
+                if (data.pickedItems) appState.pickedItems = data.pickedItems;
+                if (data.lastPickedItem) appState.lastPickedItem = data.lastPickedItem;
+                if (data.receiveListItems) appState.receiveListItems = data.receiveListItems;
+                if (data.receivedItems) appState.receivedItems = data.receivedItems;
+                if (data.lastReceivedItem) appState.lastReceivedItem = data.lastReceivedItem;
+                if (data.returnListItems) appState.returnListItems = data.returnListItems;
+                if (data.lastReturnedItem) appState.lastReturnedItem = data.lastReturnedItem;
+                if (data.barcodeMapping) appState.barcodeMapping = data.barcodeMapping;
+                if (data.itemWeights) appState.itemWeights = data.itemWeights;
+                if (data.settings) {
+                    appState.settings = { ...appState.settings, ...data.settings };
+                }
+                break;
+        }
+        
+        // Save imported data to storage
+        saveListsToStorage();
+        saveBarcodeMapping();
+        saveItemWeights();
+        saveSettings();
+        
+        return true;
+    } catch (error) {
+        console.error('Error importing data:', error);
+        return false;
+    }
 }

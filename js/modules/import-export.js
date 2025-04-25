@@ -3,6 +3,58 @@ import { appState } from '../app.js';
 import { showToast, formatDate } from './utils.js';
 import { saveListsToStorage, saveBarcodeMapping } from './storage.js';
 import { generatePDF, generatePDFFilename } from './pdf-export.js';
+import { findBestProductIdMatch, getProductDataFromBarcodes, normalizeProductId, findDescriptionFromBarcodes } from './barcode-matcher.js';
+
+/**
+ * Generisk funksjon for filimport som kan brukes på tvers av moduler
+ * @param {File} file - Filen som skal importeres
+ * @param {string} moduleType - Modultype ('pick', 'receive', 'return')
+ * @param {Object} callbacks - Callback-funksjoner for håndtering av utfall
+ */
+export function handleFileImport(file, moduleType, callbacks = {}) {
+    const { onSuccess = () => {}, onError = () => {} } = callbacks;
+    
+    try {
+        // Håndter ulike filtyper
+        if (file.type === 'application/pdf') {
+            importFromPDF(file, moduleType)
+                .then(onSuccess)
+                .catch(onError);
+        } else {
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const content = e.target.result;
+                    
+                    // Sjekk filtypen basert på filendelse eller innhold
+                    if (file.name.endsWith('.json')) {
+                        importFromJSON(content, file.name, moduleType);
+                    } else if (file.name === 'Delivery slip.txt' || file.name.toLowerCase().includes('delivery slip')) {
+                        // Spesialhåndtering for Delivery slip.txt
+                        importFromDeliverySlip(content, file.name, moduleType);
+                    } else {
+                        importFromCSV(content, file.name, moduleType);
+                    }
+                    
+                    onSuccess();
+                } catch (error) {
+                    console.error(`Feil ved import av fil for ${moduleType}:`, error);
+                    onError(error);
+                }
+            };
+            
+            reader.onerror = function(error) {
+                console.error(`Feil ved lesing av fil for ${moduleType}:`, error);
+                onError(new Error('Kunne ikke lese filen'));
+            };
+            
+            reader.readAsText(file);
+        }
+    } catch (error) {
+        console.error(`Uventet feil ved filimport for ${moduleType}:`, error);
+        onError(error);
+    }
+}
 
 /**
  * Importerer data fra CSV/TXT fil
@@ -795,109 +847,7 @@ function parseProductLinesFromPDF(lines) {
     // HJELPEFUNKSJONER FOR PRODUKTSAMMENLIGNING
     // ==========================================
     
-    /**
-     * Finner beste match for et produkt-ID ved å sammenligne med barcodes.json
-     * @param {string} rawId - Rå produkt-ID fra PDF
-     * @returns {string|null} Beste match produkt-ID eller null hvis ingen match
-     */
-    function findBestProductIdMatch(rawId) {
-        if (!rawId) return null;
-        
-        // 1. Sjekk først for eksakt match
-        if (barcodesMap[rawId]) {
-            return rawId;
-        }
-        
-        // 2. Normaliser ID-en og sjekk for normalisert match
-        const normalizedId = normalizeProductId(rawId);
-        if (normalizedBarcodesMap[normalizedId]) {
-            return normalizedBarcodesMap[normalizedId].originalId;
-        }
-        
-        // 3. Prøv uten bindestreker
-        const noDashesId = rawId.replace(/-/g, '');
-        if (normalizedBarcodesMap[noDashesId]) {
-            return normalizedBarcodesMap[noDashesId].originalId;
-        }
-        
-        // 4. Sjekk for prefiks match (f.eks. 000-XX mot 000-XX1234)
-        for (const knownId in barcodesMap) {
-            if (knownId.startsWith(rawId) || rawId.startsWith(knownId)) {
-                return knownId;
-            }
-        }
-        
-        // 5. Spesialtilfelle for "LA" og "BP" prefiks
-        if (rawId.startsWith('LA') || rawId.startsWith('BP')) {
-            const prefix = rawId.substring(0, 2);
-            const numPart = rawId.substring(2);
-            
-            // Sjekk om det finnes produkter som starter med samme prefix
-            for (const knownId in barcodesMap) {
-                if (knownId.startsWith(prefix)) {
-                    const knownNumPart = knownId.substring(2);
-                    // Hvis talldelene er like, eller en av dem er prefiks for den andre
-                    if (knownNumPart === numPart || 
-                        knownNumPart.startsWith(numPart) || 
-                        numPart.startsWith(knownNumPart)) {
-                        return knownId;
-                    }
-                }
-            }
-        }
-        
-        // Ingen match funnet, returner null for å indikere at produktet skal ignoreres
-        return null;
-    }
-    
-    /**
-     * Henter produktdata fra barcodes.json
-     * @param {string} productId - Produkt-ID
-     * @returns {Object|null} Produktdata eller null hvis ikke funnet
-     */
-    function getProductDataFromBarcodes(productId) {
-        if (!productId) return null;
-        
-        // Direkte oppslag i barcodesMap først
-        if (barcodesMap[productId]) {
-            return barcodesMap[productId];
-        }
-        
-        // Sjekk i barcodeMapping direkte
-        for (const [barcode, data] of Object.entries(appState.barcodeMapping)) {
-            const barcodeProductId = typeof data === 'object' ? data.id : data;
-            
-            if (barcodeProductId === productId) {
-                return {
-                    id: productId,
-                    description: typeof data === 'object' ? data.description : null,
-                    weight: typeof data === 'object' ? data.weight : null
-                };
-            }
-        }
-        
-        return null;
-    }
-}
-
-/**
- * Normaliserer et produkt-ID for sammenligning
- * @param {string} id - Produkt-ID som skal normaliseres
- * @returns {string} Normalisert ID
- */
-function normalizeProductId(id) {
-    if (!id) return '';
-    
-    // Fjern mellomrom
-    let normalized = id.trim();
-    
-    // Fjern mellomrom rundt bindestreker
-    normalized = normalized.replace(/\s*-\s*/g, '-');
-    
-    // Konverter til små bokstaver for case-insensitiv sammenligning
-    normalized = normalized.toLowerCase();
-    
-    return normalized;
+    /* Fjernet duplisert findBestProductIdMatch-funksjon som nå importeres fra barcode-matcher.js */
 }
 
 /**
@@ -2028,26 +1978,4 @@ export function importFromDeliverySlip(content, fileName, type) {
         console.error('Feil ved import fra Delivery slip:', error);
         showToast('Feil ved import av Delivery slip.', 'error');
     }
-}
-
-/**
- * Finner beskrivelse fra barcodes.json basert på varenummer
- * @param {string} itemId - Varenummer
- * @returns {string} - Beskrivelse eller "Ukjent vare"
- */
-function findDescriptionFromBarcodes(itemId) {
-    if (!itemId) return "Ukjent vare";
-    
-    // Sjekk først i barcode-mappingen for direkte samsvar på varenummer
-    for (const [barcode, data] of Object.entries(appState.barcodeMapping)) {
-        const productId = typeof data === 'object' ? data.id : data;
-        const description = typeof data === 'object' ? data.description : null;
-        
-        if (productId === itemId && description) {
-            return description;
-        }
-    }
-    
-    // Hvis det ikke finnes noen direkte match, returner standard beskrivelse
-    return `Vare ${itemId}`;
 }

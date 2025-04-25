@@ -12,8 +12,40 @@ import {
     importFromDeliverySlip,
     exportList, 
     exportWithFormat, 
-    exportToPDF 
+    exportToPDF,
+    handleFileImport
 } from './import-export.js';
+import { 
+    mapBarcodeToProductId, 
+    getProductDataFromBarcodes, 
+    normalizeProductId,
+    findDescriptionFromBarcodes,
+    findWeightFromBarcodes
+} from './barcode-matcher.js';
+import {
+    handleModuleScan,
+    handleModuleFileImport,
+    exportModuleList,
+    undoLastModuleScan,
+    clearModuleList
+} from './core-module-handler.js';
+
+// Importer UI-komponenter
+import { ButtonComponent } from '../components/ButtonComponent.js';
+import { TableComponent } from '../components/TableComponent.js';
+import { SearchComponent } from '../components/SearchComponent.js';
+
+// Komponenter
+let receivingTable;
+let receivingSearch;
+let importButton;
+let exportButton;
+let clearButton;
+let undoButton;
+let connectScannerButton;
+let cameraScannerButton;
+let scanButton;
+let deliverySlipButton;
 
 // DOM elementer - Mottak
 let importReceiveFileEl;
@@ -37,6 +69,9 @@ let canvasReceiveScannerEl;
 let scannerReceiveOverlayEl;
 let closeReceiveScannerEl;
 let switchCameraReceiveEl;
+let receiveSearchContainerEl;
+let receiveButtonContainerEl;
+let receiveTableContainerEl;
 
 /**
  * Initialiserer mottak-modulen
@@ -45,7 +80,6 @@ export function initReceiving() {
     console.log("Initialiserer mottak-modul");
     
     // Hent DOM-elementer
-    // Fjernet referanser til importReceiveFileEl og importReceiveBtnEl som ikke lenger eksisterer i HTML
     receiveFileInfoEl = document.getElementById('receiveFileInfo');
     connectScannerReceiveEl = document.getElementById('connectScannerReceive');
     cameraScannerReceiveEl = document.getElementById('cameraScannerReceive');
@@ -65,6 +99,31 @@ export function initReceiving() {
     scannerReceiveOverlayEl = document.getElementById('scannerReceiveOverlay');
     closeReceiveScannerEl = document.getElementById('closeReceiveScanner');
     switchCameraReceiveEl = document.getElementById('switchCameraReceive');
+    
+    // Nye container-elementer for komponenter
+    receiveSearchContainerEl = document.getElementById('receiveSearchContainer');
+    receiveButtonContainerEl = document.getElementById('receiveButtonContainer');
+    receiveTableContainerEl = document.getElementById('receiveTableContainer');
+    
+    // Hvis container-elementene ikke eksisterer, oppretter vi dem
+    if (!receiveSearchContainerEl) {
+        receiveSearchContainerEl = document.createElement('div');
+        receiveSearchContainerEl.id = 'receiveSearchContainer';
+        receiveListEl.parentNode.insertBefore(receiveSearchContainerEl, receiveListEl);
+    }
+    
+    if (!receiveButtonContainerEl) {
+        receiveButtonContainerEl = document.createElement('div');
+        receiveButtonContainerEl.id = 'receiveButtonContainer';
+        receiveButtonContainerEl.className = 'button-container';
+        receiveListEl.parentNode.insertBefore(receiveButtonContainerEl, receiveListEl);
+    }
+    
+    if (!receiveTableContainerEl) {
+        receiveTableContainerEl = document.createElement('div');
+        receiveTableContainerEl.id = 'receiveTableContainer';
+        receiveListEl.parentNode.replaceChild(receiveTableContainerEl, receiveListEl);
+    }
     
     // VIKTIG FIX: Gjøre handleReceiveScan tilgjengelig globalt
     // Dette sikrer at funksjonen alltid er tilgjengelig for skanneren
@@ -86,6 +145,9 @@ export function initReceiving() {
     // Initialiser antallsmodulen for å sette opp event listeners
     initQuantity();
     
+    // Initialiser UI-komponenter
+    initComponents();
+    
     // Legg til event listeners
     setupReceivingEventListeners();
     
@@ -96,15 +158,22 @@ export function initReceiving() {
 }
 
 /**
- * Setter opp event listeners for mottak-modulen
+ * Initialiserer UI-komponenter
  */
-function setupReceivingEventListeners() {
-    // Fjernet referanser til importReceiveBtnEl og importReceiveFileEl som ikke lenger eksisterer
-
-    // Ny eventlytter for Delivery Slip-knappen
-    const importDeliverySlipBtn = document.getElementById('importDeliverySlipBtn');
-    if (importDeliverySlipBtn) {
-        importDeliverySlipBtn.addEventListener('click', function() {
+function initComponents() {
+    // Søkekomponent
+    receivingSearch = new SearchComponent('receiveSearchContainer', {
+        placeholder: 'Søk i mottakslisten...',
+        onSearch: (searchTerm) => filterReceiveList(searchTerm)
+    });
+    
+    // Knapper
+    deliverySlipButton = new ButtonComponent('receiveButtonContainer', {
+        text: 'Importer leveranseseddel',
+        type: 'primary',
+        icon: 'upload-icon',
+        id: 'importDeliverySlipBtn',
+        onClick: () => {
             // Opprett et dedikert input-element for leveranseseddel
             const deliverySlipInput = document.createElement('input');
             deliverySlipInput.type = 'file';
@@ -120,41 +189,110 @@ function setupReceivingEventListeners() {
             
             // Utløs fil-dialog
             deliverySlipInput.click();
-        });
-    }
-    
-    // Fjernet referanse til addReceiveBtn som ikke lenger eksisterer
-    
-    connectScannerReceiveEl.addEventListener('click', function() {
-        connectToBluetoothReceiveScanner();
+        }
     });
     
-    cameraScannerReceiveEl.addEventListener('click', function() {
-        startReceiveCameraScanning();
+    connectScannerButton = new ButtonComponent('receiveButtonContainer', {
+        text: 'Koble til skanner',
+        type: 'secondary',
+        icon: 'bluetooth-icon',
+        id: 'connectScannerReceive',
+        onClick: () => connectToBluetoothReceiveScanner()
     });
     
+    cameraScannerButton = new ButtonComponent('receiveButtonContainer', {
+        text: 'Kameraskanner',
+        type: 'secondary',
+        icon: 'camera-icon',
+        id: 'cameraScannerReceive',
+        onClick: () => startReceiveCameraScanning()
+    });
+    
+    scanButton = new ButtonComponent('receiveManualScanContainer', {
+        text: 'Skann',
+        type: 'success',
+        id: 'receiveManualScanBtn',
+        onClick: () => handleReceiveScan(receiveManualScanEl.value)
+    });
+    
+    undoButton = new ButtonComponent('receiveButtonContainer', {
+        text: 'Angre siste',
+        type: 'warning',
+        icon: 'undo-icon',
+        id: 'receiveUndoBtn',
+        onClick: () => undoLastReceiveScan(),
+        disabled: !appState.lastReceivedItem
+    });
+    
+    exportButton = new ButtonComponent('receiveButtonContainer', {
+        text: 'Eksporter liste',
+        type: 'info',
+        icon: 'export-icon',
+        id: 'receiveExportBtn',
+        onClick: () => exportReceiveList('pdf'),
+        disabled: appState.receiveListItems.length === 0
+    });
+    
+    clearButton = new ButtonComponent('receiveButtonContainer', {
+        text: 'Tøm liste',
+        type: 'danger',
+        icon: 'trash-icon',
+        id: 'receiveClearBtn',
+        onClick: () => clearReceiveList(),
+        disabled: appState.receiveListItems.length === 0
+    });
+    
+    // Tabellkomponent
+    receivingTable = new TableComponent('receiveTableContainer', {
+        columns: [
+            { field: 'id', title: 'Varenr', sortable: true },
+            { field: 'description', title: 'Beskrivelse', sortable: true },
+            { 
+                field: 'quantity', 
+                title: 'Antall', 
+                sortable: true,
+                renderer: (value, row) => `${row.receivedCount || 0} / ${row.quantity}`
+            },
+            { 
+                field: 'weight', 
+                title: 'Vekt', 
+                sortable: true,
+                renderer: (value, row) => `${((row.weight || 0) * row.quantity).toFixed(2)} ${appState.settings.weightUnit || 'kg'}`
+            },
+            { 
+                field: 'received', 
+                title: 'Status', 
+                sortable: true,
+                renderer: (value, row) => {
+                    const currentCount = row.receivedCount || 0;
+                    if (currentCount === 0) {
+                        return '<span class="badge" style="background-color: var(--gray)">Venter</span>';
+                    } else if (currentCount < row.quantity) {
+                        return `<span class="badge" style="background-color: var(--warning)">Delvis (${currentCount}/${row.quantity})</span>`;
+                    } else {
+                        return '<span class="badge badge-success">Mottatt</span>';
+                    }
+                }
+            }
+        ],
+        data: appState.receiveListItems,
+        onRowClick: (item) => openQuantityModal(item.id)
+    });
+}
+
+/**
+ * Setter opp event listeners for mottak-modulen
+ */
+function setupReceivingEventListeners() {
     closeReceiveScannerEl.addEventListener('click', function() {
         stopCameraScanning();
         cameraScannerReceiveContainerEl.style.display = 'none';
-    });
-    
-    receiveManualScanBtnEl.addEventListener('click', function() {
-        handleReceiveScan(receiveManualScanEl.value);
     });
     
     receiveManualScanEl.addEventListener('keypress', function(e) {
         if (e.key === 'Enter') {
             handleReceiveScan(receiveManualScanEl.value);
         }
-    });
-    
-    receiveUndoBtnEl.addEventListener('click', function() {
-        undoLastReceiveScan();
-    });
-    
-    // Hovedeksportknapp (PDF som standard)
-    receiveExportBtnEl.addEventListener('click', function() {
-        exportReceiveList('pdf');
     });
     
     // Eksportformat velgere
@@ -165,89 +303,36 @@ function setupReceivingEventListeners() {
             exportReceiveList(format);
         });
     });
-    
-    receiveClearBtnEl.addEventListener('click', function() {
-        clearReceiveList();
-    });
 }
 
 /**
  * Oppdaterer UI for mottak-modulen
  */
 export function updateReceivingUI() {
-    // Sikre at vi har en referanse til tabellen
-    if (!receiveListEl) {
-        console.error('Tabellreferanse for mottak mangler');
-        return;
+    // Oppdater tabelldata
+    if (receivingTable) {
+        receivingTable.update(appState.receiveListItems);
+    } else {
+        console.error('Tabellkomponent for mottak mangler');
     }
-    
-    // Hent tbody-elementet
-    const tbody = receiveListEl.querySelector('tbody');
-    if (!tbody) {
-        console.error('Tbody for mottak ikke funnet');
-        return;
-    }
-    
-    // Tøm tabellen
-    tbody.innerHTML = '';
     
     // Variabler for totalberegninger
     let totalWeight = 0;
     let totalReceivedItems = 0;
     let totalRequiredItems = 0;
     
-    // Prosesser hver vare
+    // Beregn totaler
     appState.receiveListItems.forEach(item => {
-        // Initialisere tellefelt hvis det ikke eksisterer
-        if (item.receivedCount === undefined) {
-            item.receivedCount = 0;
-        }
+        const currentCount = item.receivedCount || 0;
         
-        const tr = document.createElement('tr');
-        const isFullyReceived = item.received;
-        const currentCount = item.receivedCount;
-        
-        // Regn ut statusfarge basert på skannet antall
+        // Legg til vekt for skannede varer
         if (currentCount > 0) {
-            if (currentCount >= item.quantity) {
-                tr.classList.add('received');
-            } else {
-                tr.classList.add('partially-scanned');
-            }
-            
-            // Legg til vekt for skannede varer - basert på faktisk skannede antall
             totalWeight += currentCount * (item.weight || 0);
         }
         
         // Tell opp totaler for statuslinje
         totalReceivedItems += currentCount;
         totalRequiredItems += item.quantity;
-        
-        // Beregn vekt for denne spesifikke varen
-        const itemTotalWeight = (item.weight || 0) * item.quantity;
-        const receivedWeight = (item.weight || 0) * currentCount;
-        
-        tr.innerHTML = `
-            <td>${item.id}</td>
-            <td>${item.description}</td>
-            <td>${currentCount} / ${item.quantity}</td>
-            <td>${itemTotalWeight.toFixed(2)} ${appState.settings.weightUnit}</td>
-            <td>${
-                currentCount === 0 ? 
-                    `<span class="badge" style="background-color: var(--gray)">Venter</span>` :
-                currentCount < item.quantity ? 
-                    `<span class="badge" style="background-color: var(--warning)">Delvis (${currentCount}/${item.quantity})</span>` :
-                    `<span class="badge badge-success">Mottatt</span>`
-            }
-            </td>
-        `;
-        
-        // Legg til hendelse for å angi antall ved dobbeltklikk
-        tr.addEventListener('dblclick', function() {
-            openQuantityModal(item.id);
-        });
-        
-        tbody.appendChild(tr);
     });
     
     // Oppdater statuslinjen
@@ -274,10 +359,118 @@ export function updateReceivingUI() {
         }
     }
     
-    // Aktiver/deaktiver knapper
-    if (receiveExportBtnEl) receiveExportBtnEl.disabled = appState.receiveListItems.length === 0;
-    if (receiveClearBtnEl) receiveClearBtnEl.disabled = appState.receiveListItems.length === 0;
-    if (receiveUndoBtnEl) receiveUndoBtnEl.disabled = !appState.lastReceivedItem;
+    // Oppdater knappetilstander
+    if (exportButton) exportButton.setDisabled(appState.receiveListItems.length === 0);
+    if (clearButton) clearButton.setDisabled(appState.receiveListItems.length === 0);
+    if (undoButton) undoButton.setDisabled(!appState.lastReceivedItem);
+}
+
+/**
+ * Filtrerer mottakslisten basert på søkeord
+ * @param {string} searchTerm - Søkeordet
+ */
+function filterReceiveList(searchTerm) {
+    if (!receivingTable) return;
+    
+    if (!searchTerm || searchTerm.trim() === '') {
+        // Vis alle elementer
+        receivingTable.update(appState.receiveListItems);
+        return;
+    }
+    
+    const searchTermLower = searchTerm.toLowerCase();
+    
+    // Filtrer elementer basert på søkeord
+    const filteredItems = appState.receiveListItems.filter(item => {
+        return (
+            (item.id && item.id.toLowerCase().includes(searchTermLower)) || 
+            (item.description && item.description.toLowerCase().includes(searchTermLower))
+        );
+    });
+    
+    // Oppdater tabellen med filtrerte elementer
+    receivingTable.update(filteredItems, false);
+}
+
+// ...resten av koden forblir uendret...
+
+/**
+ * Kobler til Bluetooth-skanner for mottak
+ */
+async function connectToBluetoothReceiveScanner() {
+    try {
+        showToast('Kobler til Bluetooth-skanner...', 'info');
+        await bluetoothScanner.connect();
+    } catch (error) {
+        showToast(error.message, 'error');
+    }
+}
+
+/**
+ * Starter kameraskanning for mottak
+ */
+async function startReceiveCameraScanning() {
+    try {
+        // Vis kameraskanner-container
+        cameraScannerReceiveContainerEl.style.display = 'block';
+        await startCameraScanning();
+    } catch (error) {
+        cameraScannerReceiveContainerEl.style.display = 'none';
+        showToast(error.message, 'error');
+    }
+}
+
+/**
+ * Håndterer skanning for mottak
+ * @param {string} barcode - Skannet strekkode eller varenummer
+ */
+export function handleReceiveScan(barcode) {
+    console.log(`Håndterer strekkode i mottak-modulen: ${barcode}`);
+    
+    if (!barcode) return;
+    
+    // Tøm input etter skanning
+    if (receiveManualScanEl) {
+        receiveManualScanEl.value = '';
+    }
+    
+    // Bruk den generiske scan-handler funksjonen fra core-module-handler
+    const result = handleModuleScan(barcode, 'receive');
+    
+    // Hvis skanningen var vellykket, oppdater UI
+    if (result && result.success) {
+        updateReceivingUI();
+    }
+}
+
+/**
+ * Angrer siste skanning
+ */
+function undoLastReceiveScan() {
+    // Bruk den felles undo-funksjonen fra core-module-handler
+    undoLastModuleScan('receive', updateReceivingUI);
+}
+
+/**
+ * Eksporterer mottakslisten
+ * @param {string} format - Format for eksport (pdf, csv, json, txt, html)
+ */
+function exportReceiveList(format = 'pdf') {
+    // Bruk den generiske eksportfunksjonen fra core-module-handler
+    exportModuleList(appState.receiveListItems, 'receive', format, {
+        title: 'Mottaksliste',
+        subtitle: 'Eksportert fra SnapScan',
+        exportDate: new Date(),
+        showStatus: true
+    });
+}
+
+/**
+ * Tømmer mottakslisten
+ */
+function clearReceiveList() {
+    // Bruk den felles clearModuleList-funksjonen fra core-module-handler
+    clearModuleList('receive', updateReceivingUI);
 }
 
 /**
@@ -307,21 +500,9 @@ function handleReceiveFileImport(event, appendMode = false) {
         existingItems = [...appState.receiveListItems];
     }
     
-    const reader = new FileReader();
-    reader.onload = function(e) {
-        try {
-            const content = e.target.result;
-            
-            // Sjekk filtypen basert på filendelse eller innhold
-            if (file.name.endsWith('.json')) {
-                importFromJSON(content, file.name, 'receive');
-            } else if (file.name === 'Delivery slip.txt' || file.name.toLowerCase().includes('delivery slip')) {
-                // Spesialhåndtering for Delivery slip.txt
-                importFromDeliverySlip(content, file.name, 'receive');
-            } else {
-                importFromCSV(content, file.name, 'receive');
-            }
-            
+    // Bruk den generiske filimportfunksjonen
+    handleFileImport(file, 'receive', {
+        onSuccess: () => {
             // Håndter legg-til-modus
             if (appendMode) {
                 mergeReceivedItems(existingItems);
@@ -332,15 +513,18 @@ function handleReceiveFileImport(event, appendMode = false) {
             updateReceivingUI();
             saveListsToStorage();
             
-            showSuccessMessage(appendMode);
-            
-        } catch (error) {
+            // Vis suksessmelding
+            if (appendMode) {
+                showToast(`Mottakslisten er utvidet med nye varer. Totalt ${appState.receiveListItems.length} varer.`, 'success');
+            } else {
+                showToast(`Mottaksliste importert med ${appState.receiveListItems.length} varer.`, 'success');
+            }
+        },
+        onError: (error) => {
             console.error('Feil ved import av fil:', error);
-            showToast('Feil ved import av fil. Sjekk filformatet.', 'error');
+            showToast('Feil ved import av fil: ' + error.message, 'error');
         }
-    };
-    
-    reader.readAsText(file);
+    });
     
     // Reset file input
     event.target.value = '';
@@ -407,10 +591,6 @@ async function handleMultipleFilesImport(files, appendMode = true) {
         showToast(`Behandlet fil ${i+1} av ${fileCount}`, 'info');
     }
     
-    console.log(`Total mengde importerte varer før deduplisering: ${allImportedItems.length}`);
-    
-    // Enkel validering - fjern varer uten ID
-    allImportedItems = allImportedItems.filter(item => item && item.id);
     console.log(`Etter enkel validering: ${allImportedItems.length} varer`);
     
     // Slå sammen eksisterende og nye varer (hvis appendMode)
@@ -446,7 +626,7 @@ async function handleMultipleFilesImport(files, appendMode = true) {
                 existingItem.receivedCount = item.receivedCount;
             }
         } else {
-            // Dette er en ny vare, legg den til i kartet
+            // Dette er en ny vare, legg den til i listen
             // Sikre at alle nødvendige felter er satt
             uniqueItemMap[itemId] = {
                 ...item,
@@ -584,7 +764,7 @@ function validateAndCleanReceivedItems() {
     // Log opprinnelig antall for debugging
     const originalCount = appState.receiveListItems.length;
     console.log(`VALIDATION: Startet med ${originalCount} varer før validering`);
-
+    
     const validatedItems = [];
     let filteredCount = 0;
     let fixedWeightCount = 0;
@@ -717,501 +897,6 @@ function validateAndCleanReceivedItems() {
     if (receiveFileInfoEl) {
         receiveFileInfoEl.textContent = `Aktiv mottaksliste: ${appState.receiveListItems.length} varer`;
     }
-}
-
-/**
- * Kobler til Bluetooth-skanner for mottak
- */
-async function connectToBluetoothReceiveScanner() {
-    try {
-        showToast('Kobler til Bluetooth-skanner...', 'info');
-        await bluetoothScanner.connect();
-    } catch (error) {
-        showToast(error.message, 'error');
-    }
-}
-
-/**
- * Starter kameraskanning for mottak
- */
-async function startReceiveCameraScanning() {
-    try {
-        // Vis kameraskanner-container
-        cameraScannerReceiveContainerEl.style.display = 'block';
-        await startCameraScanning();
-    } catch (error) {
-        cameraScannerReceiveContainerEl.style.display = 'none';
-        showToast(error.message, 'error');
-    }
-}
-
-/**
- * Håndterer skanning for mottak
- * @param {string} barcode - Skannet strekkode eller varenummer
- */
-export function handleReceiveScan(barcode) {
-    if (appState.currentModule !== 'receiving') {
-        console.log('Merk: handleReceiveScan kalles mens en annen modul er aktiv:', appState.currentModule);
-        // Vi fortsetter likevel med funksjonen i tilfelle dette er et direkte kall
-    }
-    
-    console.log('Håndterer strekkode i mottak-modulen:', barcode);
-    
-    if (!barcode) return;
-    
-    // Tøm input etter skanning
-    if (receiveManualScanEl) {
-        receiveManualScanEl.value = '';
-    }
-    
-    // Normaliser input (fjern hvitspace, etc.)
-    barcode = barcode.toString().trim();
-    
-    // Sjekk om input er et varenummer direkte
-    let itemId = barcode;
-    let description = 'Ukjent vare';
-    let isDirectProductId = false;
-    let isKnownItem = false;
-    
-    // Sjekk om det som ble skannet er et varenummer (ikke strekkode)
-    // Produktnummer har ofte formatet 000-XX9999 eller lignende
-    if (barcode.includes('-')) {
-        // Sjekk om dette varenummeret finnes i vår database
-        for (const [ean, data] of Object.entries(appState.barcodeMapping)) {
-            const productId = typeof data === 'object' ? data.id : data;
-            
-            if (productId === barcode) {
-                isDirectProductId = true;
-                isKnownItem = true;
-                itemId = barcode; // Behold varenummeret direkte
-                // Finn beskrivelse hvis tilgjengelig
-                if (typeof data === 'object' && data.description) {
-                    description = data.description;
-                }
-                break;
-            }
-        }
-    }
-    
-    // Hvis ikke funnet som varenummer, sjekk om det er en strekkode
-    if (!isDirectProductId && appState.barcodeMapping[barcode]) {
-        isKnownItem = true;
-        const data = appState.barcodeMapping[barcode];
-        
-        if (typeof data === 'object' && data.id) {
-            itemId = data.id;
-            description = data.description || 'Ukjent vare';
-        } else {
-            itemId = data;
-        }
-    }
-    
-    // Logger for debug
-    console.log(`DEBUG INFO - Skannet: ${barcode}, Mappet til itemId: ${itemId}`);
-    console.log(`DEBUG INFO - Mottaksliste inneholder ${appState.receiveListItems.length} varer`);
-    
-    // Finn varen i mottakslisten - her bruker vi alle mulige variasjoner
-    // for å sikre at vi finner den riktige varen
-    let item = null;
-    
-    // 1. Prøv først direkte med itemId
-    item = appState.receiveListItems.find(item => item.id === itemId);
-    
-    // 2. Hvis ikke funnet, prøv direkte med opprinnelig barcode
-    if (!item) {
-        item = appState.receiveListItems.find(item => item.id === barcode);
-        if (item) {
-            itemId = barcode; // Bruk original strekkode siden det er det som er i listen
-        }
-    }
-    
-    // 3. Prøv case-insensitive sammenligning hvis fortsatt ikke funnet
-    if (!item) {
-        const lowerItemId = itemId.toLowerCase();
-        item = appState.receiveListItems.find(item => 
-            item.id.toLowerCase() === lowerItemId);
-            
-        if (item) {
-            itemId = item.id; // Bruk ID fra listen, den har riktig formatering
-        }
-    }
-    
-    // 4. Forsøk å finne nesten-matchende varer hvis ikke funnet
-    if (!item) {
-        // Fjern eventuelt mellomrom og bindestreker for sammenligning
-        const cleanItemId = itemId.replace(/[\s-]/g, '');
-        
-        for (const listItem of appState.receiveListItems) {
-            const cleanListItemId = listItem.id.replace(/[\s-]/g, '');
-            if (cleanListItemId === cleanItemId) {
-                item = listItem;
-                itemId = listItem.id; // Bruk ID fra listen
-                break;
-            }
-        }
-    }
-    
-    // Logger hver vare i listen for debugging
-    if (!item) {
-        appState.receiveListItems.forEach(listItem => {
-        });
-    }
-    
-    // Håndtere varer som ikke er i listen
-    if (!item) {
-        showToast(`Vare "${itemId}" finnes ikke i mottakslisten. Kun varer i mottakslisten kan skannes.`, 'error');
-        blinkBackground('red');
-        playErrorSound();
-        return;
-    }
-    
-    // Her fortsetter vi med eksisterende kode for å registrere varen
-    // Initialisere tellefelt hvis det ikke eksisterer
-    if (item.receivedCount === undefined) {
-        item.receivedCount = 0;
-    }
-    
-    // Sjekk om vi har mottatt alle enhetene av denne varen
-    if (item.receivedCount >= item.quantity) {
-        // Sjekk hvis vi har overstyr-innstilling for ferdig mottatte varer
-        if (appState.settings.allowOverScanning) {
-            // Fortsette med skanning (overskrider forventet antall)
-            showToast(`Merk: ${item.quantity} enheter av "${itemId}" er allerede mottatt. Overskanning aktivert.`, 'warning');
-            blinkBackground('orange');
-        } else {
-            // Stopp videre skanning av denne varen
-            showToast(`Alle ${item.quantity} enheter av "${itemId}" er allerede mottatt! Videre skanning blokkert.`, 'error');
-            blinkBackground('red');
-            playErrorSound();
-            return;
-        }
-    }
-    
-    // Øk antallet mottatt
-    item.receivedCount++;
-    
-    // Merk varen som fullstendig mottatt hvis alle enheter er skannet
-    if (item.receivedCount >= item.quantity) {
-        item.received = true;
-        item.receivedAt = new Date();
-        
-        // Legg til i listen over fullstendig mottatte varer
-        if (!appState.receivedItems.includes(itemId)) {
-            appState.receivedItems.push(itemId);
-        }
-    }
-    
-    // Lagre sist mottatt vare for angrefunksjonalitet
-    appState.lastReceivedItem = {
-        id: itemId,
-        timestamp: new Date()
-    };
-    
-    // Oppdater UI
-    updateReceivingUI();
-    
-    // Vis tilbakemelding til brukeren
-    const remainingCount = item.quantity - item.receivedCount;
-    
-    if (remainingCount > 0) {
-        showToast(`Vare "${itemId}" registrert! ${remainingCount} av ${item.quantity} gjenstår.`, 'info');
-    } else {
-        showToast(`Vare "${itemId}" fullstendig mottatt!`, 'success');
-    }
-    
-    // Lagre endringer
-    saveListsToStorage();
-}
-
-/**
- * Angrer siste skanning
- */
-function undoLastReceiveScan() {
-    if (!appState.lastReceivedItem) return;
-    
-    // Finn varen som skal angres
-    const item = appState.receiveListItems.find(item => item.id === appState.lastReceivedItem.id);
-    
-    if (item) {
-        // Reduser antall mottatte
-        if (item.receivedCount > 0) {
-            item.receivedCount--;
-        }
-        
-        // Fjern fra fullstendig mottatte hvis antallet nå er mindre enn totalen
-        if (item.receivedCount < item.quantity) {
-            item.received = false;
-            item.receivedAt = null;
-            
-            // Fjern fra listen over fullstendig mottatte varer hvis den er der
-            const index = appState.receivedItems.indexOf(item.id);
-            if (index !== -1) {
-                appState.receivedItems.splice(index, 1);
-            }
-        }
-    }
-    
-    // Nullstill sist mottatt vare
-    appState.lastReceivedItem = null;
-    
-    // Oppdater UI
-    updateReceivingUI();
-    showToast('Siste skanning er angret!', 'warning');
-    
-    // Lagre endringer
-    saveListsToStorage();
-}
-
-/**
- * Eksporterer mottakslisten
- * @param {string} format - Format for eksport (pdf, csv, json, txt, html)
- */
-function exportReceiveList(format = 'pdf') {
-    // Sjekk om vi har varer å eksportere
-    if (appState.receiveListItems.length === 0) {
-        showToast('Ingen varer å eksportere!', 'warning');
-        return;
-    }
-    
-    // Sjekk om alle varer er mottatt
-    const unfinishedItems = appState.receiveListItems.filter(item => !item.received);
-    
-    if (unfinishedItems.length > 0) {
-        // Beregn totalt antall umottatte varer og antall som mangler
-        const totalUnreceived = unfinishedItems.reduce((sum, item) => {
-            const remaining = item.quantity - (item.receivedCount || 0);
-            return sum + remaining;
-        }, 0);
-        
-        // Vis bekreftelsesdialog
-        if (!confirm(`Advarsel: ${unfinishedItems.length} varelinjer (totalt ${totalUnreceived} enheter) er ikke ferdig mottatt.\n\nVil du eksportere likevel?`)) {
-            return; // Brukeren valgte å avbryte
-        }
-    }
-    
-    try {
-        if (format.toLowerCase() === 'pdf') {
-            // Bruk den nye PDF-eksportfunksjonen
-            exportToPDF(appState.receiveListItems, 'mottak', {
-                title: 'Mottaksliste',
-                subtitle: 'Eksportert fra SnapScan',
-                exportDate: new Date(),
-                showStatus: true
-            });
-        } else {
-            // Bruk den eksisterende eksportfunksjonen for andre formater
-            exportWithFormat(appState.receiveListItems, 'mottak', format);
-        }
-    } catch (error) {
-        console.error('Feil ved eksport:', error);
-        showToast('Kunne ikke eksportere liste. Prøv igjen senere.', 'error');
-    }
-}
-
-/**
- * Tømmer mottakslisten
- */
-function clearReceiveList() {
-    if (!confirm('Er du sikker på at du vil tømme mottakslisten?')) {
-        return;
-    }
-    
-    appState.receiveListItems = [];
-    appState.receivedItems = [];
-    appState.lastReceivedItem = null;
-    
-    updateReceivingUI();
-    showToast('Mottaksliste tømt!', 'warning');
-    
-    // Lagre endringer
-    saveListsToStorage();
-}
-
-/**
- * Slår sammen og fjerner duplikater i mottakslisten
- * Denne kjøres etter import av flere filer for å sikre at 
- * duplikater på tvers av filer håndteres riktig
- */
-function mergeAndDedupReceivedItems() {
-    if (appState.receiveListItems.length === 0) return;
-    
-    console.log(`DEDUPE: Starter med ${appState.receiveListItems.length} varer`);
-    
-    // Bygg opp et nytt map basert på ID
-    const mergedMap = {};
-    
-    // Gå gjennom alle varer
-    appState.receiveListItems.forEach((item, index) => {
-        if (!item || !item.id) {
-            console.log(`DEDUPE: Ignorerer vare #${index} med manglende ID`);
-            return; // Hopp over ugyldige varer
-        }
-        
-        const itemId = item.id;
-        console.log(`DEDUPE: Prosesserer vare med ID ${itemId}`);
-        
-        if (mergedMap[itemId]) {
-            // Denne varen finnes allerede - slå sammen
-            const existingItem = mergedMap[itemId];
-            
-            // Summer antall
-            existingItem.quantity += item.quantity || 1;
-            
-            // Behold høyeste vekt hvis de er forskjellige
-            if (item.weight && (!existingItem.weight || item.weight > existingItem.weight)) {
-                existingItem.weight = item.weight;
-            }
-            
-            // Maksimer receivedCount
-            existingItem.receivedCount = Math.max(existingItem.receivedCount || 0, item.receivedCount || 0);
-            
-            // Oppdater beskrivelse hvis den nye er bedre/lengre
-            if (item.description && (!existingItem.description || item.description.length > existingItem.description.length)) {
-                existingItem.description = item.description;
-            }
-            
-            console.log(`DEDUPE: Slått sammen duplikat '${itemId}' - Nytt antall = ${existingItem.quantity}, mottatt = ${existingItem.receivedCount || 0}`);
-        } else {
-            // Varen finnes ikke - legg den til i kartet
-            // Sikre at alle nødvendige felter er satt
-            mergedMap[itemId] = { 
-                ...item,
-                quantity: item.quantity || 1,
-                weight: item.weight || appState.settings.defaultItemWeight || 1.0,
-                receivedCount: item.receivedCount || 0
-            };
-            console.log(`DEDUPE: La til ny vare '${itemId}' - Antall = ${mergedMap[itemId].quantity}`);
-        }
-    });
-    
-    // Konverter map til array og sorter etter ID
-    const mergedArray = Object.values(mergedMap);
-    
-    // Oppdater received-status basert på receivedCount
-    mergedArray.forEach(item => {
-        item.received = (item.receivedCount || 0) >= (item.quantity || 1);
-    });
-    
-    // Sorter listen
-    mergedArray.sort((a, b) => {
-        // Sorter først etter leverandør (første del av varenr)
-        const aPrefix = a.id.split('-')[0] || '';
-        const bPrefix = b.id.split('-')[0] || '';
-        if (aPrefix !== bPrefix) {
-            return aPrefix.localeCompare(bPrefix);
-        }
-        // Deretter alfabetisk på hele varenummeret
-        return a.id.localeCompare(b.id);
-    });
-    
-    // Oppdater den globale listen
-    appState.receiveListItems = mergedArray;
-    
-    console.log(`DEDUPE: Etter sammenslåing: ${appState.receiveListItems.length} unike varer`);
-}
-
-/**
- * Hjelpeefunksjon for å normalisere varenummer 
- * slik at vi kan matche på tvers av formatteringer
- */
-function normalizeProductId(id) {
-    if (!id) return '';
-    // Fjern eventuelle ekstra mellomrom før og etter
-    return id.trim();
-}
-
-/**
- * Beriker varen med informasjon fra barcodes.json hvis tilgjengelig
- */
-function enrichItemFromBarcodes(item) {
-    if (!item || !item.id) return;
-    
-    // Sjekk om dette varenummeret er kjent i barcodes.json
-    for (const [barcode, data] of Object.entries(appState.barcodeMapping)) {
-        const productId = typeof data === 'object' ? data.id : data;
-        
-        // Sjekk for direkte match på varenummer
-        if (productId === item.id) {
-            // Oppdater beskrivelse hvis tilgjengelig
-            if (typeof data === 'object' && data.description && (!item.description || data.description.length > item.description.length)) {
-                item.description = data.description;
-            }
-            
-            // Oppdater vekt hvis tilgjengelig
-            if (typeof data === 'object' && data.weight && (!item.weight || data.weight > item.weight)) {
-                item.weight = data.weight;
-            }
-            
-            break;
-        }
-    }
-}
-
-/**
- * Validerer importerte varer og fjerner ugyldige oppføringer
- */
-function validateImportedItems(items) {
-    if (!items || items.length === 0) return [];
-    
-    const validItems = [];
-    let filteredCount = 0;
-    let correctedCount = 0;
-    
-    // Maksimale fornuftige verdier
-    const MAX_REASONABLE_WEIGHT = 1000; // kg per enhet
-    const MAX_REASONABLE_QUANTITY = 10000; // antall av en vare
-    
-    items.forEach(item => {
-        if (!item || !item.id) {
-            filteredCount++;
-            return; // Hopp over ugyldige oppføringer
-        }
-        
-        // Sjekk om dette er en systempost (f.eks. kundenummer)
-        if (item.id.includes('Kundenr.') || 
-            item.id.toLowerCase().includes('ordrenr') || 
-            (item.id.match(/^[A-Z]{2}\d{6}/) && item.description && item.description.includes('Kundenr'))) {
-            filteredCount++;
-            return;
-        }
-        
-        let modified = false;
-        
-        // Valider og korrieger vekt
-        if (item.weight === undefined || item.weight === null) {
-            item.weight = appState.settings.defaultItemWeight || 1.0;
-            modified = true;
-        } else if (item.weight > MAX_REASONABLE_WEIGHT || item.weight <= 0) {
-            item.weight = appState.settings.defaultItemWeight || 1.0;
-            modified = true;
-        }
-        
-        // Valider og korriget antall
-        if (item.quantity === undefined || item.quantity === null) {
-            item.quantity = 1;
-            modified = true;
-        } else if (item.quantity > MAX_REASONABLE_QUANTITY || item.quantity <= 0) {
-            item.quantity = 1;
-            modified = true;
-        }
-        
-        // Initialiser mottaksfelt
-        if (item.receivedCount === undefined) {
-            item.receivedCount = 0;
-        }
-        
-        if (item.received === undefined) {
-            item.received = false;
-        }
-        
-        if (modified) {
-            correctedCount++;
-        }
-        
-        validItems.push(item);
-    });
-    
-    return validItems;
 }
 
 /**

@@ -4,18 +4,22 @@ import { updatePickingUI } from './picking.js';
 import { updateReceivingUI } from './receiving.js';
 import { updateReturnsUI } from './returns.js';
 import { stopCameraScanning } from './scanner.js';
+// Importer UI-komponenter
+import { ButtonComponent } from '../components/ButtonComponent.js';
+import { BaseComponent } from '../components/BaseComponent.js';
 
 // DOM-elementer - Hovedmeny
 let mainMenuEl;
-let backButtonEl;
 let menuItemsEl;
-
-// DOM-elementer - Skanner
-let scannerIndicatorEl;
-let scannerStatusEl;
 
 // DOM-elementer - Modul containere
 let moduleContainersEl;
+
+// Komponent-referanser
+let backButton;
+let menuItems = []; // Array av menykomponenter
+let scannerIndicator; // Scanner-indikator komponent
+let moduleContainers = []; // Array av modulcontainer-komponenter
 
 /**
  * Initialiserer UI-håndtering
@@ -23,39 +27,15 @@ let moduleContainersEl;
 export function initUi() {
     // Hent DOM-elementer
     mainMenuEl = document.getElementById('mainMenu');
-    backButtonEl = document.getElementById('backButton');
-    menuItemsEl = document.querySelectorAll('.menu-item');
-    scannerIndicatorEl = document.getElementById('scannerIndicator');
-    scannerStatusEl = document.getElementById('scannerStatus');
     moduleContainersEl = document.querySelectorAll('.module-container');
     
-    // Legg til event listeners på hovedmeny-elementer
-    menuItemsEl.forEach(item => {
-        item.addEventListener('click', function() {
-            const module = this.getAttribute('data-module');
-            showModule(module);
-        });
-    });
-    
-    // Legg til event listener på tilbakeknapp
-    backButtonEl.addEventListener('click', function() {
-        showMainMenu();
-    });
-    
-    // Sikre at scanner-indikator-elementene alltid oppdateres når DOM er lastet fullstendig
-    window.addEventListener('DOMContentLoaded', function() {
-        scannerIndicatorEl = document.getElementById('scannerIndicator');
-        scannerStatusEl = document.getElementById('scannerStatus');
-        if (!scannerIndicatorEl || !scannerStatusEl) {
-            console.warn('Scanner-indikator-elementer ikke funnet etter DOMContentLoaded');
-        }
-    });
+    // Initialiser komponentene
+    initComponents();
     
     // Observer for å håndtere dynamisk DOM-endringer
     const observer = new MutationObserver(function(mutations) {
-        if (!scannerIndicatorEl || !scannerStatusEl) {
-            scannerIndicatorEl = document.getElementById('scannerIndicator');
-            scannerStatusEl = document.getElementById('scannerStatus');
+        if (!document.getElementById('scannerIndicator')) {
+            updateScannerUIReferences();
         }
     });
     
@@ -66,6 +46,69 @@ export function initUi() {
 }
 
 /**
+ * Oppdaterer referanser til scanner UI-elementer
+ */
+function updateScannerUIReferences() {
+    const scannerIndicatorEl = document.getElementById('scannerIndicator');
+    const scannerStatusEl = document.getElementById('scannerStatus');
+    
+    if (scannerIndicatorEl && !scannerIndicator) {
+        scannerIndicator = new BaseComponent({
+            element: scannerIndicatorEl,
+            properties: {
+                statusElement: scannerStatusEl
+            }
+        });
+    }
+}
+
+/**
+ * Initialiserer UI-komponenter
+ */
+function initComponents() {
+    // Opprett tilbakeknapp
+    const backButtonContainer = document.getElementById('backButtonContainer');
+    if (backButtonContainer) {
+        backButton = new ButtonComponent({
+            text: 'Tilbake',
+            type: 'secondary',
+            icon: 'back-icon',
+            id: 'backButton',
+            onClick: () => showMainMenu()
+        });
+        
+        backButtonContainer.innerHTML = '';
+        backButtonContainer.appendChild(backButton.element);
+        backButton.hide(); // Skjul knappen ved oppstart
+    }
+    
+    // Opprett menykomponenter
+    const menuItemElements = document.querySelectorAll('.menu-item');
+    menuItemElements.forEach(item => {
+        const module = item.getAttribute('data-module');
+        const menuItem = new ButtonComponent({
+            element: item, // Bruk eksisterende element
+            onClick: () => showModule(module)
+        });
+        menuItems.push(menuItem);
+    });
+    
+    // Opprett modul container komponenter
+    moduleContainersEl.forEach(container => {
+        const moduleContainer = new BaseComponent({
+            element: container,
+            properties: {
+                moduleId: container.id
+            }
+        });
+        moduleContainers.push(moduleContainer);
+    });
+    
+    // Initialiser scanner-indikator komponent
+    updateScannerUIReferences();
+}
+
+/**
  * Viser hovedmenyen
  */
 export function showMainMenu() {
@@ -73,11 +116,15 @@ export function showMainMenu() {
     stopCameraScanning();
     
     appState.currentModule = null;
-    backButtonEl.style.display = 'none';
     
-    // Skjul alle moduler
-    moduleContainersEl.forEach(container => {
-        container.style.display = 'none';
+    // Skjul tilbakeknappen
+    if (backButton) {
+        backButton.hide();
+    }
+    
+    // Skjul alle moduler ved å bruke komponentene
+    moduleContainers.forEach(container => {
+        container.hide();
     });
     
     // Vis hovedmenyen
@@ -110,21 +157,27 @@ export function showModule(module) {
     // Skjul hovedmenyen
     mainMenuEl.style.display = 'none';
     
-    // Skjul alle moduler
-    moduleContainersEl.forEach(container => {
-        container.style.display = 'none';
+    // Skjul alle moduler ved å bruke komponentene
+    moduleContainers.forEach(container => {
+        container.hide();
     });
     
     // Vis den valgte modulen
-    const moduleEl = document.getElementById(module + 'Module');
-    if (moduleEl) {
-        moduleEl.style.display = 'flex';
+    const targetModuleId = module + 'Module';
+    const moduleComponent = moduleContainers.find(container => 
+        container.properties.moduleId === targetModuleId
+    );
+    
+    if (moduleComponent) {
+        moduleComponent.show();
     } else {
-        console.error('Finner ikke modul:', module + 'Module');
+        console.error('Finner ikke modul:', targetModuleId);
     }
     
     // Vis tilbakeknappen
-    backButtonEl.style.display = 'block';
+    if (backButton) {
+        backButton.show();
+    }
     
     // Oppdater UI for den aktuelle modulen
     if (module === 'picking') {
@@ -145,39 +198,34 @@ export function showModule(module) {
  * @param {Object} details - Ytterligere detaljer om skanneren
  */
 export function updateScannerStatus(connected, details = {}) {
-    // Kontroller at DOM-elementene eksisterer før vi forsøker å manipulere dem
-    if (!scannerIndicatorEl || !scannerStatusEl) {
-        console.warn('SCANNER-STATUS-WARNING: Forsøker å oppdatere scanner-status, men DOM-elementer er ikke initialisert');
-        // Forsøk å hente elementene på nytt, i tilfelle de ikke var tilgjengelige under init
-        scannerIndicatorEl = document.getElementById('scannerIndicator');
-        scannerStatusEl = document.getElementById('scannerStatus');
+    // Kontroller at scanner-indikatoren eksisterer
+    if (!scannerIndicator) {
+        updateScannerUIReferences();
         
-        // Hvis de fortsatt ikke finnes, avbryt funksjonen
-        if (!scannerIndicatorEl || !scannerStatusEl) {
-            console.error('SCANNER-STATUS-ERROR: Kan ikke oppdatere scanner-status, DOM-elementer mangler');
+        // Hvis den fortsatt ikke finnes, avbryt funksjonen
+        if (!scannerIndicator) {
+            console.error('SCANNER-STATUS-ERROR: Kan ikke oppdatere scanner-status, komponenten mangler');
             return;
         }
     }
     
+    const statusElement = scannerIndicator.properties.statusElement;
+    
     if (connected) {
-        scannerIndicatorEl.classList.add('connected');
+        // Bruk komponentmetoder for konsistent håndtering
+        scannerIndicator.element.classList.add('connected');
         
         // Vis informasjon om skanneren
         if (details.type === 'bluetooth') {
-            scannerStatusEl.textContent = `Skanner: Tilkoblet (${details.deviceName || 'Bluetooth'})`;
+            statusElement.textContent = `Skanner: Tilkoblet (${details.deviceName || 'Bluetooth'})`;
         } else if (details.type === 'camera') {
-            scannerStatusEl.textContent = 'Skanner: Kamera aktivt';
+            statusElement.textContent = 'Skanner: Kamera aktivt';
         } else {
-            scannerStatusEl.textContent = 'Skanner: Tilkoblet';
+            statusElement.textContent = 'Skanner: Tilkoblet';
         }
     } else {
-        // Legg til sikkerhet i tilfelle classList ikke er tilgjengelig
-        if (scannerIndicatorEl.classList) {
-            scannerIndicatorEl.classList.remove('connected');
-        } else {
-            // Fallback for eldre nettlesere eller uventede situasjoner
-            scannerIndicatorEl.className = scannerIndicatorEl.className.replace(/\bconnected\b/, '');
-        }
-        scannerStatusEl.textContent = 'Skanner: Ikke tilkoblet';
+        // Bruk komponentmetoder for konsistent håndtering
+        scannerIndicator.element.classList.remove('connected');
+        statusElement.textContent = 'Skanner: Ikke tilkoblet';
     }
 }

@@ -4,7 +4,7 @@ import { appState } from '../app.js';
 import { showToast } from './utils.js';
 
 /**
- * Genererer en PDF for plukkliste eller annen liste
+ * Genererer en PDF for plukkliste eller annen liste med utvidet statistikk
  * @param {Array} items - Liste med varer
  * @param {string} type - Type liste (plukk, mottak, retur)
  * @param {Object} options - Ekstra alternativer for PDF-generering
@@ -24,7 +24,8 @@ export async function generatePDF(items, type, options = {}) {
         logo: null,
         showStatus: true,
         pageSize: 'a4',
-        pageOrientation: 'portrait'
+        pageOrientation: 'portrait',
+        showProgressBar: true
     };
     
     const settings = { ...defaultOptions, ...options };
@@ -75,7 +76,7 @@ export async function generatePDF(items, type, options = {}) {
     const exportDateString = formatDate(settings.exportDate);
     doc.text(`Dato: ${exportDateString}`, margin, margin + 20);
     
-    // Beregn sammendrag
+    // Beregn sammendrag med utvidet statistikk
     const summary = calculateSummary(items, type);
     
     // Legg til sammendrag
@@ -86,19 +87,93 @@ export async function generatePDF(items, type, options = {}) {
     doc.text('Sammendrag:', margin, metadataY);
     doc.setFont('helvetica', 'normal');
     metadataY += 7;
-    doc.text(`Antall varer: ${summary.totalItems}`, margin, metadataY);
+    doc.text(`Antall varelinjer: ${summary.totalItems}`, margin, metadataY);
     
     if (settings.showStatus) {
         metadataY += 7;
+        
+        // Vis detaljert ferdigstillingsstatus
         const statusText = getStatusText(type);
-        doc.text(`${statusText}: ${summary.completedItems} av ${summary.totalItems}`, margin, metadataY);
+        const statusMessage = `${statusText}: ${summary.completedItems} fullstendig, ${summary.partiallyCompletedItems} delvis, ${summary.uncompletedItems} ikke startet`;
+        doc.text(statusMessage, margin, metadataY);
+        
+        // Vis enheter prosessert
+        metadataY += 7;
+        doc.text(`Enheter: ${summary.processedUnits} av ${summary.totalUnits} prosessert (${summary.percentComplete}%)`, margin, metadataY);
+        
+        // Legg til fremdriftslinje hvis aktivert
+        if (settings.showProgressBar) {
+            metadataY += 7;
+            
+            // Tegn bakgrunn for fremdriftslinje
+            const progressBarWidth = 100; // 100mm
+            const progressBarHeight = 5; // 5mm
+            doc.setFillColor(240, 240, 240);
+            doc.roundedRect(margin, metadataY, progressBarWidth, progressBarHeight, 1, 1, 'F');
+            
+            // Tegn fyllt del av fremdriftslinje
+            const fillWidth = (summary.percentComplete / 100) * progressBarWidth;
+            
+            // Velg farge basert på fremdrift
+            if (summary.percentComplete < 25) {
+                doc.setFillColor(244, 67, 54); // Rød
+            } else if (summary.percentComplete < 75) {
+                doc.setFillColor(255, 152, 0); // Oransje
+            } else {
+                doc.setFillColor(76, 175, 80); // Grønn
+            }
+            
+            doc.roundedRect(margin, metadataY, fillWidth, progressBarHeight, 1, 1, 'F');
+            
+            // Legg til prosentvis tekst i fremdriftslinjen
+            doc.setFontSize(8);
+            doc.setTextColor(0);
+            const percentText = `${summary.percentComplete}%`;
+            const textWidth = doc.getTextWidth(percentText);
+            const textX = margin + (progressBarWidth / 2) - (textWidth / 2);
+            const textY = metadataY + 3.5;
+            
+            // Sett kontrast tekst basert på fremdrift
+            doc.setTextColor(0, 0, 0); // Svart tekst som standard
+            doc.text(percentText, textX, textY);
+            
+            metadataY += progressBarHeight; // Legg til høyden på fremdriftslinjen
+        }
     }
     
     metadataY += 7;
     doc.text(`Total vekt: ${summary.totalWeight.toFixed(2)} kg`, margin, metadataY);
     
+    // Legg til metadata fra ordre hvis tilgjengelig
+    if (options.ordrenr || options.kundenavn || options.selger) {
+        metadataY += 10;
+        doc.setFont('helvetica', 'bold');
+        doc.text(`Ordreinfo:`, margin, metadataY);
+        doc.setFont('helvetica', 'normal');
+        
+        if (options.ordrenr) {
+            metadataY += 7;
+            doc.text(`Ordrenr: ${options.ordrenr}`, margin, metadataY);
+        }
+        
+        if (options.kundenavn) {
+            metadataY += 7;
+            doc.text(`Kunde: ${options.kundenavn}`, margin, metadataY);
+        }
+        
+        if (options.selger) {
+            metadataY += 7;
+            doc.text(`Selger: ${options.selger}`, margin, metadataY);
+        }
+        
+        if (options.jobbeskrivelse) {
+            metadataY += 7;
+            doc.text(`Jobbeskrivelse: ${options.jobbeskrivelse}`, margin, metadataY);
+        }
+    }
+    
     // Legg til en skillelinje
-    metadataY += 5;
+    metadataY += 10;
     doc.setDrawColor(200);
     doc.line(margin, metadataY, pageWidth - margin, metadataY);
     
@@ -134,7 +209,7 @@ export async function generatePDF(items, type, options = {}) {
     
     const rowHeight = 8;
     
-    // Oppdater for-løkken i generatePDF som tegner tabellen
+    // Tegn tabellrader
     for (let i = 0; i < data.length; i++) {
         // Sjekk om vi trenger ny side
         if (tableY + rowHeight > pageHeight - margin) {
@@ -227,9 +302,46 @@ export async function generatePDF(items, type, options = {}) {
                     doc.setFont('helvetica', 'normal');
                     
                 } else {
-                    // Standard visning for retur-tilstand og andre verdier
-                    doc.setTextColor(0);
-                    doc.text(statusText, xOffset + 2, tableY + 5.5);
+                    // For returmodulen: Fargekoding basert på tilstand
+                    if (type === 'retur') {
+                        const condition = statusText.toLowerCase();
+                        
+                        if (condition === 'uåpnet') {
+                            // Grønn boks for "Uåpnet"
+                            doc.setFillColor(76, 175, 80, 0.8);
+                            doc.setTextColor(255, 255, 255);
+                        } else if (condition === 'åpnet') {
+                            // Gul boks for "Åpnet"
+                            doc.setFillColor(255, 193, 7, 0.8);
+                            doc.setTextColor(0, 0, 0);
+                        } else if (condition === 'skadet') {
+                            // Rød boks for "Skadet"
+                            doc.setFillColor(244, 67, 54, 0.8);
+                            doc.setTextColor(255, 255, 255);
+                        } else {
+                            // Standard visning
+                            doc.setTextColor(0);
+                            doc.text(statusText, xOffset + 2, tableY + 5.5);
+                            // Hopp til neste kolonne
+                            xOffset += columnWidths[j];
+                            continue;
+                        }
+                        
+                        // Tegn boks for tilstand
+                        const boxWidth = lastColWidth * 0.8;
+                        const boxX = lastColX + (lastColWidth - boxWidth) / 2;
+                        doc.roundedRect(boxX, tableY + 1, boxWidth, rowHeight - 2, 1, 1, 'F');
+                        
+                        // Tegn tekst sentrert i boksen
+                        doc.setFont('helvetica', 'bold');
+                        const textWidth = doc.getTextWidth(statusText);
+                        doc.text(statusText, boxX + (boxWidth/2) - (textWidth/2), tableY + 5.5);
+                        doc.setFont('helvetica', 'normal');
+                    } else {
+                        // Standard visning for andre verdier
+                        doc.setTextColor(0);
+                        doc.text(statusText, xOffset + 2, tableY + 5.5);
+                    }
                 }
             } else {
                 // Vanlig tekstrendering for andre kolonner
@@ -246,18 +358,18 @@ export async function generatePDF(items, type, options = {}) {
     
     // Tegn ramme rundt tabellen
     doc.setDrawColor(200);
-    doc.rect(margin, margin + 60, contentWidth, tableY - (margin + 60), 'S');
+    doc.rect(margin, metadataY + 5, contentWidth, tableY - (metadataY + 5), 'S');
     
     // Legg til vertikale skillelinjer i tabellen
     let lineX = margin;
     for (let i = 0; i < columnWidths.length - 1; i++) {
         lineX += columnWidths[i];
-        doc.line(lineX, margin + 60, lineX, tableY);
+        doc.line(lineX, metadataY + 5, lineX, tableY);
     }
     
     // Legg til horisontale skillelinjer for hver rad
     for (let i = 0; i <= data.length; i++) {
-        const lineY = margin + 60 + (i * rowHeight);
+        const lineY = metadataY + 5 + (i * rowHeight + (i === 0 ? 10 : 0));
         if (lineY < tableY) {
             doc.line(margin, lineY, margin + contentWidth, lineY);
         }
@@ -290,7 +402,8 @@ export async function generatePDF(items, type, options = {}) {
     // Legg til bunntekst med generert-info
     doc.setFontSize(7);
     doc.setTextColor(150);
-    doc.text('Generert med SnapScan', margin, pageHeight - margin);
+    const userName = appState.user ? appState.user.name : 'ukjent bruker';
+    doc.text(`Generert med SnapScan av ${userName}`, margin, pageHeight - margin);
     
     // Returner PDF som blob
     const pdfBlob = doc.output('blob');
@@ -489,35 +602,66 @@ function loadJsPDF() {
 }
 
 /**
- * Beregner sammendrag for liste
+ * Beregner sammendrag for liste med utvidet statistikk
  * @param {Array} items - Liste med varer
  * @param {string} type - Type liste
- * @returns {Object} Sammendrag av listen
+ * @returns {Object} Utvidet sammendrag av listen
  */
 function calculateSummary(items, type) {
     let totalItems = items.length;
     let totalWeight = 0;
     let completedItems = 0;
+    let partiallyCompletedItems = 0;
+    let uncompletedItems = 0;
+    let totalUnits = 0;
+    let processedUnits = 0;
 
     items.forEach(item => {
         const quantity = item.quantity || 1;
         const weight = item.weight || 0;
+        
+        totalUnits += quantity;
         totalWeight += quantity * weight;
 
-        // Sjekk fullførte varer basert på type
-        if (type === 'plukk' && item.picked) {
-            completedItems++;
-        } else if (type === 'mottak' && item.received) {
-            completedItems++;
+        // Prosesserte enheter og status basert på type
+        let processedCount = 0;
+        let isCompleted = false;
+        
+        if (type === 'plukk') {
+            processedCount = item.pickedCount || 0;
+            isCompleted = item.picked || processedCount >= quantity;
+        } else if (type === 'mottak') {
+            processedCount = item.receivedCount || 0;
+            isCompleted = item.received || processedCount >= quantity;
         } else if (type === 'retur') {
+            processedCount = item.returnedCount || 0; 
+            isCompleted = item.returned || processedCount >= quantity;
+        }
+        
+        processedUnits += processedCount;
+        
+        // Kategorisering av varestatus
+        if (isCompleted) {
             completedItems++;
+        } else if (processedCount > 0) {
+            partiallyCompletedItems++;
+        } else {
+            uncompletedItems++;
         }
     });
+
+    // Beregn prosentvis ferdigstillelse
+    const percentComplete = totalUnits > 0 ? Math.round((processedUnits / totalUnits) * 100) : 0;
 
     return {
         totalItems,
         completedItems,
-        totalWeight: parseFloat(totalWeight.toFixed(2))
+        partiallyCompletedItems,
+        uncompletedItems,
+        totalWeight: parseFloat(totalWeight.toFixed(2)),
+        totalUnits,
+        processedUnits,
+        percentComplete
     };
 }
 

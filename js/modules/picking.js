@@ -7,6 +7,25 @@ import { initCameraScanner, startCameraScanning, stopCameraScanning, bluetoothSc
 import { importFromCSV, importFromJSON, importFromPDF, exportList, exportWithFormat, exportToPDF } from './import-export.js';
 import { openWeightModal } from './weights.js';
 import { handleScannedBarcode } from './barcode-handler.js';
+import { handleModuleScan, handleModuleFileImport, exportModuleList, undoLastModuleScan, clearModuleList } from './core-module-handler.js';
+// Import EventBus
+import eventBus, { EventTypes } from './event-bus.js';
+
+// Importer UI-komponenter
+import { ButtonComponent } from '../components/ButtonComponent.js';
+import { TableComponent } from '../components/TableComponent.js';
+import { SearchComponent } from '../components/SearchComponent.js';
+
+// Komponenter
+let pickingTable;
+let pickingSearch;
+let importButton;
+let exportButton;
+let clearButton;
+let undoButton;
+let connectScannerButton;
+let cameraScannerButton;
+let scanButton;
 
 // DOM elementer - Plukk
 let importPickFileEl;
@@ -29,9 +48,16 @@ let videoPickScannerEl;
 let canvasPickScannerEl;
 let scannerPickOverlayEl;
 let closePickScannerEl;
+let pickSearchContainerEl;
+let pickButtonContainerEl;
+let pickTableContainerEl;
 
+// Registrer globale funksjoner
 window.handlePickScan = handlePickScan;
 window.updatePickingUI = updatePickingUI;
+
+// EventBus abonnementer
+let subscriptions = [];
 
 /**
  * Initialiserer plukk-modulen
@@ -61,26 +87,55 @@ export function initPicking() {
     scannerPickOverlayEl = document.getElementById('scannerPickOverlay');
     closePickScannerEl = document.getElementById('closePickScanner');
     
+    // Nye container-elementer for komponenter
+    pickSearchContainerEl = document.getElementById('pickSearchContainer');
+    pickButtonContainerEl = document.getElementById('pickButtonContainer');
+    pickTableContainerEl = document.getElementById('pickTableContainer');
+    
+    // Hvis container-elementene ikke eksisterer, oppretter vi dem
+    if (!pickSearchContainerEl) {
+        pickSearchContainerEl = document.createElement('div');
+        pickSearchContainerEl.id = 'pickSearchContainer';
+        pickListEl.parentNode.insertBefore(pickSearchContainerEl, pickListEl);
+    }
+    
+    if (!pickButtonContainerEl) {
+        pickButtonContainerEl = document.createElement('div');
+        pickButtonContainerEl.id = 'pickButtonContainer';
+        pickButtonContainerEl.className = 'button-container';
+        pickListEl.parentNode.insertBefore(pickButtonContainerEl, pickListEl);
+    }
+    
+    if (!pickTableContainerEl) {
+        pickTableContainerEl = document.createElement('div');
+        pickTableContainerEl.id = 'pickTableContainer';
+        pickListEl.parentNode.replaceChild(pickTableContainerEl, pickListEl);
+    }
+    
     // VIKTIG FIX: Gjøre handlePickScan tilgjengelig globalt
-    // Dette sikrer at funksjonen alltid er tilgjengelig for skanneren
     if (typeof window.handlePickScan !== 'function') {
         window.handlePickScan = handlePickScan;
         console.log("Registrerte window.handlePickScan");
     }
     
     // Initialiser kameraskanneren for plukk
-    // VIKTIG: Bruk 'pick' som modunavn for å registrere modulspesifikk callback
     initCameraScanner(
         document.getElementById('videoPickScanner'), 
         document.getElementById('canvasPickScanner'), 
         document.getElementById('scannerPickOverlay'), 
-        handlePickScan,  // Send handlePickScan som callback
+        handlePickScan,  
         updateScannerStatus,
-        'pick'  // Nytt parameter: modulnavn
+        'pick'  
     );
+    
+    // Initialiser komponentene
+    initComponents();
     
     // Legg til event listeners
     setupPickingEventListeners();
+    
+    // Registrer EventBus abonnementer
+    registerEventBusSubscriptions();
     
     // Oppdater UI basert på lagrede data
     updatePickingUI();
@@ -89,23 +144,180 @@ export function initPicking() {
 }
 
 /**
+ * Registrerer EventBus abonnementer for plukk-modulen
+ */
+function registerEventBusSubscriptions() {
+    // Rydder opp eventuelle eksisterende abonnementer
+    subscriptions.forEach(subscription => subscription.unsubscribe());
+    subscriptions = [];
+    
+    // Abonnér på skannede strekkoder som er relevante for plukk-modulen
+    subscriptions.push(eventBus.subscribe(EventTypes.BARCODE_SCANNED, (data) => {
+        if (data && data.module === 'pick' && appState.currentModule === 'picking') {
+            console.log(`Plukk-modul mottok skannet strekkode: ${data.barcode}`);
+            // Ikke gjør noe spesielt her siden skanner-modulen allerede håndterer dette
+        }
+    }));
+    
+    // Abonnér på prosesserte strekkoder
+    subscriptions.push(eventBus.subscribe(EventTypes.BARCODE_PROCESSED, (data) => {
+        if (data && data.module === 'pick' && appState.currentModule === 'picking') {
+            console.log(`Plukk-modul mottok prosessert strekkode: ${data.barcode}, varenr: ${data.itemId}`);
+            // Prosessering håndteres i handlePickScan, som kalles fra scanner-modulen
+        }
+    }));
+    
+    // Abonnér på ugyldig strekkode-hendelser
+    subscriptions.push(eventBus.subscribe(EventTypes.BARCODE_INVALID, (data) => {
+        if (data && data.module === 'pick' && appState.currentModule === 'picking') {
+            showToast(`Ugyldig strekkode: ${data.barcode} - ${data.reason === 'not_in_system' ? 'ikke i system' : 'ugyldig format'}`, 'error');
+            playErrorSound();
+        }
+    }));
+    
+    // Abonnér på modul-skifte for å nullstille eventuelle tilstander
+    subscriptions.push(eventBus.subscribe(EventTypes.UI_MODULE_CHANGED, (data) => {
+        // Hvis vi forlater plukk-modulen, stopp skanneren
+        if (data && data.module !== 'picking' && appState.currentModule === 'picking') {
+            stopCameraScanning();
+            cameraScannerPickContainerEl.style.display = 'none';
+        }
+        
+        // Hvis vi går inn i plukk-modulen, oppdater UI
+        if (data && data.module === 'picking') {
+            updatePickingUI();
+        }
+    }));
+    
+    // Abonnér på data-oppdateringer
+    subscriptions.push(eventBus.subscribe(EventTypes.DATA_UPDATED, (data) => {
+        if (data && data.type === 'pick' && appState.currentModule === 'picking') {
+            updatePickingUI();
+        }
+    }));
+    
+    // Abonnér på skanner-statusendringer
+    subscriptions.push(eventBus.subscribe(EventTypes.SCANNER_STATUS_CHANGED, (data) => {
+        if (appState.currentModule === 'picking') {
+            updateScannerStatus(data.status === 'success' || data.status === 'detected' || data.status === 'scanning');
+        }
+    }));
+}
+
+/**
+ * Initialiserer UI-komponenter
+ */
+function initComponents() {
+    // Søkekomponent
+    pickingSearch = new SearchComponent('pickSearchContainer', {
+        placeholder: 'Søk i plukklisten...',
+        onSearch: (searchTerm) => filterPickList(searchTerm)
+    });
+    
+    // Knapper
+    importButton = new ButtonComponent('pickButtonContainer', {
+        text: 'Importer liste',
+        type: 'primary',
+        icon: 'upload-icon',
+        id: 'importPickBtn',
+        onClick: () => importPickFileEl.click()
+    });
+    
+    connectScannerButton = new ButtonComponent('pickButtonContainer', {
+        text: 'Koble til skanner',
+        type: 'secondary',
+        icon: 'bluetooth-icon',
+        id: 'connectScannerPick',
+        onClick: () => connectToBluetoothPickScanner()
+    });
+    
+    cameraScannerButton = new ButtonComponent('pickButtonContainer', {
+        text: 'Kameraskanner',
+        type: 'secondary',
+        icon: 'camera-icon',
+        id: 'cameraScannerPick',
+        onClick: () => startPickCameraScanning()
+    });
+    
+    scanButton = new ButtonComponent('pickManualScanContainer', {
+        text: 'Skann',
+        type: 'success',
+        id: 'pickManualScanBtn',
+        onClick: () => handlePickScan(pickManualScanEl.value)
+    });
+    
+    undoButton = new ButtonComponent('pickButtonContainer', {
+        text: 'Angre siste',
+        type: 'warning',
+        icon: 'undo-icon',
+        id: 'pickUndoBtn',
+        onClick: () => undoLastPickScan(),
+        disabled: !appState.lastPickedItem
+    });
+    
+    exportButton = new ButtonComponent('pickButtonContainer', {
+        text: 'Eksporter liste',
+        type: 'info',
+        icon: 'export-icon',
+        id: 'pickExportBtn',
+        onClick: () => exportPickList('pdf'),
+        disabled: appState.pickListItems.length === 0
+    });
+    
+    clearButton = new ButtonComponent('pickButtonContainer', {
+        text: 'Tøm liste',
+        type: 'danger',
+        icon: 'trash-icon',
+        id: 'pickClearBtn',
+        onClick: () => clearPickList(),
+        disabled: appState.pickListItems.length === 0
+    });
+    
+    // Tabellkomponent
+    pickingTable = new TableComponent('pickTableContainer', {
+        columns: [
+            { field: 'id', title: 'Varenr', sortable: true },
+            { field: 'description', title: 'Beskrivelse', sortable: true },
+            { 
+                field: 'quantity', 
+                title: 'Antall', 
+                sortable: true,
+                renderer: (value, row) => `${row.pickedCount || 0} / ${row.quantity}`
+            },
+            { 
+                field: 'weight', 
+                title: 'Vekt', 
+                sortable: true,
+                renderer: (value, row) => `${((row.weight || 0) * row.quantity).toFixed(2)} ${appState.settings.weightUnit || 'kg'}`
+            },
+            { 
+                field: 'picked', 
+                title: 'Status', 
+                sortable: true,
+                renderer: (value, row) => {
+                    const currentCount = row.pickedCount || 0;
+                    if (currentCount === 0) {
+                        return '<span class="badge" style="background-color: var(--gray)">Venter</span>';
+                    } else if (currentCount < row.quantity) {
+                        return `<span class="badge" style="background-color: var(--warning)">Delvis (${currentCount}/${row.quantity})</span>`;
+                    } else {
+                        return '<span class="badge badge-success">Plukket</span>';
+                    }
+                }
+            }
+        ],
+        data: appState.pickListItems,
+        onRowClick: (item) => openWeightModal(item.id)
+    });
+}
+
+/**
  * Setter opp event listeners for plukk-modulen
  */
 function setupPickingEventListeners() {
-    importPickBtnEl.addEventListener('click', function() {
-        importPickFileEl.click();
-    });
-    
+    // Event listeners som fortsatt bruker DOM-elementer direkte
     importPickFileEl.addEventListener('change', function(event) {
         handlePickFileImport(event);
-    });
-    
-    connectScannerPickEl.addEventListener('click', function() {
-        connectToBluetoothPickScanner();
-    });
-    
-    cameraScannerPickEl.addEventListener('click', function() {
-        startPickCameraScanning();
     });
     
     closePickScannerEl.addEventListener('click', function() {
@@ -113,23 +325,10 @@ function setupPickingEventListeners() {
         cameraScannerPickContainerEl.style.display = 'none';
     });
     
-    pickManualScanBtnEl.addEventListener('click', function() {
-        handlePickScan(pickManualScanEl.value);
-    });
-    
     pickManualScanEl.addEventListener('keypress', function(e) {
         if (e.key === 'Enter') {
             handlePickScan(pickManualScanEl.value);
         }
-    });
-    
-    pickUndoBtnEl.addEventListener('click', function() {
-        undoLastPickScan();
-    });
-    
-    // Hovedeksportknapp (PDF som standard)
-    pickExportBtnEl.addEventListener('click', function() {
-        exportPickList('pdf');
     });
     
     // Eksportformat velgere
@@ -140,89 +339,36 @@ function setupPickingEventListeners() {
             exportPickList(format);
         });
     });
-    
-    pickClearBtnEl.addEventListener('click', function() {
-        clearPickList();
-    });
 }
 
 /**
  * Oppdaterer UI for plukk-modulen
  */
 export function updatePickingUI() {
-    // Sikre at vi har en referanse til tabellen
-    if (!pickListEl) {
-        console.error('Tabellreferanse for plukk mangler');
-        return;
+    // Oppdater tabelldata
+    if (pickingTable) {
+        pickingTable.update(appState.pickListItems);
+    } else {
+        console.error('Tabellkomponent for plukk mangler');
     }
-    
-    // Hent tbody-elementet
-    const tbody = pickListEl.querySelector('tbody');
-    if (!tbody) {
-        console.error('Tbody for plukk ikke funnet');
-        return;
-    }
-    
-    // Tøm tabellen
-    tbody.innerHTML = '';
     
     // Variabler for totalberegninger
     let totalWeight = 0;
     let totalScannedItems = 0;
     let totalRequiredItems = 0;
     
-    // Prosesser hver vare
+    // Beregn totaler
     appState.pickListItems.forEach(item => {
-        // Initialisere tellefelt hvis det ikke eksisterer
-        if (item.pickedCount === undefined) {
-            item.pickedCount = 0;
-        }
+        const currentCount = item.pickedCount || 0;
         
-        const tr = document.createElement('tr');
-        const isFullyPicked = item.picked;
-        const currentCount = item.pickedCount;
-        
-        // Regn ut statusfarge basert på skannet antall
+        // Legg til vekt for skannede varer
         if (currentCount > 0) {
-            if (currentCount >= item.quantity) {
-                tr.classList.add('picked');
-            } else {
-                tr.classList.add('partially-scanned');
-            }
-            
-            // Legg til vekt for skannede varer - basert på faktisk skannede antall
             totalWeight += currentCount * (item.weight || 0);
         }
         
         // Tell opp totaler for statuslinje
         totalScannedItems += currentCount;
         totalRequiredItems += item.quantity;
-        
-        // Beregn vekt for denne spesifikke varen
-        const itemTotalWeight = (item.weight || 0) * item.quantity;
-        const scannedWeight = (item.weight || 0) * currentCount;
-        
-        tr.innerHTML = `
-            <td>${item.id}</td>
-            <td>${item.description}</td>
-            <td>${currentCount} / ${item.quantity}</td>
-            <td>${itemTotalWeight.toFixed(2)} ${appState.settings.weightUnit}</td>
-            <td>${
-                currentCount === 0 ? 
-                    `<span class="badge" style="background-color: var(--gray)">Venter</span>` :
-                currentCount < item.quantity ? 
-                    `<span class="badge" style="background-color: var(--warning)">Delvis (${currentCount}/${item.quantity})</span>` :
-                    `<span class="badge badge-success">Plukket</span>`
-            }
-            </td>
-        `;
-        
-        // Legg til hendelse for å angi vekt
-        tr.addEventListener('dblclick', function() {
-            openWeightModal(item.id);
-        });
-        
-        tbody.appendChild(tr);
     });
     
     // Oppdater statuslinjen
@@ -249,10 +395,37 @@ export function updatePickingUI() {
         }
     }
     
-    // Aktiver/deaktiver knapper
-    if (pickExportBtnEl) pickExportBtnEl.disabled = appState.pickListItems.length === 0;
-    if (pickClearBtnEl) pickClearBtnEl.disabled = appState.pickListItems.length === 0;
-    if (pickUndoBtnEl) pickUndoBtnEl.disabled = !appState.lastPickedItem;
+    // Oppdater knappetilstander
+    if (exportButton) exportButton.setDisabled(appState.pickListItems.length === 0);
+    if (clearButton) clearButton.setDisabled(appState.pickListItems.length === 0);
+    if (undoButton) undoButton.setDisabled(!appState.lastPickedItem);
+}
+
+/**
+ * Filtrerer plukklisten basert på søkeord
+ * @param {string} searchTerm - Søkeordet
+ */
+function filterPickList(searchTerm) {
+    if (!pickingTable) return;
+    
+    if (!searchTerm || searchTerm.trim() === '') {
+        // Vis alle elementer
+        pickingTable.update(appState.pickListItems);
+        return;
+    }
+    
+    const searchTermLower = searchTerm.toLowerCase();
+    
+    // Filtrer elementer basert på søkeord
+    const filteredItems = appState.pickListItems.filter(item => {
+        return (
+            (item.id && item.id.toLowerCase().includes(searchTermLower)) || 
+            (item.description && item.description.toLowerCase().includes(searchTermLower))
+        );
+    });
+    
+    // Oppdater tabellen med filtrerte elementer
+    pickingTable.update(filteredItems, false);
 }
 
 /**
@@ -260,52 +433,15 @@ export function updatePickingUI() {
  * @param {Event} event - Fil-input event
  */
 function handlePickFileImport(event) {
-    const file = event.target.files[0];
-    if (!file) return;
+    // Bruk den felles filimportfunksjonen fra core-module-handler
+    handleModuleFileImport(event, 'pick', updatePickingUI);
     
-    // Vis laster-melding
-    showToast('Importerer plukkliste...', 'info');
-    
-    // Håndter ulike filtyper
-    if (file.type === 'application/pdf') {
-        importFromPDF(file, 'pick')
-            .then(() => {
-                updatePickingUI();
-                saveListsToStorage();
-            })
-            .catch(error => {
-                showToast('Feil ved import av PDF: ' + error.message, 'error');
-            });
-    } else {
-        const reader = new FileReader();
-        reader.onload = function(e) {
-            try {
-                const content = e.target.result;
-                
-                // Sjekk filtypen basert på filendelse eller innhold
-                if (file.name.endsWith('.json')) {
-                    importFromJSON(content, file.name, 'pick');
-                } else if (file.name === 'Delivery slip.txt' || file.name.toLowerCase().includes('delivery slip')) {
-                    // Spesialhåndtering for Delivery slip.txt
-                    importFromDeliverySlip(content, file.name, 'pick');
-                } else {
-                    importFromCSV(content, file.name, 'pick');
-                }
-                
-                updatePickingUI();
-                saveListsToStorage();
-                
-            } catch (error) {
-                console.error('Feil ved import av fil:', error);
-                showToast('Feil ved import av fil. Sjekk filformatet.', 'error');
-            }
-        };
-        
-        reader.readAsText(file);
-    }
-    
-    // Reset file input
-    event.target.value = '';
+    // Publiser hendelse om at data er lastet
+    eventBus.publish(EventTypes.PICK_LIST_LOADED, {
+        timestamp: new Date(),
+        count: appState.pickListItems ? appState.pickListItems.length : 0,
+        metadata: appState.pickListMetadata || {}
+    });
 }
 
 /**
@@ -317,6 +453,13 @@ async function connectToBluetoothPickScanner() {
         await bluetoothScanner.connect();
     } catch (error) {
         showToast(error.message, 'error');
+        
+        // Publiser feilhendelse
+        eventBus.publish(EventTypes.APP_ERROR, {
+            source: 'bluetooth_scanner',
+            message: error.message,
+            module: 'pick'
+        });
     }
 }
 
@@ -331,6 +474,13 @@ async function startPickCameraScanning() {
     } catch (error) {
         cameraScannerPickContainerEl.style.display = 'none';
         showToast(error.message, 'error');
+        
+        // Publiser feilhendelse
+        eventBus.publish(EventTypes.APP_ERROR, {
+            source: 'camera_scanner',
+            message: error.message,
+            module: 'pick'
+        });
     }
 }
 
@@ -341,45 +491,6 @@ async function startPickCameraScanning() {
 function handlePickScan(barcode) {
     console.log("PLUKKDEBUG-P100: handlePickScan() starter med strekkode:", barcode);
     
-    // KRITISK FIX: Håndter tilfeller der barcode er et objekt
-    if (typeof barcode === 'object' && barcode !== null) {
-        console.warn("PLUKKDEBUG-P100B: Mottok objekt i stedet for streng. Konverterer til ID.");
-        
-        // Hvis objektet har ID-felt, bruk det
-        if (barcode.id) {
-            console.log(`PLUKKDEBUG-P100C: Konverterer objekt til ID: ${barcode.id}`);
-            barcode = barcode.id;
-        } else {
-            // Forsøk å finne en egnet identifikator i objektet
-            const possibleIdFields = ['productId', 'code', 'sku', 'barcode', 'ean'];
-            for (const field of possibleIdFields) {
-                if (barcode[field]) {
-                    console.log(`PLUKKDEBUG-P100D: Fant alternativ ID i felt '${field}': ${barcode[field]}`);
-                    barcode = barcode[field];
-                    break;
-                }
-            }
-            
-            // Hvis vi fortsatt har et objekt, prøv toString() eller konverter til JSON
-            if (typeof barcode === 'object') {
-                console.warn("PLUKKDEBUG-P100E: Kunne ikke finne ID-felt, bruker String()-konvertering");
-                barcode = String(barcode);
-                
-                // Hvis konverteringen ga [object Object], logg en advarsel
-                if (barcode === "[object Object]") {
-                    console.error("PLUKKFEIL-P000: Kunne ikke konvertere objekt til gyldig strekkode");
-                    showToast("Feil strekkodeformat mottatt. Kontakt systemadministrator.", "error");
-                    return;
-                }
-            }
-        }
-    }
-    
-    if (!barcode) {
-        console.error("PLUKKFEIL-P001: Tomt strekkodeargument til handlePickScan");
-        return;
-    }
-    
     // Tøm input etter skanning
     if (pickManualScanEl) {
         pickManualScanEl.value = '';
@@ -387,166 +498,94 @@ function handlePickScan(barcode) {
         console.warn("PLUKKADVARSEL-P101: pickManualScanEl er ikke definert");
     }
     
-    // Sjekk appState
-    if (!appState) {
-        console.error("PLUKKFEIL-P002: appState mangler");
-        alert("KRITISK FEIL P002: Programtilstand mangler");
-        return;
-    }
+    // Bruk den generiske scan-handler funksjonen
+    const result = handleModuleScan(barcode, 'pick');
     
-    // Sjekk strekkodekatalog
-    if (!appState.barcodeMapping) {
-        console.error("PLUKKFEIL-P003: appState.barcodeMapping mangler");
-        alert("KRITISK FEIL P003: Strekkodekatalog mangler");
-        return;
-    }
-    
-    // Sjekk plukkliste
-    if (!appState.pickListItems || !Array.isArray(appState.pickListItems)) {
-        console.error("PLUKKFEIL-P004: appState.pickListItems mangler eller er ikke et array");
-        alert("KRITISK FEIL P004: Plukkliste mangler eller er korrupt");
-        return;
-    }
-    
-    console.log(`PLUKKDEBUG-P102: Plukkliste inneholder ${appState.pickListItems.length} varer`);
-    
-    // Sjekk om strekkoden finnes i barcode mapping
-    let itemId = barcode;
-    if (appState.barcodeMapping[barcode]) {
-        itemId = appState.barcodeMapping[barcode];
-        console.log(`PLUKKDEBUG-P103: Strekkode ${barcode} mappet til varenummer ${itemId}`);
-    } else {
-        console.log(`PLUKKDEBUG-P104: Strekkode ${barcode} ikke funnet i mapping, bruker som varenummer`);
-    }
-    
-    // Finn varen i listen
-    const item = appState.pickListItems.find(item => item.id === itemId);
-    
-    if (!item) {
-        console.error(`PLUKKFEIL-P005: Fant ikke vare "${itemId}" i plukklisten`);
-        showToast(`Vare "${itemId}" finnes ikke i plukklisten!`, 'error');
-        blinkBackground('red');
-        playErrorSound();
-        return;
-    }
-    
-    console.log(`PLUKKDEBUG-P105: Fant vare ${itemId} i plukklisten`);
-    console.log(`PLUKKDEBUG-P106: Detaljer for vare ${itemId}:`, JSON.stringify(item, null, 2));
-    
-    // Initialisere tellefelt hvis det ikke eksisterer
-    if (item.pickedCount === undefined) {
-        console.log(`PLUKKDEBUG-P107: Initialiserer pickedCount for ${itemId} til 0`);
-        item.pickedCount = 0;
-    }
-    
-    // SJEKK FOR MAKSIMALT ANTALL
-    if (item.pickedCount >= item.quantity) {
-        console.error(`PLUKKFEIL-P006: Maksantall nådd for ${itemId}: ${item.pickedCount}/${item.quantity}`);
-        showToast(`MAKS OPPNÅDD: ${item.pickedCount}/${item.quantity} enheter av "${itemId}" er allerede plukket!`, 'error');
-        blinkBackground('red');
-        playErrorSound();
-        return;
-    }
-    
-    // Øk antallet plukket
-    item.pickedCount++;
-    console.log(`PLUKKDEBUG-P108: Økte pickedCount til ${item.pickedCount} for vare ${itemId}`);
-    
-    // Merk varen som fullstendig plukket hvis alle enheter er skannet
-    if (item.pickedCount >= item.quantity) {
-        console.log(`PLUKKDEBUG-P109: Vare ${itemId} er nå fullstendig plukket`);
-        item.picked = true;
-        item.pickedAt = new Date();
-        
-        // Legg til i listen over fullstendig plukkede varer
-        if (!appState.pickedItems.includes(itemId)) {
-            appState.pickedItems.push(itemId);
-            console.log(`PLUKKDEBUG-P110: La til ${itemId} i fullstendig plukkede varer`);
+    // Hvis skanningen var vellykket, oppdater UI og publiser hendelse
+    if (result && result.success) {
+        try {
+            updatePickingUI();
+            
+            // Publiser hendelse om at vare er lagt til
+            if (result.action === 'added') {
+                eventBus.publish(EventTypes.PICK_ITEM_ADDED, {
+                    barcode: barcode,
+                    itemId: result.item ? result.item.id : null,
+                    item: result.item,
+                    timestamp: new Date()
+                });
+            }
+            // Publiser hendelse om at vare er oppdatert (tellerhendelse)
+            else if (result.action === 'updated') {
+                eventBus.publish(EventTypes.PICK_ITEM_UPDATED, {
+                    barcode: barcode,
+                    itemId: result.item ? result.item.id : null,
+                    item: result.item,
+                    count: result.item ? result.item.pickedCount : 0,
+                    timestamp: new Date()
+                });
+            }
+            
+            // Publiser at plukklisten er oppdatert
+            eventBus.publish(EventTypes.PICK_LIST_UPDATED, {
+                timestamp: new Date(),
+                totalItems: appState.pickListItems.length,
+                pickedItems: appState.pickListItems.filter(item => item.pickedCount && item.pickedCount > 0).length,
+                isComplete: appState.pickListItems.every(item => (item.pickedCount || 0) >= item.quantity)
+            });
+            
+            // Hvis plukking er fullført, publiser hendelse om det
+            if (appState.pickListItems.every(item => (item.pickedCount || 0) >= item.quantity)) {
+                eventBus.publish(EventTypes.PICK_LIST_COMPLETED, {
+                    timestamp: new Date(),
+                    itemCount: appState.pickListItems.length
+                });
+                
+                // Vis melding til brukeren
+                showToast('Plukklisten er fullført! Alle varer er plukket.', 'success', 5000);
+            }
+        } catch (uiError) {
+            console.error(`PLUKKFEIL-P007: Feil ved oppdatering av UI:`, uiError);
+            alert(`UI-FEIL P007: Kunne ikke oppdatere visningen: ${uiError.message}`);
+            
+            // Publiser feilhendelse
+            eventBus.publish(EventTypes.APP_ERROR, {
+                source: 'picking_ui_update',
+                message: uiError.message,
+                error: uiError,
+                module: 'pick'
+            });
         }
-        
-        // Vis grønn bakgrunn
-        blinkBackground('green');
-    } else {
-        console.log(`PLUKKDEBUG-P111: Vare ${itemId} er delvis plukket: ${item.pickedCount}/${item.quantity}`);
-        // Vis grønn bakgrunn for delvis plukking også
-        blinkBackground('green');
     }
     
-    // Lagre sist plukket vare for angrefunksjonalitet
-    appState.lastPickedItem = {
-        id: itemId,
-        timestamp: new Date()
-    };
-    console.log(`PLUKKDEBUG-P112: Oppdaterte lastPickedItem til ${itemId}`);
-    
-    // Vis tilbakemelding til brukeren
-    const remainingCount = item.quantity - item.pickedCount;
-    
-    if (remainingCount > 0) {
-        showToast(`Vare "${itemId}" registrert! ${remainingCount} av ${item.quantity} gjenstår.`, 'info');
-    } else {
-        showToast(`Vare "${itemId}" fullstendig plukket!`, 'success');
-    }
-
-    // Oppdater UI før lagring for umiddelbar tilbakemelding
-    console.log(`PLUKKDEBUG-P113: Kaller updatePickingUI()`);
-    try {
-        updatePickingUI();
-    } catch (uiError) {
-        console.error(`PLUKKFEIL-P007: Feil ved oppdatering av UI:`, uiError);
-        alert(`UI-FEIL P007: Kunne ikke oppdatere visningen: ${uiError.message}`);
-    }
-
-    // Lagre endringer
-    console.log(`PLUKKDEBUG-P114: Kaller saveListsToStorage()`);
-    try {
-        saveListsToStorage();
-        console.log(`PLUKKDEBUG-P115: Lagring fullført`);
-    } catch (storageError) {
-        console.error(`PLUKKFEIL-P008: Feil ved lagring av lister:`, storageError);
-        alert(`LAGRINGSFEIL P008: Kunne ikke lagre data: ${storageError.message}`);
-    }
-    
-    console.log(`PLUKKDEBUG-P116: handlePickScan() fullført for strekkode ${barcode} / vare ${itemId}`);
+    console.log(`PLUKKDEBUG-P116: handlePickScan() fullført for strekkode ${barcode}`);
 }
 
 /**
  * Angrer siste skanning
  */
 function undoLastPickScan() {
-    if (!appState.lastPickedItem) return;
+    const lastItem = appState.lastPickedItem;
     
-    // Finn varen som skal angres
-    const item = appState.pickListItems.find(item => item.id === appState.lastPickedItem.id);
+    // Bruk den felles undo-funksjonen fra core-module-handler
+    const result = undoLastModuleScan('pick', updatePickingUI);
     
-    if (item) {
-        // Reduser antall plukkede
-        if (item.pickedCount > 0) {
-            item.pickedCount--;
-        }
+    if (result && result.success && lastItem) {
+        // Publiser hendelse om at vare er fjernet
+        eventBus.publish(EventTypes.PICK_ITEM_REMOVED, {
+            itemId: lastItem.id,
+            item: lastItem,
+            timestamp: new Date()
+        });
         
-        // Fjern fra fullstendig plukkede hvis antallet nå er mindre enn totalen
-        if (item.pickedCount < item.quantity) {
-            item.picked = false;
-            item.pickedAt = null;
-            
-            // Fjern fra listen over fullstendig plukkede varer hvis den er der
-            const index = appState.pickedItems.indexOf(item.id);
-            if (index !== -1) {
-                appState.pickedItems.splice(index, 1);
-            }
-        }
+        // Publiser at plukklisten er oppdatert
+        eventBus.publish(EventTypes.PICK_LIST_UPDATED, {
+            timestamp: new Date(),
+            totalItems: appState.pickListItems.length,
+            pickedItems: appState.pickListItems.filter(item => item.pickedCount && item.pickedCount > 0).length,
+            isComplete: appState.pickListItems.every(item => (item.pickedCount || 0) >= item.quantity)
+        });
     }
-    
-    // Nullstill sist plukket vare
-    appState.lastPickedItem = null;
-    
-    // Oppdater UI
-    updatePickingUI();
-    showToast('Siste skanning er angret!', 'warning');
-    
-    // Lagre endringer
-    saveListsToStorage();
 }
 
 /**
@@ -554,77 +593,41 @@ function undoLastPickScan() {
  * @param {string} format - Format for eksport (pdf, csv, json, txt, html)
  */
 function exportPickList(format = 'pdf') {
-    // Sjekk om vi har varer å eksportere
-    if (appState.pickListItems.length === 0) {
-        showToast('Ingen varer å eksportere!', 'warning');
-        return;
+    // Hent brukerinformasjon
+    const userName = appState.user ? appState.user.name : 'ukjent';
+    const now = new Date();
+    const dateStr = formatDate(now, 'YYYY_MM_DD_HH');
+    
+    // Hent informasjon om opprinnelig filnavn
+    let fileName = '';
+    if (appState.pickListMetadata && appState.pickListMetadata.originalFilename) {
+        // Bruk originalfilnavnet, men legg til brukernavn på starten
+        fileName = `${userName}_${appState.pickListMetadata.originalFilename}`;
+    } else {
+        // Hvis vi ikke har originalfilnavn, bruk standard format
+        fileName = `${userName}_Plukke_liste_TI${Math.floor(100000 + Math.random() * 900000)}_${dateStr}.pdf`;
     }
     
-    // Sjekk om alle varer er plukket
-    const unfinishedItems = appState.pickListItems.filter(item => !item.picked);
+    // Sørg for at filnavnet er gyldig
+    fileName = fileName.replace(/[/\\?%*:|"<>]/g, '_');
     
-    if (unfinishedItems.length > 0) {
-        // Beregn totalt antall uplukkede varer og antall som mangler
-        const totalUnpicked = unfinishedItems.reduce((sum, item) => {
-            const remaining = item.quantity - (item.pickedCount || 0);
-            return sum + remaining;
-        }, 0);
-        
-        // Vis bekreftelsesdialog
-        if (!confirm(`Advarsel: ${unfinishedItems.length} varelinjer (totalt ${totalUnpicked} enheter) er ikke ferdig plukket.\n\nVil du eksportere likevel?`)) {
-            return; // Brukeren valgte å avbryte
-        }
-    }
+    // Bruk den generiske eksportfunksjonen fra core-module-handler
+    const result = exportModuleList(appState.pickListItems, 'pick', format, {
+        title: 'Plukkliste',
+        subtitle: 'Eksportert fra SnapScan',
+        exportDate: now,
+        showStatus: true,
+        customFileName: fileName
+    });
     
-    try {
-        if (format.toLowerCase() === 'pdf') {
-            // Hent brukerinformasjon
-            const userName = appState.user ? appState.user.name : 'ukjent';
-            const now = new Date();
-            const dateStr = formatDate(now, 'YYYY_MM_DD_HH');
-            
-            // Hent informasjon om opprinnelig filnavn
-            let fileName = '';
-            const fileInfoElement = document.getElementById('pickFileInfo');
-            
-            if (fileInfoElement && fileInfoElement.textContent.includes('Aktiv plukkliste:')) {
-                // Sjekk om vi har originalfilnavnet fra importprosessen
-                if (appState.pickListMetadata && appState.pickListMetadata.originalFilename) {
-                    // Bruk originalfilnavnet, men legg til brukernavn på starten
-                    fileName = `${userName}_${appState.pickListMetadata.originalFilename}`;
-                    console.log("Bruker originalfilnavn fra metadata:", fileName);
-                } else {
-                    // Hvis vi ikke har originalfilnavn, bruk standard format
-                    fileName = `${userName}_Plukke_liste_TI${Math.floor(100000 + Math.random() * 900000)}_${dateStr}.pdf`;
-                }
-            } else {
-                // Hvis vi ikke har filinfo, bruk standard format
-                fileName = `${userName}_Plukke_liste_TI${Math.floor(100000 + Math.random() * 900000)}_${dateStr}.pdf`;
-            }
-            
-            // Sørg for at filnavnet er gyldig
-            fileName = fileName.replace(/[/\\?%*:|"<>]/g, '_');
-            
-            console.log("Genererer PDF med filnavn:", fileName);
-            
-            // Bruk den nye PDF-eksportfunksjonen med egendefinert filnavn
-            const pdfOptions = {
-                title: 'Plukkliste',
-                subtitle: 'Eksportert fra SnapScan',
-                exportDate: now,
-                showStatus: true,
-                customFileName: fileName
-            };
-            
-            // Kall eksportfunksjonen
-            exportToPDF(appState.pickListItems, 'plukk', pdfOptions);
-        } else {
-            // Bruk den eksisterende eksportfunksjonen for andre formater
-            exportWithFormat(appState.pickListItems, 'plukk', format);
-        }
-    } catch (error) {
-        console.error('Feil ved eksport:', error);
-        showToast('Kunne ikke eksportere liste. Prøv igjen senere.', 'error');
+    // Publiser hendelse om at eksporten er gjennomført
+    if (result && result.success) {
+        eventBus.publish(EventTypes.DATA_SAVED, {
+            type: 'pick_export',
+            format: format,
+            fileName: result.fileName,
+            timestamp: new Date()
+        });
     }
 }
 
@@ -632,17 +635,20 @@ function exportPickList(format = 'pdf') {
  * Tømmer plukklisten
  */
 function clearPickList() {
-    if (!confirm('Er du sikker på at du vil tømme plukklisten?')) {
-        return;
+    // Bruk den felles clearModuleList-funksjonen fra core-module-handler
+    const result = clearModuleList('pick', updatePickingUI);
+    
+    if (result && result.success) {
+        // Publiser hendelse om at listen er tømt
+        eventBus.publish(EventTypes.PICK_LIST_UPDATED, {
+            timestamp: new Date(),
+            totalItems: 0,
+            pickedItems: 0,
+            isComplete: false,
+            cleared: true
+        });
+        
+        // Vis melding til brukeren
+        showToast('Plukklisten er tømt.', 'info');
     }
-    
-    appState.pickListItems = [];
-    appState.pickedItems = [];
-    appState.lastPickedItem = null;
-    
-    updatePickingUI();
-    showToast('Plukkliste tømt!', 'warning');
-    
-    // Lagre endringer
-    saveListsToStorage();
 }

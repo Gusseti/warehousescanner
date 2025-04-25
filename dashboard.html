@@ -12,123 +12,212 @@
     <link rel="stylesheet" href="css/camera-styles.css">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <!-- VIKTIG: Kommenterer ut camera-styles.css for å unngå konflikt -->
-    <!-- <link rel="stylesheet" href="css/camera-styles.css"> -->
 
-    <!-- Inline stiler for kameravisning - dette sikrer at ingen CSS-konflikter oppstår -->
+    <!-- Styling for components - this will later be moved to its own CSS file -->
     <style>
-        .simple-camera-container {
-            margin: 1rem 0;
-            padding: 1rem;
-            background-color: #f0f8ff;
-            border-radius: 8px;
-            border: 1px solid #64b5f6;
-        }
-        
-        .simple-camera-wrapper {
-            position: relative;
+        /* Component styling */
+        .component-container {
             width: 100%;
-            height: 400px;
-            overflow: hidden;
-            border-radius: 8px;
-            background-color: #000;
             margin-bottom: 1rem;
         }
-        
-        .simple-video {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100% !important;
-            height: 100% !important;
-            object-fit: cover;
-            z-index: 1;
-            background-color: #000;
-        }
-        
-        .simple-overlay {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            z-index: 3;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            pointer-events: none;
-        }
-        
-        .simple-scan-area {
-            width: 250px;
-            height: 150px;
-            border: 3px solid #4caf50;
-            border-radius: 8px;
-            box-shadow: 0 0 0 2000px rgba(0, 0, 0, 0.5);
-            position: relative;
-        }
-        
-        .simple-canvas {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            z-index: 2;
-            background-color: transparent;
+
+        /* Dark mode support */
+        body.dark-mode .component-container {
+            color: #e0e0e0;
         }
 
-        /* Bruker-profil stil i header */
+        /* Generic component styles */
+        .app-component {
+            border-radius: 8px;
+            overflow: hidden;
+            transition: all 0.3s ease;
+        }
+
+        /* Improved Dashboard Styling */
+        .dashboard-header {
+            background-color: #2196f3;
+            color: white;
+            padding: 15px 0;
+            box-shadow: 0 3px 10px rgba(0, 0, 0, 0.1);
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 1000;
+        }
+
+        .header-container {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 20px;
+        }
+
+        .header-left {
+            display: flex;
+            align-items: center;
+        }
+
+        .app-brand {
+            display: flex;
+            align-items: center;
+        }
+
+        .app-logo {
+            font-size: 1.8rem;
+            margin-right: 10px;
+        }
+
+        .app-title h1 {
+            margin: 0;
+            font-size: 1.4rem;
+            letter-spacing: 0.5px;
+        }
+
+        .app-version {
+            font-size: 0.7rem;
+            opacity: 0.7;
+        }
+
+        .header-right {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+        }
+
+        .scanner-status {
+            display: flex;
+            align-items: center;
+            font-size: 0.8rem;
+            background: rgba(255, 255, 255, 0.1);
+            padding: 5px 10px;
+            border-radius: 20px;
+        }
+
+        .scanner-indicator {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background-color: #ff5252;
+            margin-right: 8px;
+        }
+
+        .scanner-indicator.connected {
+            background-color: #4caf50;
+        }
+
+        .theme-switch {
+            position: relative;
+            display: inline-block;
+            width: 50px;
+            height: 26px;
+        }
+
+        .theme-switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+
+        .slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: #ccc;
+            transition: .4s;
+            border-radius: 34px;
+        }
+
+        .slider:before {
+            position: absolute;
+            content: "";
+            height: 18px;
+            width: 18px;
+            left: 4px;
+            bottom: 4px;
+            background-color: white;
+            transition: .4s;
+            border-radius: 50%;
+        }
+
+        input:checked + .slider {
+            background-color: #333;
+        }
+
+        input:checked + .slider:before {
+            transform: translateX(24px);
+        }
+
+        .theme-icon {
+            position: absolute;
+            top: 5px;
+            font-size: 0.8rem;
+            transition: .4s;
+        }
+
+        .light-icon {
+            right: 5px;
+            color: #f1c40f;
+        }
+
+        .dark-icon {
+            left: 5px;
+            color: #34495e;
+        }
+
         .user-profile {
             display: flex;
             align-items: center;
-            margin-left: 1rem;
             cursor: pointer;
             position: relative;
         }
 
         .user-avatar {
-            width: 35px;
-            height: 35px;
-            background-color: #2196f3;
+            width: 32px;
+            height: 32px;
             border-radius: 50%;
+            background-color: #1a75c5;
             color: white;
             display: flex;
             align-items: center;
             justify-content: center;
             font-weight: bold;
-            margin-right: 0.5rem;
+            margin-right: 8px;
+            font-size: 1rem;
         }
 
         .user-name {
             font-size: 0.9rem;
             font-weight: 500;
-            color: #cccccc;
         }
 
         .user-dropdown {
             position: absolute;
-            top: 100%;
+            top: 44px;
             right: 0;
             background-color: white;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-            border-radius: 4px;
-            padding: 0.5rem 0;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+            border-radius: 8px;
             min-width: 180px;
             z-index: 1000;
             display: none;
         }
 
-        .user-dropdown.active {
+        .user-profile:hover .user-dropdown {
             display: block;
         }
 
         .user-dropdown-item {
-            padding: 0.5rem 1rem;
-            cursor: pointer;
+            padding: 12px 15px;
+            color: #333;
+            transition: background-color 0.2s;
             display: flex;
             align-items: center;
-            color: #333; /* Fikser problemet med hvit tekst på hvit bakgrunn */
         }
 
         .user-dropdown-item:hover {
@@ -136,209 +225,475 @@
         }
 
         .user-dropdown-item i {
-            margin-right: 0.5rem;
-            width: 20px;
+            margin-right: 10px;
+            width: 16px;
             text-align: center;
-            color: #555;
         }
-        
-        /* Profil-modulens styling */
-        .profile-container {
-            padding: 1rem;
+
+        /* Dashboard Main Content */
+        .dashboard-content {
+            margin-top: 80px;
+            padding: 20px;
+            max-width: 1200px;
+            margin-left: auto;
+            margin-right: auto;
         }
-        
-        .profile-header {
-            display: flex;
-            align-items: center;
-            margin-bottom: 2rem;
-            padding-bottom: 1rem;
-            border-bottom: 1px solid #e0e0e0;
+
+        .dashboard-title {
+            margin-bottom: 30px;
+            padding-bottom: 15px;
+            border-bottom: 1px solid #eee;
         }
-        
-        .profile-avatar {
-            margin-right: 1.5rem;
+
+        .dashboard-title h2 {
+            font-size: 1.8rem;
+            color: #333;
+            margin: 0;
         }
-        
-        .large-avatar {
-            width: 80px;
-            height: 80px;
-            background-color: #2196f3;
-            border-radius: 50%;
-            color: white;
+
+        .dashboard-title p {
+            color: #777;
+            margin: 5px 0 0 0;
+        }
+
+        .module-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+            gap: 20px;
+            margin-bottom: 40px;
+        }
+
+        .module-card {
+            background-color: white;
+            border-radius: 10px;
+            overflow: hidden;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.05);
+            transition: transform 0.3s, box-shadow 0.3s;
+            cursor: pointer;
+        }
+
+        .module-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.1);
+        }
+
+        .module-icon {
+            height: 120px;
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 2.5rem;
-            font-weight: bold;
+            background-color: #2196f3;
+            color: white;
         }
-        
-        .profile-name h2 {
-            margin: 0 0 0.5rem 0;
-            font-size: 1.8rem;
+
+        .module-icon i {
+            font-size: 3rem;
+        }
+
+        .module-info {
+            padding: 20px;
+        }
+
+        .module-info h3 {
+            margin: 0 0 10px 0;
             color: #333;
+            font-size: 1.2rem;
         }
-        
-        .profile-name p {
+
+        .module-info p {
+            color: #777;
             margin: 0;
-            color: #666;
-            font-size: 1.1rem;
+            font-size: 0.9rem;
         }
-        
-        .profile-section {
-            margin-bottom: 2rem;
-            background-color: #f9f9f9;
-            border-radius: 8px;
-            padding: 1.5rem;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+
+        .stats-section {
+            margin-bottom: 40px;
         }
-        
-        .profile-section-title {
-            margin-top: 0;
-            margin-bottom: 1.5rem;
-            color: #333;
-            font-size: 1.3rem;
-            display: flex;
-            align-items: center;
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 20px;
         }
-        
-        .profile-section-title i {
-            margin-right: 0.5rem;
-            color: #2196f3;
+
+        .stat-card {
+            background-color: white;
+            border-radius: 10px;
+            padding: 20px;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.05);
         }
-        
-        .profile-info-table {
-            width: 100%;
-            border-collapse: collapse;
+
+        .stat-card h3 {
+            margin: 0 0 5px 0;
+            font-size: 1rem;
+            color: #777;
         }
-        
-        .profile-info-table th, 
-        .profile-info-table td {
-            padding: 0.8rem;
-            text-align: left;
-            border-bottom: 1px solid #eee;
-        }
-        
-        .profile-info-table th {
-            width: 30%;
-            color: #666;
-            font-weight: 500;
-        }
-        
-        .profile-info-table td {
-            color: #333;
-            font-weight: 400;
-        }
-        
-        .profile-stats {
-            display: flex;
-            justify-content: space-between;
-            text-align: center;
-            margin-top: 1rem;
-        }
-        
-        .profile-stat-item {
-            flex: 1;
-            padding: 1rem;
-            background-color: #fff;
-            border-radius: 8px;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
-            margin: 0 0.5rem;
-        }
-        
-        .profile-stat-item:first-child {
-            margin-left: 0;
-        }
-        
-        .profile-stat-item:last-child {
-            margin-right: 0;
-        }
-        
-        .profile-stat-value {
+
+        .stat-card .value {
             font-size: 2rem;
             font-weight: bold;
             color: #2196f3;
-            margin-bottom: 0.5rem;
-        }
-        
-        .profile-stat-label {
-            font-size: 0.9rem;
-            color: #666;
         }
 
-        /* Dark mode support for profile */
-        body.dark-mode .profile-section {
-            background-color: #333;
+        .stat-card .change {
+            display: flex;
+            align-items: center;
+            font-size: 0.8rem;
+            margin-top: 5px;
         }
-        
-        body.dark-mode .profile-name h2,
-        body.dark-mode .profile-section-title,
-        body.dark-mode .profile-info-table td {
-            color: #eee;
+
+        .stat-card .change.positive {
+            color: #4caf50;
         }
-        
-        body.dark-mode .profile-name p,
-        body.dark-mode .profile-info-table th,
-        body.dark-mode .profile-stat-label {
+
+        .stat-card .change.negative {
+            color: #f44336;
+        }
+
+        .recent-section {
+            margin-bottom: 40px;
+        }
+
+        .recent-activities {
+            background-color: white;
+            border-radius: 10px;
+            padding: 20px;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.05);
+        }
+
+        .activity-item {
+            padding: 15px 0;
+            border-bottom: 1px solid #f0f0f0;
+            display: flex;
+            align-items: center;
+        }
+
+        .activity-item:last-child {
+            border-bottom: none;
+        }
+
+        .activity-icon {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background-color: #e3f2fd;
+            color: #2196f3;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-right: 15px;
+        }
+
+        .activity-info {
+            flex: 1;
+        }
+
+        .activity-info h4 {
+            margin: 0 0 5px 0;
+            font-size: 1rem;
+        }
+
+        .activity-info p {
+            margin: 0;
+            font-size: 0.85rem;
+            color: #777;
+        }
+
+        .activity-time {
+            font-size: 0.8rem;
+            color: #999;
+        }
+
+        /* Dark Mode Styles */
+        body.dark-mode {
+            background-color: #121212;
+            color: #e0e0e0;
+        }
+
+        body.dark-mode .dashboard-header {
+            background-color: #1a1a1a;
+            box-shadow: 0 3px 10px rgba(0, 0, 0, 0.2);
+        }
+
+        body.dark-mode .scanner-status {
+            background: rgba(255, 255, 255, 0.05);
+        }
+
+        body.dark-mode .module-card,
+        body.dark-mode .stat-card,
+        body.dark-mode .recent-activities {
+            background-color: #1e1e1e;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+        }
+
+        body.dark-mode .module-info h3,
+        body.dark-mode .stat-card h3 {
+            color: #e0e0e0;
+        }
+
+        body.dark-mode .module-info p,
+        body.dark-mode .activity-info p,
+        body.dark-mode .dashboard-title p {
             color: #aaa;
         }
-        
-        body.dark-mode .profile-stat-item {
-            background-color: #444;
+
+        body.dark-mode .dashboard-title {
+            border-bottom-color: #333;
         }
-        
-        body.dark-mode .profile-section-title i,
-        body.dark-mode .profile-stat-value {
-            color: #64b5f6;
+
+        body.dark-mode .dashboard-title h2 {
+            color: #e0e0e0;
+        }
+
+        body.dark-mode .activity-item {
+            border-bottom-color: #333;
+        }
+
+        body.dark-mode .activity-icon {
+            background-color: #333;
+        }
+
+        body.dark-mode .user-dropdown {
+            background-color: #1e1e1e;
+        }
+
+        body.dark-mode .user-dropdown-item {
+            color: #e0e0e0;
+        }
+
+        body.dark-mode .user-dropdown-item:hover {
+            background-color: #2a2a2a;
+        }
+
+        /* Mobile Responsive Adjustments */
+        @media (max-width: 768px) {
+            .header-container {
+                padding: 0 10px;
+            }
+
+            .scanner-status {
+                display: none;
+            }
+
+            .app-title h1 {
+                font-size: 1.2rem;
+            }
+
+            .dashboard-content {
+                padding: 15px;
+            }
+
+            .module-grid, .stats-grid {
+                grid-template-columns: 1fr;
+            }
         }
     </style>
 </head>
 <body>
-    <header>
-        <div class="header-left">
-            <button id="backButton" class="back-button">
-                <i class="fas fa-arrow-left"></i>
-            </button>
-            <div class="app-brand">
-                <i class="fas fa-qrcode app-logo"></i>
-                <div class="app-title">
-                    <h1>SnapScan</h1>
-                    <span class="app-version">v1.0</span>
+    <div id="appRoot">
+        <!-- Dashboard Header -->
+        <header class="dashboard-header">
+            <div class="header-container">
+                <div class="header-left">
+                    <button id="backButton" class="back-button">
+                        <i class="fas fa-arrow-left"></i>
+                    </button>
+                    <div class="app-brand">
+                        <i class="fas fa-qrcode app-logo"></i>
+                        <div class="app-title">
+                            <h1>SnapScan</h1>
+                            <span class="app-version">v1.0</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="header-right">
+                    <div id="scannerStatusHeader" class="scanner-status">
+                        <div id="scannerIndicator" class="scanner-indicator"></div>
+                        <span id="scannerStatus">Skanner: Ikke tilkoblet</span>
+                    </div>
+                    
+                    <!-- Dark Mode Toggle Switch -->
+                    <label class="theme-switch">
+                        <input type="checkbox" id="themeToggle">
+                        <span class="slider"></span>
+                        <i class="fas fa-moon theme-icon dark-icon"></i>
+                        <i class="fas fa-sun theme-icon light-icon"></i>
+                    </label>
+
+                    <!-- Bruker profil -->
+                    <div class="user-profile" id="userProfile">
+                        <div class="user-avatar" id="userAvatar">K</div>
+                        <span class="user-name" id="userName">Kristian</span>
+                        <div class="user-dropdown" id="userDropdown">
+                            <div class="user-dropdown-item" id="userProfile" data-module="profile">
+                                <i class="fas fa-user-cog"></i> Min profil
+                            </div>
+                            <div class="user-dropdown-item" id="userSettings" data-module="settings">
+                                <i class="fas fa-cog"></i> Innstillinger
+                            </div>
+                            <div class="user-dropdown-item" id="logoutBtn">
+                                <i class="fas fa-sign-out-alt"></i> Logg ut
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
+        </header>
+
+        <!-- Main Dashboard Content -->
+        <main id="mainDashboard" class="dashboard-content">
+            <div class="dashboard-title">
+                <h2>Velkommen til SnapScan</h2>
+                <p>Velg en modul nedenfor for å komme i gang</p>
+            </div>
+
+            <!-- Modules Grid -->
+            <section>
+                <div class="module-grid">
+                    <div class="module-card" data-module="picking">
+                        <div class="module-icon" style="background-color: #4caf50;">
+                            <i class="fas fa-clipboard-list"></i>
+                        </div>
+                        <div class="module-info">
+                            <h3>Plukk</h3>
+                            <p>Håndter plukking av varer fra lager</p>
+                        </div>
+                    </div>
+
+                    <div class="module-card" data-module="receiving">
+                        <div class="module-icon" style="background-color: #2196f3;">
+                            <i class="fas fa-truck-loading"></i>
+                        </div>
+                        <div class="module-info">
+                            <h3>Mottak</h3>
+                            <p>Registrer og håndter varemottak</p>
+                        </div>
+                    </div>
+
+                    <div class="module-card" data-module="returns">
+                        <div class="module-icon" style="background-color: #ff9800;">
+                            <i class="fas fa-undo-alt"></i>
+                        </div>
+                        <div class="module-info">
+                            <h3>Retur</h3>
+                            <p>Behandle og registrer returvarer</p>
+                        </div>
+                    </div>
+
+                    <div class="module-card" data-module="settings">
+                        <div class="module-icon" style="background-color: #607d8b;">
+                            <i class="fas fa-cogs"></i>
+                        </div>
+                        <div class="module-info">
+                            <h3>Innstillinger</h3>
+                            <p>Konfigurer applikasjonen</p>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Recent Activities Section -->
+            <section class="recent-section">
+                <h3>Siste aktiviteter</h3>
+                <div class="recent-activities">
+                    <div class="activity-item">
+                        <div class="activity-icon">
+                            <i class="fas fa-clipboard-check"></i>
+                        </div>
+                        <div class="activity-info">
+                            <h4>Plukkliste fullført</h4>
+                            <p>Plukkliste #12345 fullført med 23 varer</p>
+                        </div>
+                        <div class="activity-time">
+                            I dag, 14:32
+                        </div>
+                    </div>
+
+                    <div class="activity-item">
+                        <div class="activity-icon">
+                            <i class="fas fa-truck-loading"></i>
+                        </div>
+                        <div class="activity-info">
+                            <h4>Nytt varemottak</h4>
+                            <p>Varemottak registrert fra leverandør Elektro AS</p>
+                        </div>
+                        <div class="activity-time">
+                            I dag, 10:15
+                        </div>
+                    </div>
+
+                    <div class="activity-item">
+                        <div class="activity-icon">
+                            <i class="fas fa-undo-alt"></i>
+                        </div>
+                        <div class="activity-info">
+                            <h4>Retur behandlet</h4>
+                            <p>3 varer returnert fra kunde #87652</p>
+                        </div>
+                        <div class="activity-time">
+                            I går, 16:45
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </main>
+
+        <!-- Loading screen will be shown until app is fully loaded -->
+        <div class="loading-screen">
+            <div class="spinner"></div>
+            <p>Laster SnapScan...</p>
         </div>
-        
-        <div class="header-right">
-            <div id="scannerStatusHeader" class="scanner-status">
-                <div id="scannerIndicator" class="scanner-indicator"></div>
-                <span id="scannerStatus">Skanner: Ikke tilkoblet</span>
+    </div>
+
+    <!-- Templates from the original file (unmodified) -->
+    <template id="headerTemplate">
+        <header>
+            <div class="header-left">
+                <button id="backButton" class="back-button">
+                    <i class="fas fa-arrow-left"></i>
+                </button>
+                <div class="app-brand">
+                    <i class="fas fa-qrcode app-logo"></i>
+                    <div class="app-title">
+                        <h1>SnapScan</h1>
+                        <span class="app-version">v1.0</span>
+                    </div>
+                </div>
             </div>
             
-            <!-- Dark Mode Toggle Switch -->
-            <label class="theme-switch">
-                <input type="checkbox" id="themeToggle">
-                <span class="slider"></span>
-                <i class="fas fa-moon theme-icon dark-icon"></i>
-                <i class="fas fa-sun theme-icon light-icon"></i>
-            </label>
+            <div class="header-right">
+                <div id="scannerStatusHeader" class="scanner-status">
+                    <div id="scannerIndicator" class="scanner-indicator"></div>
+                    <span id="scannerStatus">Skanner: Ikke tilkoblet</span>
+                </div>
+                
+                <!-- Dark Mode Toggle Switch -->
+                <label class="theme-switch">
+                    <input type="checkbox" id="themeToggle">
+                    <span class="slider"></span>
+                    <i class="fas fa-moon theme-icon dark-icon"></i>
+                    <i class="fas fa-sun theme-icon light-icon"></i>
+                </label>
 
-            <!-- Bruker profil -->
-            <div class="user-profile" id="userProfile">
-                <div class="user-avatar" id="userAvatar"></div>
-                <span class="user-name" id="userName">Bruker</span>
-                <div class="user-dropdown" id="userDropdown">
-                    <div class="user-dropdown-item" id="userSettings">
-                        <i class="fas fa-user-cog"></i> Min profil
-                    </div>
-                    <div class="user-dropdown-item" id="logoutBtn">
-                        <i class="fas fa-sign-out-alt"></i> Logg ut
+                <!-- Bruker profil -->
+                <div class="user-profile" id="userProfile">
+                    <div class="user-avatar" id="userAvatar"></div>
+                    <span class="user-name" id="userName">Bruker</span>
+                    <div class="user-dropdown" id="userDropdown">
+                        <div class="user-dropdown-item" id="userSettings">
+                            <i class="fas fa-user-cog"></i> Min profil
+                        </div>
+                        <div class="user-dropdown-item" id="logoutBtn">
+                            <i class="fas fa-sign-out-alt"></i> Logg ut
+                        </div>
                     </div>
                 </div>
             </div>
-        </div>
-    </header>
-    
-    <div class="main-container">
-        <!-- Main Menu -->
+        </header>
+    </template>
+
+    <template id="mainMenuTemplate">
         <div id="mainMenu" class="main-menu">
             <div class="menu-grid">
                 <div class="menu-item" data-module="picking">
@@ -359,721 +714,212 @@
                 </div>
             </div>
         </div>
-        
-        <!-- Picking Module -->
-        <div id="pickingModule" class="module-container">
-            <div class="card">
-                <div class="card-title">
-                    <i class="fas fa-clipboard-list"></i> Plukk
-                </div>
-                
-                <div class="module-section">
-                    <!-- Toppknapper for import, bluetooth og kamera -->
-                    <div class="top-action-buttons">
-                        <input type="file" id="importPickFile" accept=".csv,.txt,.json,.pdf" style="display: none;">
-                        <button id="importPickBtn" class="action-button">
-                            <i class="fas fa-file-import"></i>
-                            <span>Import</span>
-                        </button>
-                        <button id="connectScannerPick" class="action-button">
-                            <i class="fab fa-bluetooth-b"></i>
-                            <span>Bluetooth</span>
-                        </button>
-                        <button id="cameraScannerPick" class="action-button">
-                            <i class="fas fa-camera"></i>
-                            <span>Kamera</span>
-                        </button>
-                    </div>
-                    
-                    <div id="pickFileInfo" class="module-info-text">Ingen fil lastet inn</div>
-                    
-                    <!-- Kameraskanner for plukk -->
-                    <div id="cameraScannerPickContainer" class="camera-scanner-container" style="display: none;">
-                        <div class="camera-wrapper">
-                            <video id="videoPickScanner" autoplay playsinline muted></video>
-                            <canvas id="canvasPickScanner"></canvas>
-                            <div id="scannerPickOverlay" class="camera-overlay">
-                                <div class="scan-area"><span></span>
-                                    <div class="scan-line"></div>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="scanner-controls">
-                            <button id="switchCameraPick" class="btn btn-primary scanner-switch-btn">
-                                <i class="fas fa-sync"></i> Bytt kamera
-                            </button>
-                            <button id="closePickScanner" class="btn btn-danger scanner-close-btn">
-                                <i class="fas fa-times"></i> Lukk skanner
-                            </button>
-                        </div>
-                    </div>
-                    
-                    <!-- Fremdrift for plukk -->
-                    <div class="progress-container">
-                        <div class="status-bar">
-                            <div id="pickStatusPicked" class="status-picked" style="width: 0%"></div>
-                            <div id="pickStatusRemaining" class="status-remaining" style="width: 100%"></div>
-                        </div>
-                        <div id="pickStatusText" class="status-text">0 av 0 varer plukket (0%)</div>
-                    </div>
-                    
-                    <!-- Manuell registrering over listen -->
-                    <div class="scan-input-group">
-                        <div class="scan-input-container">
-                            <input type="text" id="pickManualScan" class="form-control" placeholder="Skann eller skriv inn varenummer">
-                            <button id="pickManualScanBtn" class="btn btn-primary scan-button">
-                                <i class="fas fa-barcode"></i> Registrer
-                            </button>
-                        </div>
-                    </div>
-                    
-                    <!-- Total vekt vises direkte over liste -->
-                    <div class="quick-weight-info">
-                        <div class="weight-label">Total vekt:</div>
-                        <div id="totalWeight" class="weight-box">0 kg</div>
-                    </div>
-                    
-                    <!-- Plukkliste -->
-                    <div class="list-container">
-                        <table id="pickList">
-                            <thead>
-                                <tr>
-                                    <th>Varenr.</th>
-                                    <th>Beskrivelse</th>
-                                    <th>Antall</th>
-                                    <th>Vekt (kg)</th>
-                                    <th>Status</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                <!-- Data fylles inn via JavaScript -->
-                            </tbody>
-                        </table>
-                    </div>
-                    
-                    <!-- Handlingsknapper for plukk -->
-                    <div class="action-buttons-container">
-                        <div class="module-action-buttons">
-                            <button id="pickUndoBtn" class="btn btn-warning" disabled>
-                                <i class="fas fa-undo"></i> Angre siste skann
-                            </button>
-                            <div class="dropdown" style="display:inline-block;">
-                                <button id="pickExportBtn" class="btn btn-success dropdown-toggle" disabled>
-                                    <i class="fas fa-file-export"></i> Eksporter
-                                </button>
-                                <div class="dropdown-content">
-                                    <a href="#" data-format="pdf">PDF-dokument</a>
-                                    <a href="#" data-format="html">HTML-dokument</a>
-                                    <a href="#" data-format="csv">CSV-fil</a>
-                                    <a href="#" data-format="json">JSON-fil</a>
-                                    <a href="#" data-format="txt">Tekst-fil</a>
-                                </div>
-                            </div>
-                            <button id="pickClearBtn" class="btn btn-danger" disabled>
-                                <i class="fas fa-trash"></i> Tøm liste
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-        
-        <!-- Receiving Module -->
-        <div id="receivingModule" class="module-container">
-            <div class="card">
-                <div class="card-title">
-                    <i class="fas fa-truck-loading"></i> Mottak
-                </div>
-                
-                <div class="module-section">
-                    <!-- Toppknapper for import, bluetooth og kamera -->
-                    <div class="top-action-buttons">
-                        <button id="importDeliverySlipBtn" class="action-button">
-                            <i class="fas fa-file-invoice"></i>
-                            <span>Delivery Slip</span>
-                        </button>
-                        <button id="connectScannerReceive" class="action-button">
-                            <i class="fab fa-bluetooth-b"></i>
-                            <span>Bluetooth</span>
-                        </button>
-                        <button id="cameraScannerReceive" class="action-button">
-                            <i class="fas fa-camera"></i>
-                            <span>Kamera</span>
-                        </button>
-                    </div>
-                    
-                    <div id="receiveFileInfo" class="module-info-text">Ingen fil lastet inn</div>
-                    
-                    <!-- Kameraskanner for mottak -->
-                    <div id="cameraScannerReceiveContainer" class="camera-scanner-container" style="display: none;">
-                        <div class="camera-wrapper">
-                            <video id="videoReceiveScanner" autoplay playsinline muted></video>
-                            <canvas id="canvasReceiveScanner"></canvas>
-                            <div id="scannerReceiveOverlay" class="camera-overlay">
-                                <div class="scan-area"><span></span>
-                                    <div class="scan-line"></div>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="scanner-controls">
-                            <button id="switchCameraReceive" class="btn btn-primary scanner-switch-btn">
-                                <i class="fas fa-sync"></i> Bytt kamera
-                            </button>
-                            <button id="closeReceiveScanner" class="btn btn-danger scanner-close-btn">
-                                <i class="fas fa-times"></i> Lukk skanner
-                            </button>
-                        </div>
-                    </div>
-                    
-                    <!-- Fremdrift for mottak -->
-                    <div class="progress-container">
-                        <div class="status-bar">
-                            <div id="receiveStatusReceived" class="status-picked" style="width: 0%"></div>
-                            <div id="receiveStatusRemaining" class="status-remaining" style="width: 100%"></div>
-                        </div>
-                        <div id="receiveStatusText" class="status-text">0 av 0 varer mottatt (0%)</div>
-                    </div>
-                    
-                    <!-- Manuell registrering over listen -->
-                    <div class="scan-input-group">
-                        <div class="scan-input-container">
-                            <input type="text" id="receiveManualScan" class="form-control" placeholder="Skann eller skriv inn varenummer">
-                            <button id="receiveManualScanBtn" class="btn btn-primary scan-button">
-                                <i class="fas fa-barcode"></i> Registrer
-                            </button>
-                        </div>
-                    </div>
-                    
-                    <!-- Total vekt vises direkte over liste -->
-                    <div class="quick-weight-info">
-                        <div class="weight-label">Total vekt:</div>
-                        <div id="totalReceiveWeight" class="weight-box">0 kg</div>
-                    </div>
-                    
-                    <!-- Mottaksliste -->
-                    <div class="list-container">
-                        <table id="receiveList">
-                            <thead>
-                                <tr>
-                                    <th>Varenr.</th>
-                                    <th>Beskrivelse</th>
-                                    <th>Antall</th>
-                                    <th>Vekt (kg)</th>
-                                    <th>Status</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                <!-- Data fylles inn via JavaScript -->
-                            </tbody>
-                        </table>
-                    </div>
-                    
-                    <!-- Handlingsknapper for mottak -->
-                    <div class="action-buttons-container">
-                        <div class="module-action-buttons">
-                            <button id="receiveUndoBtn" class="btn btn-warning" disabled>
-                                <i class="fas fa-undo"></i> Angre siste skann
-                            </button>
-                            <div class="dropdown" style="display:inline-block;">
-                                <button id="receiveExportBtn" class="btn btn-success dropdown-toggle" disabled>
-                                    <i class="fas fa-file-export"></i> Eksporter
-                                </button>
-                                <div class="dropdown-content">
-                                    <a href="#" data-format="pdf">PDF-dokument</a>
-                                    <a href="#" data-format="html">HTML-dokument</a>
-                                    <a href="#" data-format="csv">CSV-fil</a>
-                                    <a href="#" data-format="json">JSON-fil</a>
-                                    <a href="#" data-format="txt">Tekst-fil</a>
-                                </div>
-                            </div>
-                            <button id="receiveClearBtn" class="btn btn-danger" disabled>
-                                <i class="fas fa-trash"></i> Tøm liste
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-        
-        <!-- Returns Module -->
-        <div id="returnsModule" class="module-container">
-            <div class="card">
-                <div class="card-title">
-                    <i class="fas fa-undo-alt"></i> Retur
-                </div>
-                
-                <div class="module-section">
-                    <!-- Toppknapper for bluetooth og kamera -->
-                    <div class="top-action-buttons">
-                        <button id="connectScannerReturn" class="action-button">
-                            <i class="fab fa-bluetooth-b"></i>
-                            <span>Bluetooth</span>
-                        </button>
-                        <button id="cameraScannerReturn" class="action-button">
-                            <i class="fas fa-camera"></i>
-                            <span>Kamera</span>
-                        </button>
-                    </div>
+    </template>
 
-                    <!-- Kameraskanner for retur -->
-                    <div id="cameraScannerReturnContainer" class="camera-scanner-container" style="display: none;">
-                        <div class="camera-wrapper">
-                            <video id="videoReturnScanner" autoplay playsinline muted></video>
-                            <canvas id="canvasReturnScanner"></canvas>
-                            <div id="scannerReturnOverlay" class="camera-overlay">
-                                <div class="scan-area"><span></span>
-                                    <div class="scan-line"></div>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="scanner-controls">
-                            <button id="switchCameraReturn" class="btn btn-primary scanner-switch-btn">
-                                <i class="fas fa-sync"></i> Bytt kamera
-                            </button>
-                            <button id="closeReturnScanner" class="btn btn-danger scanner-close-btn">
-                                <i class="fas fa-times"></i> Lukk skanner
-                            </button>
-                        </div>
-                    </div>
-                    
-                    <!-- Manuell registrering over listen -->
-                    <div class="return-register-form">
-                        <div class="form-row">
-                            <div class="form-group">
-                                <label for="returnManualScan"><i class="fas fa-barcode"></i> Varenummer</label>
-                                <input type="text" id="returnManualScan" class="form-control" placeholder="Skann eller skriv inn varenummer">
-                            </div>
-                        </div>
-                        
-                        <div class="form-row two-columns">
-                            <div class="form-group">
-                                <label for="returnQuantity"><i class="fas fa-sort-amount-up"></i> Antall</label>
-                                <input type="number" id="returnQuantity" class="form-control" value="1" min="1" placeholder="Antall">
-                            </div>
-                            
-                            <div class="form-group">
-                                <label for="returnItemCondition"><i class="fas fa-clipboard-check"></i> Tilstand</label>
-                                <select id="returnItemCondition" class="form-control">
-                                    <option value="uåpnet">Uåpnet</option>
-                                    <option value="åpnet">Åpnet</option>
-                                    <option value="skadet">Skadet</option>
-                                </select>
-                            </div>
-                        </div>
-                        
-                        <button id="returnManualScanBtn" class="btn btn-primary full-width-btn">
-                            <i class="fas fa-plus-circle"></i> Registrer retur
-                        </button>
-                    </div>
-                    
-                    <!-- Returliste -->
-                    <div class="list-container">
-                        <table id="returnList">
-                            <thead>
-                                <tr>
-                                    <th>Varenr.</th>
-                                    <th>Beskrivelse</th>
-                                    <th>Antall</th>
-                                    <th>Tilstand</th>
-                                    <th>Handlinger</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                <!-- Data fylles inn via JavaScript -->
-                            </tbody>
-                        </table>
-                    </div>
-                    
-                    <!-- Handlingsknapper for returliste -->
-                    <div class="action-buttons-container">
-                        <div class="module-action-buttons">
-                            <div class="dropdown" style="display:inline-block;">
-                                <button id="returnExportBtn" class="btn btn-success dropdown-toggle" disabled>
-                                    <i class="fas fa-file-export"></i> Eksporter
-                                </button>
-                                <div class="dropdown-content">
-                                    <a href="#" data-format="pdf">PDF-dokument</a>
-                                    <a href="#" data-format="html">HTML-dokument</a>
-                                    <a href="#" data-format="csv">CSV-fil</a>
-                                    <a href="#" data-format="json">JSON-fil</a>
-                                    <a href="#" data-format="txt">Tekst-fil</a>
-                                </div>
-                            </div>
-                            <button id="clearReturnList" class="btn btn-danger" disabled>
-                                <i class="fas fa-trash"></i> Tøm liste
-                            </button>
-                        </div>
-                    </div>
+    <template id="modalTemplate">
+        <div class="modal">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h2 class="modal-title"></h2>
+                    <span class="close">&times;</span>
+                </div>
+                <div class="modal-body">
+                    <!-- Content will be injected here -->
+                </div>
+                <div class="modal-footer">
+                    <!-- Buttons will be injected here -->
                 </div>
             </div>
         </div>
-        
-        <!-- Settings Module -->
-        <div id="settingsModule" class="module-container">
-            <div class="card">
-                <div class="card-title">
-                    <i class="fas fa-cogs"></i> Innstillinger
-                </div>
-                
-                <!-- Innstillinger Tabs -->
-                <div class="settings-tabs">
-                    <button class="settings-tab-btn active" data-tab="generalSettings">
-                        <i class="fas fa-sliders-h"></i> Generelt
-                    </button>
-                    <button class="settings-tab-btn" data-tab="barcodeSettings">
-                        <i class="fas fa-barcode"></i> Strekkoder
-                    </button>
-                    <button class="settings-tab-btn" data-tab="dataSettings">
-                        <i class="fas fa-database"></i> Data
-                    </button>
-                    <button class="settings-tab-btn" data-tab="systemSettings">
-                        <i class="fas fa-tools"></i> System
-                    </button>
-                </div>
-                
-                <!-- General Settings Tab -->
-                <div id="generalSettings" class="settings-tab-content active">
-                    <div class="settings-section">
-                        <h3 class="settings-section-title"><i class="fas fa-weight"></i> Vekt og måleenheter</h3>
-                        
-                        <div class="settings-option">
-                            <div class="settings-option-info">
-                                <label for="weightUnit">Vektenhet</label>
-                                <p class="settings-description">Velg standard måleenhet for vekt i applikasjonen.</p>
-                            </div>
-                            <div class="settings-option-control">
-                                <select id="weightUnit" class="form-control">
-                                    <option value="kg">Kilogram (kg)</option>
-                                    <option value="g">Gram (g)</option>
-                                </select>
-                            </div>
-                        </div>
-                        
-                        <div class="settings-option">
-                            <div class="settings-option-info">
-                                <label for="defaultItemWeight">Standard varevekt</label>
-                                <p class="settings-description">Sett standard vekt for varer som ikke har en definert vekt.</p>
-                            </div>
-                            <div class="settings-option-control">
-                                <input type="number" id="defaultItemWeight" class="form-control" value="1" min="0.01" step="0.01">
-                            </div>
-                        </div>
-                    </div>
-                    
-                    <div class="settings-section">
-                        <h3 class="settings-section-title"><i class="fas fa-palette"></i> Utseende</h3>
-                        
-                        <div class="settings-option">
-                            <div class="settings-option-info">
-                                <label for="themeToggleSettings">Fargemodus</label>
-                                <p class="settings-description">Velg mellom lys og mørk modus for applikasjonen.</p>
-                            </div>
-                            <div class="settings-option-control">
-                                <div class="theme-toggle-container">
-                                    <span class="theme-label">Lys</span>
-                                    <label class="theme-switch-settings">
-                                        <input type="checkbox" id="themeToggleSettings">
-                                        <span class="slider round"></span>
-                                    </label>
-                                    <span class="theme-label">Mørk</span>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                
-                <!-- Barcode Settings Tab -->
-                <div id="barcodeSettings" class="settings-tab-content">
-                    <div class="settings-section">
-                        <h3 class="settings-section-title"><i class="fas fa-barcode"></i> Strekkodeinnstillinger</h3>
-                        
-                        <div class="settings-option">
-                            <div class="settings-option-info">
-                                <label>Importer strekkodeoversikt</label>
-                                <p class="settings-description">Last opp en JSON-fil med strekkoder for bruk i applikasjonen.</p>
-                            </div>
-                            <div class="settings-option-control">
-                                <input type="file" id="importBarcodeFile" accept=".json" style="display: none;">
-                                <button id="importBarcodeBtn" class="btn btn-primary">
-                                    <i class="fas fa-file-import"></i> Importer strekkoder
-                                </button>
-                                <div id="barcodeFileInfo" class="settings-info-text">Ingen strekkoder lastet inn</div>
-                            </div>
-                        </div>
-                        
-                        <div class="settings-note">
-                            <i class="fas fa-info-circle"></i> Appen inneholder innebygde strekkoder som alltid vil være tilgjengelige.
-                        </div>
-                        
-                        <div class="settings-action-buttons">
-                            <button id="resetBarcodeData" class="btn btn-secondary">
-                                <i class="fas fa-undo"></i> Tilbakestill til kun innebygde strekkoder
-                            </button>
-                            <button id="clearBarcodeData" class="btn btn-warning">
-                                <i class="fas fa-trash"></i> Tøm brukerdefinerte strekkoder
-                            </button>
-                        </div>
-                    </div>
-                </div>
-                
-                <!-- Data Settings Tab -->
-                <div id="dataSettings" class="settings-tab-content">
-                    <div class="settings-section">
-                        <h3 class="settings-section-title"><i class="fas fa-database"></i> Databehandling</h3>
-                        
-                        <div class="settings-action-panel danger-zone">
-                            <div class="panel-header">
-                                <i class="fas fa-exclamation-triangle"></i> Faresone
-                            </div>
-                            <div class="panel-body">
-                                <p>Disse handlingene vil fjerne data permanent og kan ikke angres.</p>
-                                
-                                <button id="clearAllBarcodeData" class="btn btn-warning">
-                                    <i class="fas fa-trash"></i> Tøm all strekkodedata
-                                </button>
-                                
-                                <button id="clearAllData" class="btn btn-danger">
-                                    <i class="fas fa-trash-alt"></i> Tøm alle data
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                
-                <!-- System Settings Tab -->
-                <div id="systemSettings" class="settings-tab-content">
-                    <div class="settings-section">
-                        <h3 class="settings-section-title"><i class="fas fa-sync-alt"></i> Oppdatering og systemvedlikehold</h3>
-                        <p class="settings-description">Hvis du har problemer med appen eller ønsker å hente nyeste versjon av appen, kan du bruke knappen under. Dette vil slette all lokal cache, cookies og tømme lagring for å sikre at du får nyeste versjon.</p>
-                        
-                        <div class="settings-action-panel">
-                            <button id="forceRefreshBtn" class="btn btn-info btn-refresh">
-                              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16" style="margin-right: 5px;">
-                                <path d="M8 3a5 5 0 1 0 4.546 2.914.5.5 0 0 1 .908-.417A6 6 0 1 1 8 2v1z"/>
-                                <path fill-rule="evenodd" d="M8 4.5a.5.5 0 0 1 .5.5v2.5h2.5a.5.5 0 0 1 0 1H8a.5.5 0 0 1-.5-.5V5a.5.5 0 0 1 .5-.5z"/>
-                              </svg>
-                              Last applikasjonen på nytt
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-        
-        <!-- Profile Module -->
-        <div id="profileModule" class="module-container">
-            <div class="card">
-                <div class="card-title">
-                    <i class="fas fa-user"></i> Min Profil
-                </div>
-                
-                <div class="module-section">
-                    <div class="profile-container">
-                        <div class="profile-header">
-                            <div class="profile-avatar">
-                                <div class="large-avatar" id="profileAvatar">G</div>
-                            </div>
-                            <div class="profile-name">
-                                <h2 id="profileName">Gustav</h2>
-                                <p id="profileCompany">Stadven AS</p>
-                            </div>
-                        </div>
-                        
-                        <div class="profile-details">
-                            <div class="profile-section">
-                                <h3 class="profile-section-title"><i class="fas fa-id-card"></i> Brukerinformasjon</h3>
-                                
-                                <table class="profile-info-table">
-                                    <tr>
-                                        <th>Navn:</th>
-                                        <td id="profileFullName">Gustav</td>
-                                    </tr>
-                                    <tr>
-                                        <th>E-post:</th>
-                                        <td id="profileEmail">gustav@stadven.no</td>
-                                    </tr>
-                                    <tr>
-                                        <th>Firma:</th>
-                                        <td id="profileCompanyDetail">Stadven AS</td>
-                                    </tr>
-                                    <tr>
-                                        <th>Brukerrolle:</th>
-                                        <td id="profileRole">Administrator</td>
-                                    </tr>
-                                    <tr>
-                                        <th>Registrert:</th>
-                                        <td id="profileCreated">23. april 2025</td>
-                                    </tr>
-                                </table>
-                            </div>
-                            
-                            <div class="profile-section">
-                                <h3 class="profile-section-title"><i class="fas fa-chart-line"></i> Aktivitetsstatistikk</h3>
-                                
-                                <div class="profile-stats">
-                                    <div class="profile-stat-item">
-                                        <div class="profile-stat-value" id="profilePickCount">0</div>
-                                        <div class="profile-stat-label">Plukkede varer</div>
-                                    </div>
-                                    <div class="profile-stat-item">
-                                        <div class="profile-stat-value" id="profileReceiveCount">0</div>
-                                        <div class="profile-stat-label">Mottatte varer</div>
-                                    </div>
-                                    <div class="profile-stat-item">
-                                        <div class="profile-stat-value" id="profileReturnCount">0</div>
-                                        <div class="profile-stat-label">Returnerte varer</div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
+    </template>
 
-    <!-- Modaler -->
-    <!-- Vektmodal -->
-    <div id="weightModal" class="modal">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h2>Angi vekt for produkt</h2>
-                <span id="closeWeightModal" class="close">&times;</span>
-            </div>
-            <div class="modal-body">
-                <div class="form-group">
-                    <label for="weightModalItemId">Varenummer:</label>
-                    <span id="weightModalItemId" class="modal-item-id"></span>
-                </div>
-                <div class="form-group">
-                    <label for="itemWeight">Vekt (kg):</label>
-                    <input type="number" id="itemWeight" class="form-control" step="0.01" min="0" value="1">
-                </div>
-            </div>
-            <div class="modal-footer">
-                <button id="cancelWeightBtn" class="btn btn-secondary">Avbryt</button>
-                <button id="saveWeightBtn" class="btn btn-primary">Lagre</button>
+    <template id="tableComponentTemplate">
+        <div class="list-container">
+            <table>
+                <thead>
+                    <tr>
+                        <!-- Headers will be injected here -->
+                    </tr>
+                </thead>
+                <tbody>
+                    <!-- Rows will be injected here -->
+                </tbody>
+            </table>
+        </div>
+    </template>
+
+    <template id="buttonComponentTemplate">
+        <button class="btn">
+            <i class="fas"></i>
+            <span></span>
+        </button>
+    </template>
+
+    <template id="dropdownComponentTemplate">
+        <div class="dropdown">
+            <button class="btn dropdown-toggle">
+                <i class="fas"></i>
+                <span></span>
+            </button>
+            <div class="dropdown-content">
+                <!-- Dropdown items will be injected here -->
             </div>
         </div>
-    </div>
+    </template>
 
-    <!-- Antallsmodal for mottak -->
-    <div id="quantityModal" class="modal">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h2>Angi antall for produkt</h2>
-                <span id="closeQuantityModal" class="close">&times;</span>
-            </div>
-            <div class="modal-body">
-                <div class="form-group">
-                    <label for="quantityModalItemId">Varenummer:</label>
-                    <span id="quantityModalItemId" class="modal-item-id"></span>
-                </div>
-                <div class="form-group">
-                    <label for="itemQuantity">Antall:</label>
-                    <input type="number" id="itemQuantity" class="form-control" min="1" value="1">
-                </div>
-            </div>
-            <div class="modal-footer">
-                <button id="cancelQuantityBtn" class="btn btn-secondary">Avbryt</button>
-                <button id="saveQuantityBtn" class="btn btn-primary">Lagre</button>
+    <template id="scanInputComponentTemplate">
+        <div class="scan-input-group">
+            <div class="scan-input-container">
+                <input type="text" class="form-control" placeholder="Skann eller skriv inn varenummer">
+                <button class="btn btn-primary scan-button">
+                    <i class="fas fa-barcode"></i> Registrer
+                </button>
             </div>
         </div>
-    </div>
+    </template>
 
-    <!-- JavaScript-filer -->
+    <template id="progressBarComponentTemplate">
+        <div class="progress-container">
+            <div class="status-bar">
+                <div class="status-picked" style="width: 0%"></div>
+                <div class="status-remaining" style="width: 100%"></div>
+            </div>
+            <div class="status-text">0 av 0 varer plukket (0%)</div>
+        </div>
+    </template>
+
+    <template id="weightModalComponentTemplate">
+        <div class="form-group">
+            <div class="field-label">Varenummer:</div>
+            <span class="modal-item-id"></span>
+        </div>
+        <div class="form-group">
+            <label for="itemWeight">Vekt (kg):</label>
+            <input type="number" id="itemWeight" class="form-control" step="0.01" min="0" value="1">
+        </div>
+    </template>
+
+    <template id="quantityModalComponentTemplate">
+        <div class="form-group">
+            <div class="field-label">Varenummer:</div>
+            <span class="modal-item-id"></span>
+        </div>
+        <div class="form-group">
+            <label for="itemQuantity">Antall:</label>
+            <input type="number" id="itemQuantity" class="form-control" min="1" value="1">
+        </div>
+    </template>
+
+    <template id="cameraScannerComponentTemplate">
+        <div class="camera-scanner-container" style="display: none;">
+            <div class="camera-wrapper">
+                <video autoplay playsinline muted></video>
+                <canvas></canvas>
+                <div class="camera-overlay">
+                    <div class="scan-area"><span></span>
+                        <div class="scan-line"></div>
+                    </div>
+                </div>
+            </div>
+            <div class="scanner-controls">
+                <button class="btn btn-primary scanner-switch-btn">
+                    <i class="fas fa-sync"></i> Bytt kamera
+                </button>
+                <button class="btn btn-danger scanner-close-btn">
+                    <i class="fas fa-times"></i> Lukk skanner
+                </button>
+            </div>
+        </div>
+    </template>
+
+    <template id="unknownBarcodeModalTemplate">
+        <div class="form-group">
+            <div class="field-label">Ukjent strekkode:</div>
+            <span class="modal-barcode"></span>
+        </div>
+        <div class="form-group">
+            <label for="itemDescription">Beskrivelse:</label>
+            <input type="text" id="itemDescription" class="form-control" placeholder="Varebeskrivelse">
+        </div>
+        <div class="form-group">
+            <label for="itemWeight">Vekt (kg):</label>
+            <input type="number" id="itemWeight" class="form-control" step="0.01" min="0" value="1">
+        </div>
+    </template>
+
+    <!-- JavaScript med moduler og komponenter -->
+    <script src="js/modules/load-libraries.js" type="module"></script>
     <script src="js/app.js" type="module"></script>
-    <!-- Legg til PDF.js bibliotek -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.7.107/pdf.min.js"></script>
+
+    <!-- Dashboard-specific JavaScript -->
     <script>
-        // Sjekk om brukeren er logget inn
         document.addEventListener('DOMContentLoaded', function() {
-            const currentUser = localStorage.getItem('snapscan_user');
-            if (!currentUser) {
-                // Redirect til innloggingssiden hvis brukeren ikke er logget inn
-                window.location.href = 'login.html';
-                return;
-            }
-            
-            // Initialiser brukerprofilområdet i header
-            const user = JSON.parse(currentUser);
-            const userNameElement = document.getElementById('userName');
-            const userAvatarElement = document.getElementById('userAvatar');
-            if (userNameElement && user.name) {
-                userNameElement.textContent = user.name;
-            }
-            if (userAvatarElement && user.name) {
-                userAvatarElement.textContent = user.name.substring(0, 1).toUpperCase();
-            }
-            
-            // Brukerprofilinteraksjon
-            const userProfile = document.getElementById('userProfile');
-            const userDropdown = document.getElementById('userDropdown');
-            
-            if (userProfile) {
-                userProfile.addEventListener('click', function(e) {
-                    e.stopPropagation();
-                    userDropdown.classList.toggle('active');
+            // Hide loading screen when DOM is loaded
+            setTimeout(() => {
+                document.querySelector('.loading-screen').style.display = 'none';
+            }, 1000);
+
+            // Event listeners for module cards
+            document.querySelectorAll('.module-card').forEach(card => {
+                card.addEventListener('click', function() {
+                    const moduleId = this.getAttribute('data-module');
+                    // Hide dashboard and show the selected module
+                    document.getElementById('mainDashboard').style.display = 'none';
+                    // This will trigger the existing module activation logic in app.js
+                    if (window.app && typeof window.app.showModule === 'function') {
+                        window.app.showModule(moduleId);
+                    }
                 });
-            }
-            
-            // Lukk dropdown når man klikker utenfor
-            document.addEventListener('click', function() {
-                if (userDropdown.classList.contains('active')) {
-                    userDropdown.classList.remove('active');
+            });
+
+            // Back button to show dashboard
+            document.getElementById('backButton').addEventListener('click', function() {
+                // Check if we're in a module view
+                if (document.getElementById('mainDashboard').style.display === 'none') {
+                    // We're in a module, go back to dashboard
+                    document.getElementById('mainDashboard').style.display = 'block';
+                    // Hide any active modules
+                    document.querySelectorAll('.module-container').forEach(container => {
+                        container.style.display = 'none';
+                    });
+                } else {
+                    // We're already at dashboard, ask if user wants to exit
+                    if (confirm('Er du sikker på at du vil logge ut?')) {
+                        // Log out logic
+                        localStorage.removeItem('snapscan_user');
+                        window.location.href = 'login.html';
+                    }
                 }
             });
-            
-            // Håndter utlogging
-            const logoutBtn = document.getElementById('logoutBtn');
-            if (logoutBtn) {
-                logoutBtn.addEventListener('click', function() {
+
+            // Handle logout button
+            document.getElementById('logoutBtn').addEventListener('click', function() {
+                if (confirm('Er du sikker på at du vil logge ut?')) {
                     localStorage.removeItem('snapscan_user');
                     window.location.href = 'login.html';
-                });
-            }
+                }
+            });
 
-            // Håndter klikk på "Min profil"
-            const userSettings = document.getElementById('userSettings');
-            if (userSettings) {
-                userSettings.addEventListener('click', function() {
-                    // Lukk dropdown-menyen
-                    userDropdown.classList.remove('active');
-                    
-                    // Vis profilsiden
-                    if (typeof window.app !== 'undefined' && typeof window.app.showModule === 'function') {
-                        window.app.showModule('profile');
-                    }
-                });
+            // Handle theme toggle
+            const themeToggle = document.getElementById('themeToggle');
+            const prefersDarkScheme = window.matchMedia('(prefers-color-scheme: dark)');
+            
+            // Set initial theme based on user preference or system preference
+            const savedTheme = localStorage.getItem('theme');
+            if (savedTheme === 'dark' || (!savedTheme && prefersDarkScheme.matches)) {
+                document.body.classList.add('dark-mode');
+                themeToggle.checked = true;
             }
             
-            // Hent brukerdata fra brukerens eget lager
-            // Dette sikrer at hver bruker har sin egen separate datalagring
-            const userStorageKey = `snapscan_data_${user.id}`;
-            let userData = JSON.parse(localStorage.getItem(userStorageKey) || '{}');
-            
-            // Hvis dette er første gang brukeren logger inn, initialiser standard datastruktur
-            if (Object.keys(userData).length === 0) {
-                userData = {
-                    barcodes: {},
-                    pickings: [],
-                    receivings: [],
-                    returns: [],
-                    settings: {
-                        weightUnit: 'kg',
-                        defaultItemWeight: 1,
-                        theme: 'light'
-                    }
-                };
-                localStorage.setItem(userStorageKey, JSON.stringify(userData));
-            }
-            
-            // Denne variabelen brukes til å lagre og laste data per bruker
-            window.currentUserData = {
-                id: user.id,
-                storageKey: userStorageKey,
-                data: userData
-            };
+            themeToggle.addEventListener('change', function() {
+                if (this.checked) {
+                    document.body.classList.add('dark-mode');
+                    localStorage.setItem('theme', 'dark');
+                } else {
+                    document.body.classList.remove('dark-mode');
+                    localStorage.setItem('theme', 'light');
+                }
+            });
         });
     </script>
 </body>

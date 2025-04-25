@@ -8,9 +8,14 @@ let availableCameras = [];
 let lastScannedCode = '';
 let scanCooldown = false;
 
-import { appState } from '../app.js';
+import eventBus, { EventTypes } from './event-bus.js';
 import { showToast } from './utils.js';
 import * as bluetoothScanner from './bluetooth-scanner.js';
+import { ButtonComponent } from '../components/ButtonComponent.js';
+import { BaseComponent } from '../components/BaseComponent.js';
+
+// Applikasjonstilstand som vil bli tilgjengelig via window-objektet
+const appState = window.appState || {};
 
 // DOM-elementer
 let videoElement = null;
@@ -34,6 +39,139 @@ let moduleCallbacks = {
 // Callback-funksjon for å håndtere skannede strekkoder
 let onScanCallback = null;
 let scannerStatusCallback = null;
+
+// Scanner status component instance
+let statusComponent = null;
+
+/**
+ * ScannerStatusComponent - Viser status for skanneren
+ * Arver fra BaseComponent og gir en konsistent måte å vise skannerstatus på
+ */
+class ScannerStatusComponent extends BaseComponent {
+    constructor(options = {}) {
+        // Call the parent constructor with null containerId and autoCreate option
+        super(null, {
+            ...options,
+            autoCreate: true // Use the auto-create feature from the improved BaseComponent
+        });
+        
+        // Use the container created by BaseComponent
+        this.element = this.container;
+        this.element.className = 'scanner-status-container';
+        if (options.className) {
+            this.element.className += ' ' + options.className;
+        }
+        
+        this.statusElement = document.createElement('span');
+        this.statusElement.className = 'scanner-status-text';
+        this.element.appendChild(this.statusElement);
+        
+        this.iconElement = document.createElement('i');
+        this.iconElement.className = 'scanner-status-icon';
+        this.element.appendChild(this.iconElement);
+        
+        this.status = 'idle';
+        this.setStatus('idle');
+    }
+    
+    /**
+     * Setter statusen for skanneren
+     * @param {string} status - Status: 'idle', 'scanning', 'detected', 'processing', 'success', 'error'
+     * @param {string} message - Valgfri melding å vise
+     */
+    setStatus(status, message = '') {
+        this.status = status;
+        
+        // Fjern alle tidligere statusklasser
+        this.element.classList.remove('idle', 'scanning', 'detected', 'processing', 'success', 'error');
+        
+        // Legg til ny statusklasse
+        this.element.classList.add(status);
+        
+        // Oppdater ikon basert på status
+        switch(status) {
+            case 'idle':
+                this.iconElement.className = 'scanner-status-icon fas fa-barcode';
+                this.statusElement.textContent = message || 'Klar til skanning';
+                break;
+            case 'scanning':
+                this.iconElement.className = 'scanner-status-icon fas fa-search';
+                this.statusElement.textContent = message || 'Skanner...';
+                
+                // Publiser status endring til event bus
+                eventBus.publish(EventTypes.SCANNER_STATUS_CHANGED, { 
+                    status: 'scanning',
+                    message: message || 'Skanner...'
+                });
+                break;
+            case 'detected':
+                this.iconElement.className = 'scanner-status-icon fas fa-check-circle';
+                this.statusElement.textContent = message || 'Strekkode oppdaget';
+                
+                // Publiser status endring til event bus
+                eventBus.publish(EventTypes.SCANNER_STATUS_CHANGED, { 
+                    status: 'detected',
+                    message: message || 'Strekkode oppdaget'
+                });
+                break;
+            case 'processing':
+                this.iconElement.className = 'scanner-status-icon fas fa-cog fa-spin';
+                this.statusElement.textContent = message || 'Behandler...';
+                
+                // Publiser status endring til event bus
+                eventBus.publish(EventTypes.SCANNER_STATUS_CHANGED, { 
+                    status: 'processing',
+                    message: message || 'Behandler...'
+                });
+                break;
+            case 'success':
+                this.iconElement.className = 'scanner-status-icon fas fa-check';
+                this.statusElement.textContent = message || 'Skanning fullført';
+                
+                // Publiser status endring til event bus
+                eventBus.publish(EventTypes.SCANNER_STATUS_CHANGED, { 
+                    status: 'success',
+                    message: message || 'Skanning fullført'
+                });
+                break;
+            case 'error':
+                this.iconElement.className = 'scanner-status-icon fas fa-exclamation-triangle';
+                this.statusElement.textContent = message || 'Feil under skanning';
+                
+                // Publiser status endring til event bus
+                eventBus.publish(EventTypes.SCANNER_STATUS_CHANGED, { 
+                    status: 'error',
+                    message: message || 'Feil under skanning'
+                });
+                break;
+        }
+    }
+    
+    /**
+     * Viser en statusmelding med automatisk timeout
+     * @param {string} message - Meldingen som skal vises
+     * @param {string} status - Status for meldingen
+     * @param {number} timeout - Tid i ms før meldingen forsvinner (0 = ingen timeout)
+     */
+    showMessage(message, status = 'scanning', timeout = 3000) {
+        this.setStatus(status, message);
+        
+        if (timeout > 0) {
+            setTimeout(() => {
+                if (this.status === status) {
+                    this.setStatus('idle');
+                }
+            }, timeout);
+        }
+    }
+    
+    /**
+     * Skjuler statusmeldingen og setter tilbake til idle
+     */
+    hideMessage() {
+        this.setStatus('idle');
+    }
+}
 
 /**
  * Registrerer en callback-funksjon for en spesifikk modul
@@ -99,6 +237,16 @@ function initCameraScanner(videoEl, canvasEl, overlayEl, callback, statusCallbac
     
     // Oppsett for sticky-funksjonalitet
     setupStickyScanner(module);
+    
+    // Initialiserer status component
+    initStatusComponent(module);
+    
+    // Publiser hendelse om skanner-initialisering 
+    eventBus.publish(EventTypes.SCANNER_STATUS_CHANGED, {
+        status: 'initialized',
+        module: module,
+        timestamp: new Date()
+    });
 }
 
 /**
@@ -203,35 +351,40 @@ function createScanButton(module) {
         return;
     }
     
-    // Opprett knapp
-    const button = document.createElement('button');
-    button.className = 'scan-button disabled'; // Start med disabled tilstand
-    button.dataset.module = module;
-    button.textContent = 'Venter på strekkode...';
-    button.title = 'Vent til en strekkode er oppdaget';
-    button.disabled = true; // Gjør knappen deaktivert ved oppstart
+    // Opprett knapp med ButtonComponent
+    const scanButtonContainer = document.createElement('div');
+    scanButtonContainer.className = 'scan-button-container';
+    scanButtonContainer.id = `scanButton${modulePrefix}Container`;
     
-    // Legg til clickhandler som kun fungerer når knappen er klar
-    button.addEventListener('click', () => {
-        // Sjekk om knappen er i ready-to-scan tilstand
-        if (button.classList.contains('ready-to-scan')) {
-            performManualScan(module);
+    // Først legg til knapp-container i DOM
+    container.appendChild(scanButtonContainer);
+    
+    // Opprett knappen med ButtonComponent
+    const scanButton = new ButtonComponent(`scanButton${modulePrefix}Container`, {
+        text: 'Venter på strekkode...',
+        disabled: true,
+        className: 'scan-button disabled',
+        id: `scanButton${modulePrefix}`,
+        onClick: () => {
+            // Sjekk om knappen er i ready-to-scan tilstand
+            if (scanButton.button && scanButton.button.classList.contains('ready-to-scan')) {
+                performManualScan(module);
+            }
         }
     });
     
     // Finn passende plasseringssted i containeren
     const closeButton = container.querySelector('.scanner-close-btn');
     
-    if (closeButton && closeButton.parentNode) {
+    // Fjern scanButtonContainer fra den nåværende posisjonen før den plasseres på nytt
+    if (closeButton && closeButton.parentNode && scanButtonContainer.parentNode) {
+        scanButtonContainer.parentNode.removeChild(scanButtonContainer);
         // Legg knappen før lukke-knappen
-        closeButton.parentNode.insertBefore(button, closeButton);
-    } else {
-        // Legg til på slutten av containeren hvis vi ikke finner lukke-knappen
-        container.appendChild(button);
+        closeButton.parentNode.insertBefore(scanButtonContainer, closeButton);
     }
     
     // Lagre referanse til knappen
-    scanButtonElements[module] = button;
+    scanButtonElements[module] = scanButton.button;
 }
 
 /**
@@ -867,6 +1020,15 @@ function handleCameraScanResult(result) {
             // Spill lyd for å indikere at strekkode er funnet
             playDetectionSound();
             
+            // Publiser hendelse om at strekkode er skannet
+            eventBus.publish(EventTypes.BARCODE_SCANNED, {
+                barcode: barcode,
+                itemId: itemId,
+                mappedData: isValidMappedBarcode ? appState.barcodeMapping[barcode] : null,
+                timestamp: new Date(),
+                module: getModuleType(appState.currentModule)
+            });
+            
             // Hvis vi er i kontinuerlig skannemodus, prosesser strekkoden automatisk
             if (window.continuousScanning) {
                 console.log(`DEBUG-SCAN006: Auto-prosesserer strekkode ${barcode} i kontinuerlig modus`);
@@ -942,6 +1104,14 @@ function handleCameraScanResult(result) {
                         
                         // Spill feil-lyd
                         playErrorSound();
+                        
+                        // Publiser hendelse om ugyldig strekkode
+                        eventBus.publish(EventTypes.BARCODE_INVALID, {
+                            barcode: barcode,
+                            reason: 'not_in_system',
+                            timestamp: new Date(),
+                            module: getModuleType(appState.currentModule)
+                        });
                     }
                 }
                 
@@ -990,6 +1160,15 @@ function handleCameraScanResult(result) {
             if (!window.invalidBarcodeDebounce) {
                 showBarcodeStatusMessage("Strekkode ikke gjenkjent. Prøv igjen.", false);
                 window.invalidBarcodeDebounce = true;
+                
+                // Publiser hendelse om ugyldig strekkode
+                eventBus.publish(EventTypes.BARCODE_INVALID, {
+                    barcode: barcode,
+                    reason: 'invalid_format',
+                    timestamp: new Date(),
+                    module: getModuleType(appState.currentModule)
+                });
+                
                 setTimeout(() => {
                     window.invalidBarcodeDebounce = false;
                 }, 2000);
@@ -1494,6 +1673,15 @@ export function processScannedBarcode(barcode) {
             console.log(`PROSESS-DEBUG-P103: Strekkode ${barcode} mappet til varenummer ${itemId}`);
         }
         
+        // Publiser hendelse om at strekkoden er prosessert
+        eventBus.publish(EventTypes.BARCODE_PROCESSED, {
+            barcode: barcode,
+            itemId: itemId,
+            mappedData: appState.barcodeMapping[barcode],
+            module: moduleType,
+            timestamp: new Date()
+        });
+        
         // Prosesser modulcallback kun hvis strekkoden finnes i mapping
         if (moduleCallback) {
             console.log(`PROSESS-DEBUG-P102: Bruker modulspesifikk callback for ${moduleType}`);
@@ -1505,6 +1693,14 @@ export function processScannedBarcode(barcode) {
             } catch (error) {
                 console.error(`PROSESS-FEIL-P002: Feil i modulspesifikk callback:`, error);
                 alert(`Feil ved skanningshåndtering: ${error.message}`);
+                
+                // Publiser feilhendelse
+                eventBus.publish(EventTypes.APP_ERROR, {
+                    source: 'scanner',
+                    message: `Feil i moduleCallback for ${moduleType}`,
+                    error: error.message,
+                    barcode: barcode
+                });
             }
         }
         
@@ -1520,6 +1716,14 @@ export function processScannedBarcode(barcode) {
         blinkBackground('red');
         playErrorSound();
         showBarcodeStatusMessage(`Ukjent strekkode: ${barcode}. Ikke registrert i systemet.`, false);
+        
+        // Publiser hendelse om ugyldig strekkode
+        eventBus.publish(EventTypes.BARCODE_INVALID, {
+            barcode: barcode,
+            reason: 'not_in_system',
+            timestamp: new Date(),
+            module: moduleType
+        });
         
         // Nullstill lastDetectedCode og gjør knappen klar for ny skanning
         lastDetectedCode = null;
@@ -1762,39 +1966,38 @@ export function blinkBackground(color) {
  * @param {boolean} isSuccess - Om dette er en suksessmelding (grønn) eller feilmelding (rød)
  */
 function showBarcodeStatusMessage(message, isSuccess = false) {
-    // Finn eller opprett statusboks
-    let statusEl = document.querySelector('.barcode-status');
-    if (!statusEl) {
-        statusEl = document.createElement('div');
-        statusEl.className = 'barcode-status';
-        
-        // Legg til i kameravisningen
-        const container = document.querySelector('.camera-wrapper');
-        if (container) {
-            container.appendChild(statusEl);
-        }
+    // Bruk statusComponent om den er opprettet
+    if (statusComponent) {
+        statusComponent.showMessage(message, isSuccess ? 'success' : 'error');
+        return;
     }
     
-    // Sett melding og stil
-    statusEl.textContent = message;
-    statusEl.style.backgroundColor = isSuccess ? 'rgba(76, 175, 80, 0.8)' : 'rgba(0, 0, 0, 0.7)';
-    
-    // Vis meldingen
-    statusEl.classList.add('visible');
-    
-    // Fjern meldingen etter en stund
-    setTimeout(() => {
-        if (statusEl) statusEl.classList.remove('visible');
-    }, 3000);
+    // Legacy-støtte for eldre moduler
+    const statusElement = document.getElementById('barcodeStatusMessage');
+    if (statusElement) {
+        statusElement.textContent = message;
+        statusElement.style.display = 'block';
+        
+        // Oppdater klasser basert på status
+        statusElement.className = 'barcode-status-message';
+        statusElement.classList.add(isSuccess ? 'success' : 'error');
+    }
 }
 
 /**
  * Skjuler statusmeldingen
  */
 function hideBarcodeStatusMessage() {
-    const statusEl = document.querySelector('.barcode-status');
-    if (statusEl) {
-        statusEl.classList.remove('visible');
+    // Bruk statusComponent om den er opprettet
+    if (statusComponent) {
+        statusComponent.hideMessage();
+        return;
+    }
+    
+    // Legacy-støtte for eldre moduler
+    const statusElement = document.getElementById('barcodeStatusMessage');
+    if (statusElement) {
+        statusElement.style.display = 'none';
     }
 }
 
@@ -1832,6 +2035,115 @@ function playDetectionSound() {
         } catch (e) {
             // Ignorer feil her
         }
+    }
+}
+
+/**
+ * Initialiserer status komponenten for skanneren
+ * @param {string} module - Modulnavn ('pick', 'receive', 'return')
+ */
+function initStatusComponent(module) {
+    if (!module) return;
+    
+    const modulePrefix = getModulePrefix(module);
+    const containerId = `cameraScanner${modulePrefix}Container`;
+    const container = document.getElementById(containerId);
+    
+    if (!container) {
+        console.warn(`Kunne ikke finne kamera-container for ${module}-modul`);
+        return;
+    }
+    
+    // Finn eller opprett statuscontainer
+    let statusContainer = container.querySelector('.scanner-status-wrapper');
+    if (!statusContainer) {
+        statusContainer = document.createElement('div');
+        statusContainer.className = 'scanner-status-wrapper';
+        container.appendChild(statusContainer);
+    }
+    
+    // Opprett status component
+    statusComponent = new ScannerStatusComponent();
+    statusContainer.appendChild(statusComponent.element);
+    
+    // Vis initial status
+    statusComponent.setStatus('idle', 'Klar til å skanne');
+}
+
+/**
+ * Håndterer oppdaget strekkode
+ * @param {string} barcodeValue - Strekkoden som ble oppdaget
+ */
+function handleDetectedBarcode(barcodeValue) {
+    // Oppdater statusindikatoren
+    if (statusComponent) {
+        statusComponent.setStatus('detected', `Oppdaget: ${barcodeValue}`);
+    }
+    
+    // Lagre detektert kode for manuell bekreftelse
+    lastDetectedCode = barcodeValue;
+    
+    // Finn aktiv modul
+    const activeModule = appState.currentModule.replace('ing', '');
+    
+    // Oppdater scan-knapp for den aktive modulen
+    const scanButton = scanButtonElements[activeModule];
+    if (scanButton) {
+        if (scanButton instanceof ButtonComponent) {
+            // Hvis scanButton er en ButtonComponent instans
+            scanButton.setText('Bekreft strekkode');
+            scanButton.setDisabled(false);
+            scanButton.element.classList.add('ready-to-scan');
+        } else {
+            // Legacy support hvis scanButton ikke er en ButtonComponent
+            scanButton.textContent = 'Bekreft strekkode';
+            scanButton.classList.remove('disabled');
+            scanButton.classList.add('ready-to-scan');
+        }
+    }
+    
+    // Legg til klasse på scan-area for visuell indikasjon
+    const scanArea = document.querySelector('.scan-area');
+    if (scanArea) {
+        scanArea.classList.add('detected');
+    }
+    
+    // Hvis vi er i kontinuerlig skanningsmodus og koden er gyldig
+    if (window.continuousScanning) {
+        // Utfør automatisk bekreftelse etter en kort forsinkelse
+        setTimeout(() => {
+            if (window.continuousScanning && lastDetectedCode === barcodeValue) {
+                // Vi bruker samme kode, så automatisk bekreft
+                processScannedBarcode(barcodeValue);
+                
+                // Tilbakestill kontinuerlig skanningsmodus
+                window.continuousScanning = false;
+                
+                // Tilbakestill scan-knapp
+                if (scanButton) {
+                    if (scanButton instanceof ButtonComponent) {
+                        scanButton.setText('Utfør skann');
+                        scanButton.element.classList.remove('scanning-active');
+                    } else {
+                        scanButton.textContent = 'Utfør skann';
+                        scanButton.classList.remove('scanning-active');
+                    }
+                    
+                    // Gjenopprett original klikkhandler
+                    scanButton.onclick = () => {
+                        performManualScan(activeModule);
+                    };
+                }
+                
+                // Oppdater statusindikator til "success"
+                if (statusComponent) {
+                    statusComponent.setStatus('success', 'Strekkode skannet: ' + barcodeValue);
+                    setTimeout(() => {
+                        statusComponent.setStatus('idle');
+                    }, 3000);
+                }
+            }
+        }, 500);
     }
 }
 

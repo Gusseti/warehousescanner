@@ -7,6 +7,28 @@ import { initCameraScanner, startCameraScanning, stopCameraScanning, bluetoothSc
 import { exportList, exportWithFormat, exportToPDF } from './import-export.js';
 import { openWeightModal } from './weights.js';
 import { handleScannedBarcode } from './barcode-handler.js';
+import {
+    handleModuleScan,
+    handleModuleFileImport,
+    exportModuleList,
+    clearModuleList
+} from './core-module-handler.js';
+
+// Importer UI-komponenter
+import { ButtonComponent } from '../components/ButtonComponent.js';
+import { TableComponent } from '../components/TableComponent.js';
+import { SearchComponent } from '../components/SearchComponent.js';
+import { DropdownSearchComponent } from '../components/DropdownSearchComponent.js';
+
+// Komponenter
+let returnsTable;
+let returnsSearch;
+let exportButton;
+let clearButton;
+let connectScannerButton;
+let cameraScannerButton;
+let scanButton;
+let conditionDropdown;
 
 // DOM elementer - Retur
 let connectScannerReturnEl;
@@ -24,7 +46,10 @@ let canvasReturnScannerEl;
 let scannerReturnOverlayEl;
 let closeReturnScannerEl;
 let switchCameraReturnEl;
-let returnItemConditionEl; // Ny referanse til tilstandsvelgeren
+let returnItemConditionEl; // Tilstandsvelgeren
+let returnSearchContainerEl;
+let returnButtonContainerEl;
+let returnTableContainerEl;
 
 /**
  * Globale variabler for tilstandsmodalen
@@ -59,7 +84,32 @@ export function initReturns() {
     scannerReturnOverlayEl = document.getElementById('scannerReturnOverlay');
     closeReturnScannerEl = document.getElementById('closeReturnScanner');
     switchCameraReturnEl = document.getElementById('switchCameraReturn');
-    returnItemConditionEl = document.getElementById('returnItemCondition'); // Ny: Hent tilstandsvelgeren
+    returnItemConditionEl = document.getElementById('returnItemCondition');
+    
+    // Nye container-elementer for komponenter
+    returnSearchContainerEl = document.getElementById('returnSearchContainer');
+    returnButtonContainerEl = document.getElementById('returnButtonContainer');
+    returnTableContainerEl = document.getElementById('returnTableContainer');
+    
+    // Hvis container-elementene ikke eksisterer, oppretter vi dem
+    if (!returnSearchContainerEl) {
+        returnSearchContainerEl = document.createElement('div');
+        returnSearchContainerEl.id = 'returnSearchContainer';
+        returnListEl.parentNode.insertBefore(returnSearchContainerEl, returnListEl);
+    }
+    
+    if (!returnButtonContainerEl) {
+        returnButtonContainerEl = document.createElement('div');
+        returnButtonContainerEl.id = 'returnButtonContainer';
+        returnButtonContainerEl.className = 'button-container';
+        returnListEl.parentNode.insertBefore(returnButtonContainerEl, returnListEl);
+    }
+    
+    if (!returnTableContainerEl) {
+        returnTableContainerEl = document.createElement('div');
+        returnTableContainerEl.id = 'returnTableContainer';
+        returnListEl.parentNode.replaceChild(returnTableContainerEl, returnListEl);
+    }
     
     // Hent referanser til tilstandsmodalen
     conditionModalEl = document.getElementById('conditionModal');
@@ -86,6 +136,9 @@ export function initReturns() {
         'return'  // Nytt parameter: modulnavn
     );
     
+    // Initialiser UI-komponenter
+    initComponents();
+    
     // Legg til event listeners
     setupReturnsEventListeners();
     
@@ -96,35 +149,139 @@ export function initReturns() {
 }
 
 /**
+ * Initialiserer UI-komponenter
+ */
+function initComponents() {
+    // Søkekomponent
+    returnsSearch = new SearchComponent('returnSearchContainer', {
+        placeholder: 'Søk i returlisten...',
+        onSearch: (searchTerm) => filterReturnList(searchTerm)
+    });
+    
+    // Tilstandsvelger dropdown
+    conditionDropdown = new DropdownSearchComponent('returnItemConditionContainer', {
+        label: 'Tilstand',
+        options: [
+            { value: 'uåpnet', label: 'Uåpnet' },
+            { value: 'åpnet', label: 'Åpnet' },
+            { value: 'skadet', label: 'Skadet' }
+        ],
+        defaultValue: 'uåpnet',
+        id: 'returnItemCondition'
+    });
+    
+    // Knapper
+    connectScannerButton = new ButtonComponent('returnButtonContainer', {
+        text: 'Koble til skanner',
+        type: 'secondary',
+        icon: 'bluetooth-icon',
+        id: 'connectScannerReturn',
+        onClick: () => connectToBluetoothReturnScanner()
+    });
+    
+    cameraScannerButton = new ButtonComponent('returnButtonContainer', {
+        text: 'Kameraskanner',
+        type: 'secondary',
+        icon: 'camera-icon',
+        id: 'cameraScannerReturn',
+        onClick: () => startReturnCameraScanning()
+    });
+    
+    scanButton = new ButtonComponent('returnManualScanContainer', {
+        text: 'Skann',
+        type: 'success',
+        id: 'returnManualScanBtn',
+        onClick: () => handleReturnScan(returnManualScanEl.value, parseInt(returnQuantityEl.value) || 1)
+    });
+    
+    exportButton = new ButtonComponent('returnButtonContainer', {
+        text: 'Eksporter liste',
+        type: 'info',
+        icon: 'export-icon',
+        id: 'returnExportBtn',
+        onClick: () => exportReturnList('pdf'),
+        disabled: appState.returnListItems.length === 0
+    });
+    
+    clearButton = new ButtonComponent('returnButtonContainer', {
+        text: 'Tøm liste',
+        type: 'danger',
+        icon: 'trash-icon',
+        id: 'clearReturnList',
+        onClick: () => clearReturnList(),
+        disabled: appState.returnListItems.length === 0
+    });
+    
+    // Tabellkomponent
+    returnsTable = new TableComponent('returnTableContainer', {
+        columns: [
+            { field: 'id', title: 'Varenr', sortable: true },
+            { field: 'description', title: 'Beskrivelse', sortable: true },
+            { field: 'quantity', title: 'Antall', sortable: true },
+            { 
+                field: 'condition', 
+                title: 'Tilstand', 
+                sortable: true,
+                renderer: (value, row, index) => {
+                    let colorClass = '';
+                    if (value === 'uåpnet') {
+                        colorClass = 'condition-unopened';
+                    } else if (value === 'åpnet') {
+                        colorClass = 'condition-opened';
+                    } else if (value === 'skadet') {
+                        colorClass = 'condition-damaged';
+                    }
+                    return `<span class="condition-cell ${colorClass}" data-index="${index}">${value} <i class="fas fa-edit edit-icon"></i></span>`;
+                }
+            },
+            { 
+                field: 'weight', 
+                title: 'Vekt', 
+                sortable: true,
+                renderer: (value, row) => `${((row.weight || 0) * row.quantity).toFixed(2)} ${appState.settings.weightUnit || 'kg'}`
+            },
+            { 
+                field: 'actions', 
+                title: 'Handlinger', 
+                sortable: false,
+                renderer: (value, row, index) => {
+                    return `<button class="btn btn-danger remove-return-item" data-index="${index}">
+                        <i class="fas fa-trash"></i>
+                    </button>`;
+                }
+            }
+        ],
+        data: appState.returnListItems,
+        onRowClick: (item, index) => openWeightModal(item.id),
+        onCellClick: (cellElement, field, row, index) => {
+            if (field === 'condition') {
+                openConditionModal(index);
+                return true; // Indikerer at vi har håndtert klikket
+            }
+            return false; // La standardhåndteringen fortsette
+        },
+        rowClassGenerator: (item) => {
+            if (item.condition === 'uåpnet') return 'item-unopened';
+            if (item.condition === 'åpnet') return 'item-opened';
+            if (item.condition === 'skadet') return 'item-damaged';
+            return '';
+        }
+    });
+}
+
+/**
  * Setter opp event listeners for retur-modulen
  */
 function setupReturnsEventListeners() {
-    connectScannerReturnEl.addEventListener('click', function() {
-        connectToBluetoothReturnScanner();
-    });
-    
-    cameraScannerReturnEl.addEventListener('click', function() {
-        startReturnCameraScanning();
-    });
-    
     closeReturnScannerEl.addEventListener('click', function() {
         stopCameraScanning();
         cameraScannerReturnContainerEl.style.display = 'none';
-    });
-    
-    returnManualScanBtnEl.addEventListener('click', function() {
-        handleReturnScan(returnManualScanEl.value, parseInt(returnQuantityEl.value) || 1);
     });
     
     returnManualScanEl.addEventListener('keypress', function(e) {
         if (e.key === 'Enter') {
             handleReturnScan(returnManualScanEl.value, parseInt(returnQuantityEl.value) || 1);
         }
-    });
-    
-    // Hovedeksportknapp (PDF som standard)
-    returnExportBtnEl.addEventListener('click', function() {
-        exportReturnList('pdf');
     });
     
     // Eksportformat velgere
@@ -134,10 +291,6 @@ function setupReturnsEventListeners() {
             const format = this.getAttribute('data-format');
             exportReturnList(format);
         });
-    });
-    
-    clearReturnListEl.addEventListener('click', function() {
-        clearReturnList();
     });
     
     // Tilstandsmodal event listeners
@@ -152,96 +305,60 @@ function setupReturnsEventListeners() {
     if (cancelConditionBtnEl) {
         cancelConditionBtnEl.addEventListener('click', closeConditionModal);
     }
+    
+    // Lytter på remove-return-item knapper (delegert til tabellen)
+    document.addEventListener('click', function(e) {
+        if (e.target.closest('.remove-return-item')) {
+            const button = e.target.closest('.remove-return-item');
+            const index = parseInt(button.getAttribute('data-index'));
+            removeReturnItem(index);
+        }
+    });
+}
+
+/**
+ * Filtrerer returlisten basert på søkeord
+ * @param {string} searchTerm - Søkeordet
+ */
+function filterReturnList(searchTerm) {
+    if (!returnsTable) return;
+    
+    if (!searchTerm || searchTerm.trim() === '') {
+        // Vis alle elementer
+        returnsTable.update(appState.returnListItems);
+        return;
+    }
+    
+    const searchTermLower = searchTerm.toLowerCase();
+    
+    // Filtrer elementer basert på søkeord
+    const filteredItems = appState.returnListItems.filter(item => {
+        return (
+            (item.id && item.id.toLowerCase().includes(searchTermLower)) || 
+            (item.description && item.description.toLowerCase().includes(searchTermLower)) ||
+            (item.condition && item.condition.toLowerCase().includes(searchTermLower))
+        );
+    });
+    
+    // Oppdater tabellen med filtrerte elementer
+    returnsTable.update(filteredItems, false);
 }
 
 /**
  * Oppdaterer UI for retur-modulen
  */
 export function updateReturnsUI() {
-    // Sikre at vi har en referanse til tabellen
-    if (!returnListEl) {
-        console.error('Tabellreferanse for retur mangler');
-        return;
+    // Oppdater tabelldata
+    if (returnsTable) {
+        returnsTable.update(appState.returnListItems);
+    } else {
+        console.error('Tabellkomponent for retur mangler');
     }
-    
-    // Hent tbody-elementet
-    const tbody = returnListEl.querySelector('tbody');
-    if (!tbody) {
-        console.error('Tbody for retur ikke funnet');
-        return;
-    }
-    
-    // Tøm tabellen
-    tbody.innerHTML = '';
     
     // Beregn total vekt
     let totalWeight = 0;
-    
-    // Prosesser hver vare
-    appState.returnListItems.forEach((item, index) => {
-        const tr = document.createElement('tr');
-        tr.classList.add('returned');
-        
-        // Fargekoding basert på tilstand
-        if (item.condition) {
-            if (item.condition === 'uåpnet') {
-                tr.classList.add('item-unopened');
-            } else if (item.condition === 'åpnet') {
-                tr.classList.add('item-opened');
-            } else if (item.condition === 'skadet') {
-                tr.classList.add('item-damaged');
-            }
-        }
-        
-        // Legg til vekt
+    appState.returnListItems.forEach(item => {
         totalWeight += item.quantity * (item.weight || 0);
-        
-        // Beregn totalvekt for denne spesifikke varen
-        const itemTotalWeight = (item.weight || 0) * item.quantity;
-        
-        // Vis tilstand i tabellen med en klikkbar lenke
-        const conditionText = item.condition || 'uåpnet';
-        
-        tr.innerHTML = `
-            <td>${item.id}</td>
-            <td>${item.description}</td>
-            <td>${item.quantity}</td>
-            <td class="condition-cell" data-index="${index}">${conditionText} <i class="fas fa-edit" style="font-size: 0.8em; margin-left: 5px; color: #777;"></i></td>
-            <td>${itemTotalWeight.toFixed(2)} ${appState.settings.weightUnit}</td>
-            <td>
-                <button class="btn btn-danger remove-return-item" data-index="${index}">
-                    <i class="fas fa-trash"></i>
-                </button>
-            </td>
-        `;
-        
-        // Legg til hendelse for å angi vekt
-        tr.addEventListener('dblclick', function() {
-            openWeightModal(item.id);
-        });
-        
-        tbody.appendChild(tr);
-    });
-    
-    // Legg til event listeners for slette-knapper
-    const removeButtons = document.querySelectorAll('.remove-return-item');
-    removeButtons.forEach(button => {
-        button.addEventListener('click', function() {
-            const index = parseInt(this.getAttribute('data-index'));
-            removeReturnItem(index);
-        });
-    });
-    
-    // Legg til event listeners for tilstandsceller
-    const conditionCells = document.querySelectorAll('.condition-cell');
-    conditionCells.forEach(cell => {
-        cell.addEventListener('click', function() {
-            const index = parseInt(this.getAttribute('data-index'));
-            openConditionModal(index);
-        });
-        
-        // Legg til visuell indikasjon at cellen er klikkbar
-        cell.style.cursor = 'pointer';
     });
     
     // Oppdater totalvekt
@@ -249,9 +366,9 @@ export function updateReturnsUI() {
         totalReturnWeightEl.textContent = `${totalWeight.toFixed(2)} ${appState.settings.weightUnit || 'kg'}`;
     }
     
-    // Aktiver/deaktiver knapper
-    if (returnExportBtnEl) returnExportBtnEl.disabled = appState.returnListItems.length === 0;
-    if (clearReturnListEl) clearReturnListEl.disabled = appState.returnListItems.length === 0;
+    // Oppdater knappetilstander
+    if (exportButton) exportButton.setDisabled(appState.returnListItems.length === 0);
+    if (clearButton) clearButton.setDisabled(appState.returnListItems.length === 0);
 }
 
 /**
@@ -292,7 +409,19 @@ export function handleReturnScan(barcode, quantity = 1) {
     
     if (!barcode) return;
     
-    // KRITISK FIX: Håndterer tilfeller der barcode er et objekt
+    // Tøm input etter skanning
+    if (returnManualScanEl) {
+        returnManualScanEl.value = '';
+    }
+    
+    // Retur-modulen bruker en annen tilnærming enn de andre modulene
+    // Isteden for å bruke en forhåndsdefinert liste med varer,
+    // lar vi brukeren legge til varer direkte i en liste
+    
+    // Her bruker vi ikke handleModuleScan direkte siden retur-modulen
+    // har en annen logikk enn plukk og mottak
+    
+    // Håndterer tilfeller der barcode er et objekt
     if (typeof barcode === 'object' && barcode !== null) {
         console.log('Barcode er et objekt, konverterer til riktig format', barcode);
         
@@ -315,11 +444,6 @@ export function handleReturnScan(barcode, quantity = 1) {
                 return;
             }
         }
-    }
-    
-    // Tøm input etter skanning
-    if (returnManualScanEl) {
-        returnManualScanEl.value = '';
     }
     
     // Normaliser strekkoden: Fjern eventuelle mellomrom og tegn som ikke er alfanumeriske
@@ -382,7 +506,7 @@ export function handleReturnScan(barcode, quantity = 1) {
     }
     
     // Hent den valgte tilstanden fra dropdown
-    const condition = returnItemConditionEl ? returnItemConditionEl.value : 'uåpnet';
+    const condition = conditionDropdown ? conditionDropdown.getValue() : 'uåpnet';
     
     // Sjekk om denne spesifikke varenummeren allerede finnes, uavhengig av tilstand
     const existingItemsWithSameId = appState.returnListItems.filter(item => item.id === itemId);
@@ -454,46 +578,21 @@ function removeReturnItem(index) {
  * @param {string} format - Format for eksport (pdf, csv, json, txt, html)
  */
 function exportReturnList(format = 'pdf') {
-    // Sjekk om vi har varer å eksportere
-    if (appState.returnListItems.length === 0) {
-        showToast('Ingen varer å eksportere!', 'warning');
-        return;
-    }
-    
-    try {
-        if (format.toLowerCase() === 'pdf') {
-            // Bruk den nye PDF-eksportfunksjonen
-            exportToPDF(appState.returnListItems, 'retur', {
-                title: 'Returliste',
-                subtitle: 'Eksportert fra SnapScan',
-                exportDate: new Date(),
-                showStatus: true
-            });
-        } else {
-            // Bruk den eksisterende eksportfunksjonen for andre formater
-            exportWithFormat(appState.returnListItems, 'retur', format);
-        }
-    } catch (error) {
-        console.error('Feil ved eksport:', error);
-        showToast('Kunne ikke eksportere liste. Prøv igjen senere.', 'error');
-    }
+    // Bruk den generiske eksportfunksjonen fra core-module-handler
+    exportModuleList(appState.returnListItems, 'return', format, {
+        title: 'Returliste',
+        subtitle: 'Eksportert fra SnapScan',
+        exportDate: new Date(),
+        showStatus: true
+    });
 }
 
 /**
  * Tømmer returlisten
  */
 function clearReturnList() {
-    if (!confirm('Er du sikker på at du vil tømme returlisten?')) {
-        return;
-    }
-    
-    appState.returnListItems = [];
-    
-    updateReturnsUI();
-    showToast('Returliste tømt!', 'warning');
-    
-    // Lagre endringer
-    saveListsToStorage();
+    // Bruk den felles clearModuleList-funksjonen fra core-module-handler
+    clearModuleList('return', updateReturnsUI);
 }
 
 /**
