@@ -432,7 +432,14 @@ function handlePickScan(barcode) {
     
     if (!item) {
         console.error(`PLUKKFEIL-P005: Fant ikke vare "${itemId}" i plukklisten`);
+        
+        // NYTT: Vis tydelig statusmelding i toppen
+        showStatusMessage(`Vare "${itemId}" finnes ikke i plukklisten!`, 'error', 5000);
+        
+        // Vis toast melding i tillegg
         showToast(`Vare "${itemId}" finnes ikke i plukklisten!`, 'error');
+        
+        // Visuell og lydmessig tilbakemelding
         blinkBackground('red');
         playErrorSound();
         return;
@@ -440,6 +447,10 @@ function handlePickScan(barcode) {
     
     console.log(`PLUKKDEBUG-P105: Fant vare ${itemId} i plukklisten`);
     console.log(`PLUKKDEBUG-P106: Detaljer for vare ${itemId}:`, JSON.stringify(item, null, 2));
+    
+    // NYTT: Scroll til og fremhev raden i tabellen
+    const scrollSuccess = scrollToTableRow(itemId, 'pickList', true);
+    console.log(`PLUKKDEBUG-P106B: Scroll til vare ${itemId} i tabellen: ${scrollSuccess ? 'vellykket' : 'mislykket'}`);
     
     // Initialisere tellefelt hvis det ikke eksisterer
     if (item.pickedCount === undefined) {
@@ -450,6 +461,10 @@ function handlePickScan(barcode) {
     // SJEKK FOR MAKSIMALT ANTALL
     if (item.pickedCount >= item.quantity) {
         console.error(`PLUKKFEIL-P006: Maksantall nådd for ${itemId}: ${item.pickedCount}/${item.quantity}`);
+        
+        // NYTT: Vis tydelig statusmelding i toppen
+        showStatusMessage(`MAKS OPPNÅDD: ${item.pickedCount}/${item.quantity} enheter av "${itemId}" er allerede plukket!`, 'error', 5000);
+        
         showToast(`MAKS OPPNÅDD: ${item.pickedCount}/${item.quantity} enheter av "${itemId}" er allerede plukket!`, 'error');
         blinkBackground('red');
         playErrorSound();
@@ -474,10 +489,20 @@ function handlePickScan(barcode) {
         
         // Vis grønn bakgrunn
         blinkBackground('green');
+        
+        // NYTT: Spill suksesslyd
+        playSuccessSound();
+        
+        // NYTT: Vis statusmelding for fullstendig plukket vare
+        showStatusMessage(`Vare "${itemId}" er fullstendig plukket!`, 'success', 3000);
     } else {
         console.log(`PLUKKDEBUG-P111: Vare ${itemId} er delvis plukket: ${item.pickedCount}/${item.quantity}`);
         // Vis grønn bakgrunn for delvis plukking også
         blinkBackground('green');
+        
+        // NYTT: Vis statusmelding for delvis plukket vare
+        const remainingCount = item.quantity - item.pickedCount;
+        showStatusMessage(`Plukket vare "${itemId}" (${item.pickedCount}/${item.quantity}) - ${remainingCount} gjenstår`, 'info', 3000);
     }
     
     // Lagre sist plukket vare for angrefunksjonalitet

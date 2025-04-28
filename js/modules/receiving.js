@@ -859,19 +859,22 @@ export function handleReceiveScan(barcode) {
         }
     }
     
-    // Logger hver vare i listen for debugging
-    if (!item) {
-        appState.receiveListItems.forEach(listItem => {
-        });
-    }
-    
     // Håndtere varer som ikke er i listen
     if (!item) {
+        console.error(`Vare "${itemId}" finnes ikke i mottakslisten`);
+        
+        // NYTT: Vis tydelig statusmelding i toppen
+        showStatusMessage(`Vare "${itemId}" finnes ikke i mottakslisten!`, 'error', 5000);
+        
         showToast(`Vare "${itemId}" finnes ikke i mottakslisten. Kun varer i mottakslisten kan skannes.`, 'error');
         blinkBackground('red');
         playErrorSound();
         return;
     }
+    
+    // NYTT: Scroll til og fremhev raden i tabellen
+    const scrollSuccess = scrollToTableRow(itemId, 'receiveList', true);
+    console.log(`Scroll til vare ${itemId} i tabellen: ${scrollSuccess ? 'vellykket' : 'mislykket'}`);
     
     // Her fortsetter vi med eksisterende kode for å registrere varen
     // Initialisere tellefelt hvis det ikke eksisterer
@@ -884,10 +887,18 @@ export function handleReceiveScan(barcode) {
         // Sjekk hvis vi har overstyr-innstilling for ferdig mottatte varer
         if (appState.settings.allowOverScanning) {
             // Fortsette med skanning (overskrider forventet antall)
+            
+            // NYTT: Vis statusmelding om overskanning
+            showStatusMessage(`Merk: ${item.quantity} enheter av "${itemId}" er allerede mottatt. Overskanning aktivert.`, 'warning', 3000);
+            
             showToast(`Merk: ${item.quantity} enheter av "${itemId}" er allerede mottatt. Overskanning aktivert.`, 'warning');
             blinkBackground('orange');
         } else {
             // Stopp videre skanning av denne varen
+            
+            // NYTT: Vis tydelig statusmelding i toppen
+            showStatusMessage(`MAKS OPPNÅDD: Alle ${item.quantity} enheter av "${itemId}" er allerede mottatt!`, 'error', 5000);
+            
             showToast(`Alle ${item.quantity} enheter av "${itemId}" er allerede mottatt! Videre skanning blokkert.`, 'error');
             blinkBackground('red');
             playErrorSound();
@@ -907,6 +918,16 @@ export function handleReceiveScan(barcode) {
         if (!appState.receivedItems.includes(itemId)) {
             appState.receivedItems.push(itemId);
         }
+        
+        // NYTT: Vis statusmelding for fullstendig mottatt vare
+        showStatusMessage(`Vare "${itemId}" er fullstendig mottatt!`, 'success', 3000);
+        
+        // NYTT: Spill suksesslyd
+        playSuccessSound();
+    } else {
+        // NYTT: Vis statusmelding for delvis mottatt vare
+        const remainingCount = item.quantity - item.receivedCount;
+        showStatusMessage(`Mottatt vare "${itemId}" (${item.receivedCount}/${item.quantity}) - ${remainingCount} gjenstår`, 'info', 3000);
     }
     
     // Lagre sist mottatt vare for angrefunksjonalitet

@@ -251,3 +251,171 @@ export function playErrorSound(type = 'error') {
 export function playSuccessSound() {
     playErrorSound('success');
 }
+
+/**
+ * Scrolle til en matchende rad i en tabell som inneholder en bestemt varekode
+ * @param {string} itemId - Varenummer som skal finnes i tabellen
+ * @param {string} tableId - ID til tabellen som skal søkes i
+ * @param {boolean} highlight - Om raden skal fremheves
+ * @returns {boolean} Om scrolling var vellykket
+ */
+export function scrollToTableRow(itemId, tableId, highlight = true) {
+    if (!itemId || !tableId) return false;
+    
+    const table = document.getElementById(tableId);
+    if (!table) return false;
+    
+    // Finn alle rader i tabellen
+    const rows = table.querySelectorAll('tbody tr');
+    if (!rows || rows.length === 0) return false;
+    
+    // Fjern eventuelle tidligere fremhevinger
+    rows.forEach(row => {
+        row.classList.remove('highlighted-row');
+        row.classList.remove('blink-animation');
+    });
+    
+    // Let gjennom radene etter varenummeret
+    let found = false;
+    for (const row of rows) {
+        // Sjekk attributter først - data-item-id eller data-id
+        const rowItemId = row.getAttribute('data-item-id') || row.getAttribute('data-id');
+        
+        // Deretter sjekk tekstinnhold i celler
+        let cellMatch = false;
+        const cells = row.querySelectorAll('td');
+        for (const cell of cells) {
+            // Sjekk om cellen inneholder varenummeret som tekst
+            if (cell.textContent.trim() === itemId) {
+                cellMatch = true;
+                break;
+            }
+        }
+        
+        // Hvis vi fant en match, scroll til denne raden
+        if (rowItemId === itemId || cellMatch) {
+            // Scroll til raden med en liten offset for å sikre at den er synlig
+            const container = table.closest('.table-container') || table.parentElement;
+            
+            if (container) {
+                // Beregn posisjonen med litt offset
+                const rowTop = row.offsetTop - container.offsetTop;
+                const containerHeight = container.clientHeight;
+                const scrollPosition = rowTop - (containerHeight / 4); // Plasser raden 1/4 ned i containeren
+                
+                container.scrollTo({
+                    top: scrollPosition,
+                    behavior: 'smooth'
+                });
+            } else {
+                // Fallback til scrollIntoView hvis vi ikke har en container
+                row.scrollIntoView({
+                    behavior: 'smooth',
+                    block: 'center'
+                });
+            }
+            
+            // Fremhev raden hvis angitt
+            if (highlight) {
+                row.classList.add('highlighted-row');
+                row.classList.add('blink-animation');
+                
+                // Fjern fremheving etter en viss tid
+                setTimeout(() => {
+                    row.classList.remove('blink-animation');
+                    // Beholder highlighted-row for å vise hvilken rad som ble skannet
+                }, 2000);
+            }
+            
+            found = true;
+            break;
+        }
+    }
+    
+    return found;
+}
+
+/**
+ * Viser en statusmelding i toppen av skjermen
+ * @param {string} message - Meldingen som skal vises
+ * @param {string} type - Type melding (success, error, warning, info)
+ * @param {number} duration - Hvor lenge meldingen skal vises (i millisekunder)
+ */
+export function showStatusMessage(message, type = 'info', duration = 3000) {
+    // Finn eller opprett statuscontainer
+    let statusContainer = document.getElementById('scannerStatusMessage');
+    
+    if (!statusContainer) {
+        // Opprett container hvis den ikke finnes
+        statusContainer = document.createElement('div');
+        statusContainer.id = 'scannerStatusMessage';
+        statusContainer.className = 'scanner-status-message';
+        document.body.appendChild(statusContainer);
+        
+        // Legg til styling hvis det ikke allerede er i CSS
+        const style = document.createElement('style');
+        style.textContent = `
+            .scanner-status-message {
+                position: fixed;
+                top: 0;
+                left: 0;
+                right: 0;
+                padding: 12px;
+                text-align: center;
+                font-weight: bold;
+                z-index: 10000;
+                transform: translateY(-100%);
+                transition: transform 0.3s ease-in-out;
+                box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+                opacity: 0.95;
+            }
+            .scanner-status-message.visible {
+                transform: translateY(0);
+            }
+            .scanner-status-message.success {
+                background-color: #4CAF50;
+                color: white;
+            }
+            .scanner-status-message.error {
+                background-color: #F44336;
+                color: white;
+            }
+            .scanner-status-message.warning {
+                background-color: #FF9800;
+                color: white;
+            }
+            .scanner-status-message.info {
+                background-color: #2196F3;
+                color: white;
+            }
+            .highlighted-row {
+                background-color: rgba(255, 255, 0, 0.2) !important;
+            }
+            .blink-animation {
+                animation: highlight-blink 1s ease-in-out 3;
+            }
+            @keyframes highlight-blink {
+                0% { background-color: rgba(255, 255, 0, 0.2); }
+                50% { background-color: rgba(255, 255, 0, 0.5); }
+                100% { background-color: rgba(255, 255, 0, 0.2); }
+            }
+        `;
+        document.head.appendChild(style);
+    }
+    
+    // Sett meldingen og typen
+    statusContainer.textContent = message;
+    statusContainer.className = `scanner-status-message ${type}`;
+    
+    // Vis meldingen
+    setTimeout(() => {
+        statusContainer.classList.add('visible');
+    }, 10);
+    
+    // Skjul meldingen etter angitt tid
+    if (duration > 0) {
+        setTimeout(() => {
+            statusContainer.classList.remove('visible');
+        }, duration);
+    }
+}
