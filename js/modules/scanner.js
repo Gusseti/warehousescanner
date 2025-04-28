@@ -1918,8 +1918,12 @@ export function registerHIDScannerHandler(callback) {
         }
         
         // Trimme bort whitespace og eventuelle Enter-tegn
-        const barcode = window.scannerBuffer.trim().replace(/[\r\n]/g, '');
-        console.log(`Strekkode fra HID-skanner: "${barcode}" (lengde: ${barcode.length})`);
+        const rawBarcode = window.scannerBuffer.trim();
+        // Fjern "Enter" fra slutten av strekkoden hvis den finnes der
+        const barcode = rawBarcode.replace(/Enter$/i, '').replace(/[\r\n]/g, '');
+        
+        console.log(`Strekkode fra HID-skanner: "${rawBarcode}" (lengde: ${rawBarcode.length})`);
+        console.log(`Renset strekkode: "${barcode}" (lengde: ${barcode.length})`);
         
         // Nullstill buffer
         window.scannerBuffer = '';
