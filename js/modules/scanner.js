@@ -1854,3 +1854,194 @@ export {
     isScanning,
     playErrorSound
 };
+
+/**
+ * Registrerer global handler for HID-skannere som er koblet til via Windows
+ * @param {Function} callback - Valgfri callback når en strekkode er skannet
+ * @returns {boolean} Om registreringen var vellykket
+ */
+export function registerHIDScannerHandler(callback) {
+    console.log('Registrerer HID-skannerstøtte...');
+    
+    // Variabel for å holde strekkode-bufferen
+    if (!window.scannerBuffer) {
+        window.scannerBuffer = '';
+    }
+    
+    // Variabel for å holde styr på siste tastetrykk
+    if (!window.lastKeyPressTime) {
+        window.lastKeyPressTime = 0;
+    }
+    
+    // Vi har allerede registrert handlere
+    if (window.hidScannerHandlersRegistered) {
+        console.log('HID-skannerstøtte er allerede registrert.');
+        return true;
+    }
+    
+    // Vis en indikator på skjermen
+    const showScanIndicator = (color = '#00ff00', duration = 300) => {
+        let indicator = document.getElementById('scan-indicator');
+        if (!indicator) {
+            indicator = document.createElement('div');
+            indicator.id = 'scan-indicator';
+            indicator.style.position = 'fixed';
+            indicator.style.top = '10px';
+            indicator.style.right = '10px';
+            indicator.style.width = '20px';
+            indicator.style.height = '20px';
+            indicator.style.borderRadius = '50%';
+            indicator.style.backgroundColor = color;
+            indicator.style.boxShadow = `0 0 10px ${color}`;
+            indicator.style.display = 'none';
+            indicator.style.zIndex = '9999';
+            document.body.appendChild(indicator);
+        } else {
+            indicator.style.backgroundColor = color;
+            indicator.style.boxShadow = `0 0 10px ${color}`;
+        }
+        
+        // Vis indikatoren
+        indicator.style.display = 'block';
+        
+        // Skjul indikatoren etter en viss tid
+        setTimeout(() => {
+            indicator.style.display = 'none';
+        }, duration);
+    };
+    
+    // Behandle strekkode når den er komplett
+    const processBuffer = () => {
+        // Sjekk at vi har data
+        if (!window.scannerBuffer || window.scannerBuffer.length === 0) {
+            return;
+        }
+        
+        // Trimme bort whitespace og eventuelle Enter-tegn
+        const barcode = window.scannerBuffer.trim().replace(/[\r\n]/g, '');
+        console.log(`Strekkode fra HID-skanner: "${barcode}" (lengde: ${barcode.length})`);
+        
+        // Nullstill buffer
+        window.scannerBuffer = '';
+        
+        // Sjekk om strekkoden ser gyldig ut (lengde > 3 for å unngå vanlige tastetrykk)
+        if (barcode.length > 3) {
+            showScanIndicator('#00ff00', 1000); // grønn for vellykket skann
+            showToast(`Skannet strekkode: ${barcode}`, 'success');
+            
+            // Kall callback hvis angitt
+            if (typeof callback === 'function') {
+                callback(barcode);
+            } else {
+                // Ellers bruk standard prosessering
+                processScannedBarcode(barcode);
+            }
+        }
+    };
+    
+    // Registrer keydown-handler for å fange tastaturinndata
+    document.addEventListener('keydown', (e) => {
+        // Skip hvis vi er i et input-felt (la normal funksjonalitet håndtere det)
+        if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') {
+            return;
+        }
+        
+        // Vis visuell indikator
+        showScanIndicator('#ffff00'); // gul for hvert tastetrykk
+        
+        // Merk at brukeren holder Shift/Ctrl/Alt/etc.
+        if (e.shiftKey || e.ctrlKey || e.altKey || e.metaKey) {
+            window.manualInput = true;
+            setTimeout(() => { window.manualInput = false; }, 3000);
+            return;
+        }
+    });
+    
+    // Registrer keypress-handler for å samle strekkode-tegn
+    document.addEventListener('keypress', (e) => {
+        // Skip hvis vi er i et input-felt (la normal funksjonalitet håndtere det)
+        if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') {
+            return;
+        }
+        
+        // Sjekk om dette er manuell input (bruker holder modifikasjonstaster)
+        if (window.manualInput) {
+            return;
+        }
+        
+        // Vis visuell indikator
+        showScanIndicator('#ffff00'); // gul for hvert tastetrykk
+        
+        // Sjekk tid siden siste tastetrykk
+        const now = Date.now();
+        const timeSinceLastKeyPress = now - window.lastKeyPressTime;
+        
+        // Hvis det er mer enn 500ms, anta dette er starten på en ny strekkode
+        if (timeSinceLastKeyPress > 500) {
+            window.scannerBuffer = '';
+        }
+        
+        // Oppdater timestamp
+        window.lastKeyPressTime = now;
+        
+        // Legg til tegnet i bufferen
+        window.scannerBuffer += e.key;
+        
+        // Hvis Enter-tasten ble trykket, behandle strekkoden umiddelbart
+        if (e.key === 'Enter' || e.keyCode === 13) {
+            e.preventDefault(); // Hindre standard Enter-oppførsel
+            processBuffer();
+            return;
+        }
+        
+        // Ellers, start/nullstill timeren
+        if (window.scannerTimer) {
+            clearTimeout(window.scannerTimer);
+        }
+        
+        // Sett en timer for å behandle strekkoden etter en liten pause
+        // Dette er viktig for skannere som ikke sender Enter etter strekkoden
+        window.scannerTimer = setTimeout(processBuffer, 300);
+    });
+    
+    // For skannere som sender til input-felt
+    document.addEventListener('input', (e) => {
+        // Bare prosesser input i tekstfelt som ikke er textarea
+        if (e.target.tagName !== 'INPUT' || e.target.type === 'textarea') {
+            return;
+        }
+        
+        const input = e.target;
+        const value = input.value.trim();
+        
+        // Hvis verdien er lang nok til å være en strekkode og ikke er manuell input
+        if (value.length >= 8 && !window.manualInput) {
+            console.log(`Potensiell strekkode i inputfelt: "${value}"`);
+            
+            // Vis visuell indikator
+            showScanIndicator('#00ff00', 1000);
+            
+            // Kall callback hvis angitt
+            if (typeof callback === 'function') {
+                callback(value);
+            } else {
+                // Ellers bruk standard prosessering
+                processScannedBarcode(value);
+            }
+            
+            // Tøm input-feltet
+            setTimeout(() => {
+                input.value = '';
+            }, 100);
+        }
+    });
+    
+    // Marker at vi har registrert handlere
+    window.hidScannerHandlersRegistered = true;
+    console.log('HID-skannerstøtte er nå aktivert. Du kan bruke en skanner som er koblet til via Windows Bluetooth.');
+    
+    // Vis en melding til brukeren
+    showToast('HID-skannerstøtte aktivert. Koble til skanneren via Windows Bluetooth-innstillinger.', 'info', 5000);
+    
+    return true;
+}

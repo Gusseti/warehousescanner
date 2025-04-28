@@ -259,8 +259,16 @@ export function updateReturnsUI() {
  */
 async function connectToBluetoothReturnScanner() {
     try {
-        showToast('Kobler til Bluetooth-skanner...', 'info');
-        await bluetoothScanner.connect();
+        showToast('HID-skannerstøtte er aktivert. Koble til skanneren via Windows Bluetooth-innstillinger. Du kan nå begynne å skanne.', 'info');
+        
+        // Sjekk om skanneren allerede er koblet til via Windows Bluetooth
+        const deviceInfo = bluetoothScanner.getDeviceInfo();
+        if (deviceInfo) {
+            showToast(`Allerede koblet til: ${deviceInfo.name}`, 'success');
+        } else {
+            // Prøv Web Bluetooth-tilkobling som backup hvis brukeren foretrekker det
+            await bluetoothScanner.connect();
+        }
     } catch (error) {
         showToast(error.message, 'error');
     }
@@ -325,6 +333,11 @@ export function handleReturnScan(barcode, quantity = 1) {
     // Normaliser strekkoden: Fjern eventuelle mellomrom og tegn som ikke er alfanumeriske
     barcode = barcode.toString().trim().replace(/[^a-zA-Z0-9]/g, '');
     console.log('Normalisert strekkode:', barcode);
+    
+    // Legg til ekstra debugging
+    console.log(`[DEBUG] handleReturnScan: Håndterer strekkode "${barcode}" med kvantitet ${quantity}`);
+    console.log(`[DEBUG] handleReturnScan: Gjeldende modul er "${appState.currentModule}"`);
+    console.log(`[DEBUG] handleReturnScan: appState.returnListItems lengde før: ${appState.returnListItems ? appState.returnListItems.length : 'undefined'}`);
     
     // Sjekk om strekkoden finnes i barcode mapping
     let itemId = barcode;

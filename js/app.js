@@ -1,7 +1,7 @@
 // app.js - Hovedapplikasjonen
 
 // Import nødvendige moduler
-import { initCameraScanner as initScanner, stopCameraScanning as closeScanner } from './modules/scanner.js';
+import { initCameraScanner as initScanner, stopCameraScanning as closeScanner, registerHIDScannerHandler } from './modules/scanner.js';
 import { updatePickingUI, initPicking as registerPickingHandlers } from './modules/picking.js';
 import { updateReceivingUI, initReceiving as registerReceivingHandlers } from './modules/receiving.js';
 import { updateReturnsUI, initReturns as registerReturnsHandlers } from './modules/returns.js';
@@ -114,6 +114,16 @@ async function initApp() {
         } catch (error) {
             console.error('Feil ved Service Worker registrering:', error);
         }
+    }
+
+    // Aktiver HID-skannerstøtte (for strekkodeskannere koblet via Windows Bluetooth)
+    try {
+        if (registerHIDScannerHandler()) {
+            console.log('HID-skannerstøtte aktivert. Du kan nå bruke en skanner koblet via Windows Bluetooth.');
+            showToast('HID-skannerstøtte aktivert. Koble til skanneren via Windows Bluetooth-innstillinger.', 'info', 5000);
+        }
+    } catch (error) {
+        console.error('Kunne ikke aktivere HID-skannerstøtte:', error);
     }
 
     // Hvis dette er en side som krever barcodedata, last den

@@ -1,0 +1,1276 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>R8 Scanner Pairing (BLE Mode)</title>
+    <link rel="stylesheet" href="css/styles.css">
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        
+        h1 {
+            color: #2c3e50;
+        }
+        
+        .card {
+            background-color: #f9f9f9;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        button {
+            background-color: #3498db;
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-right: 10px;
+            margin-bottom: 10px;
+        }
+        
+        button:hover {
+            background-color: #2980b9;
+        }
+        
+        button:disabled {
+            background-color: #bdc3c7;
+            cursor: not-allowed;
+        }
+        
+        .log-area {
+            background-color: #2c3e50;
+            color: #ecf0f1;
+            border-radius: 4px;
+            padding: 10px;
+            font-family: monospace;
+            height: 300px;
+            overflow-y: auto;
+            margin-top: 20px;
+        }
+        
+        .log-entry {
+            margin-bottom: 5px;
+            border-bottom: 1px solid #34495e;
+            padding-bottom: 5px;
+        }
+        
+        .success {
+            color: #2ecc71;
+        }
+        
+        .error {
+            color: #e74c3c;
+        }
+        
+        .info {
+            color: #3498db;
+        }
+        
+        .warning {
+            color: #f1c40f;
+        }
+        
+        .device-list {
+            list-style-type: none;
+            padding: 0;
+        }
+        
+        .device-item {
+            padding: 10px;
+            border: 1px solid #ddd;
+            margin-bottom: 5px;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        
+        .device-item:hover {
+            background-color: #ecf0f1;
+        }
+
+        .scanner-section {
+            margin: 20px 0;
+            padding: 20px;
+            border-radius: 8px;
+            background-color: #f5f5f5;
+        }
+        .scanner-info {
+            margin-top: 20px;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            background-color: #fff;
+        }
+        .status-connected {
+            color: green;
+            font-weight: bold;
+        }
+        .status-disconnected {
+            color: red;
+            font-weight: bold;
+        }
+        .scan-data {
+            margin-top: 20px;
+            max-height: 300px;
+            overflow-y: auto;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+        .action-buttons {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin: 15px 0;
+        }
+        .scan-mode-select {
+            margin: 15px 0;
+        }
+        #debug-log {
+            font-family: monospace;
+            background-color: #f8f9fa;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            max-height: 200px;
+            overflow-y: auto;
+            margin-top: 20px;
+        }
+        .debug-entry {
+            margin-bottom: 5px;
+            border-bottom: 1px solid #eee;
+            padding-bottom: 5px;
+        }
+        .advanced-options {
+            margin-top: 15px;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            background-color: #f9f9f9;
+        }
+        .advanced-heading {
+            cursor: pointer;
+            user-select: none;
+        }
+        .advanced-heading:hover {
+            color: #3498db;
+        }
+        .connection-mode {
+            margin-top: 20px;
+            background-color: #e3f2fd;
+            padding: 10px;
+            border-radius: 5px;
+            border-left: 4px solid #2196f3;
+        }
+        .connection-type-buttons {
+            display: flex;
+            gap: 10px;
+            margin-top: 10px;
+        }
+        .connection-type-buttons button {
+            flex: 1;
+            padding: 8px;
+        }
+        .connection-type-buttons button.active {
+            background-color: #2196f3;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>R8 Scanner Pairing (BLE Mode)</h1>
+        
+        <div class="scanner-section">
+            <h2>Scanner Connection</h2>
+            <p>Connect your R8 Bluetooth scanner to start scanning barcodes.</p>
+            
+            <div class="connection-mode">
+                <h3>Connection Mode</h3>
+                <p>Select the connection mode for your R8 scanner:</p>
+                <div class="connection-type-buttons">
+                    <button id="ble-mode-button" class="active">BLE Mode</button>
+                    <button id="spp-mode-button">SPP Mode</button>
+                    <button id="hid-mode-button">HID Mode</button>
+                </div>
+                <p id="mode-description">BLE Mode: Low power consumption Bluetooth Low Energy mode.</p>
+            </div>
+            
+            <div class="action-buttons">
+                <button id="connect-ble-button" class="btn btn-primary">Connect Scanner (BLE)</button>
+                <button id="connect-any-button" class="btn btn-secondary">Find Any Bluetooth Device</button>
+                <button id="disconnect-button" class="btn btn-danger" disabled>Disconnect</button>
+            </div>
+            
+            <div class="advanced-options">
+                <h3 class="advanced-heading" id="advanced-toggle">▶ Advanced Options</h3>
+                <div id="advanced-controls" style="display: none;">
+                    <div>
+                        <label for="scan-filter-type">Device Filter Type:</label>
+                        <select id="scan-filter-type">
+                            <option value="name-prefix">Name Prefix</option>
+                            <option value="service">Service UUID</option>
+                            <option value="any" selected>Accept Any Device</option>
+                        </select>
+                    </div>
+                    <div style="margin-top: 10px;">
+                        <label for="device-name-prefix">Device Name Prefixes (comma separated):</label>
+                        <input type="text" id="device-name-prefix" value="R8,Scanner,Barcode,BLE,BT" style="width: 100%; padding: 5px;">
+                    </div>
+                    <div style="margin-top: 10px; margin-bottom: 10px;">
+                        <label for="custom-service-uuid">Custom BLE Service UUID (optional):</label>
+                        <input type="text" id="custom-service-uuid" placeholder="Example: 49535343-fe7d-4ae5-8fa9-9fafd205e455" style="width: 100%; padding: 5px;">
+                    </div>
+                    <div style="margin-top: 10px;">
+                        <button id="apply-settings" class="btn btn-secondary">Apply Settings</button>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="scan-mode-select">
+                <label for="scan-mode">Scan Mode:</label>
+                <select id="scan-mode" disabled>
+                    <option value="Trigger mode">Trigger Mode</option>
+                    <option value="Detection mode">Detection Mode</option>
+                    <option value="Continuous mode">Continuous Mode</option>
+                </select>
+                <button id="apply-mode" class="btn btn-secondary" disabled>Apply</button>
+            </div>
+            
+            <div class="scanner-info">
+                <h3>Scanner Information</h3>
+                <p>Status: <span id="connection-status" class="status-disconnected">Disconnected</span></p>
+                <p>Device: <span id="device-name">Not connected</span></p>
+                <p>Model: R8</p>
+                <p>Current Mode: <span id="current-mode">Trigger mode</span></p>
+                <p>Connection Type: <span id="connection-type">BLE</span></p>
+                <h4>Supported Barcode Types</h4>
+                <p><strong>1D:</strong> EAN, UPC, Code 39, Code 93, Code 128, UCC/EAN 128, Code 11, Codabar, Interleaved 2 of 5, Standard 25, MSI-Plessey, GS1 Databar, Industrial 25, Matrix 2 of 5</p>
+                <p><strong>2D:</strong> QR Code, Data Matrix, PDF417, Maxicode, Aztec, Hanxin</p>
+            </div>
+            
+            <div id="debug-log">
+                <h3>Connection Debug Log</h3>
+                <div id="debug-entries"></div>
+            </div>
+        </div>
+        
+        <div class="scanner-section">
+            <h2>Scan Test</h2>
+            <p>Scan a barcode to test the connection.</p>
+            
+            <div class="scan-data">
+                <h3>Scan Results</h3>
+                <div id="scan-results"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        /**
+         * BluetoothScanner class - directly included in the HTML to avoid CORS issues
+         */
+        class BluetoothScanner {
+            constructor() {
+                this.device = null;
+                this.server = null;
+                this.service = null;
+                this.characteristic = null;
+                this.isConnected = false;
+                this.dataCallback = null;
+                this.connectionCallback = null;
+                this.disconnectionCallback = null;
+                this.errorCallback = null;
+                this.logCallback = null;
+                this.connectionType = 'BLE'; // Default to BLE
+                this.scannerInfo = {
+                    model: "R8",
+                    supportedProtocols: ["HID", "SPP", "BLE"],
+                    barcodeTypes: {
+                        "1D": ["EAN", "UPC", "Code 39", "Code 93", "Code 128", "UCC/EAN 128", "Code 11", 
+                              "Codabar", "Interleaved 2 of 5", "Standard 25", "MSI-Plessey",
+                              "GS1 Databar", "Industrial 25", "Matrix 2 of 5"],
+                        "2D": ["QR Code", "Data Matrix", "PDF417", "Maxicode", "Aztec", "Hanxin"]
+                    }
+                };
+                this.scanModes = {
+                    TRIGGER: "Trigger mode",
+                    DETECTION: "Detection mode",
+                    CONTINUOUS: "Continuous mode"
+                };
+                this.currentScanMode = this.scanModes.TRIGGER;
+                
+                // Service UUIDs by connection type
+                this.serviceUUIDs = {
+                    BLE: [
+                        // BLE services
+                        "49535343-fe7d-4ae5-8fa9-9fafd205e455", // R8 Primary Service
+                        "49535343-8841-43f4-a8d4-ecbe34729bb3",
+                        "0000ffe0-0000-1000-8000-00805f9b34fb",
+                        "6e400001-b5a3-f393-e0a9-e50e24dcca9e",  // Nordic UART Service
+                        "0000fff0-0000-1000-8000-00805f9b34fb",   // Common generic BLE service
+                        // Additional BLE services common for scanners
+                        "6e400001-b5a3-f393-e0a9-e50e24dcca9e", // UART
+                        "0000fee7-0000-1000-8000-00805f9b34fb", // Device Information
+                        // Additional services commonly found in barcode scanners
+                        "0000fff0-0000-1000-8000-00805f9b34fb", // Common in Chinese scanners
+                        "0000180a-0000-1000-8000-00805f9b34fb", // Device Information Service
+                        "0000180f-0000-1000-8000-00805f9b34fb", // Battery Service
+                        "00001800-0000-1000-8000-00805f9b34fb", // Generic Access Service
+                        "00001801-0000-1000-8000-00805f9b34fb", // Generic Attribute Service
+                        "03b80e5a-ede8-4b33-a751-6ce34ec4c700", // Alternative scanner service
+                        "7377772e-8a04-0000-0000-000034383734", // Another scanner service 
+                        "0000fef5-0000-1000-8000-00805f9b34fb"  // OTA service found in some scanners
+                    ],
+                    SPP: [
+                        // SPP (Serial Port Profile) - common for many Bluetooth scanners
+                        "00001101-0000-1000-8000-00805f9b34fb"
+                    ],
+                    HID: [
+                        // HID (Human Interface Device) - for scanners acting as keyboards
+                        "00001812-0000-1000-8000-00805f9b34fb",
+                        "00001124-0000-1000-8000-00805f9b34fb"
+                    ]
+                };
+                
+                // Get the list of all possible service UUIDs
+                this.potentialServiceUUIDs = [
+                    ...this.serviceUUIDs.BLE,
+                    ...this.serviceUUIDs.SPP,
+                    ...this.serviceUUIDs.HID
+                ];
+                
+                // Known characteristic UUIDs for BLE scanners
+                this.knownCharacteristicUUIDs = {
+                    BLE: [
+                        "49535343-8841-43f4-a8d4-ecbe34729bb3", // Notification characteristic
+                        "49535343-1e4d-4bd9-ba61-23c647249616", // Command characteristic
+                        "6e400002-b5a3-f393-e0a9-e50e24dcca9e", // UART TX (notify)
+                        "6e400003-b5a3-f393-e0a9-e50e24dcca9e", // UART RX (write)
+                        "0000ffe1-0000-1000-8000-00805f9b34fb"  // Common BLE characteristic
+                    ]
+                };
+            }
+
+            /**
+             * Set the connection type (BLE, SPP, HID)
+             * @param {string} type - The connection type to set
+             */
+            setConnectionType(type) {
+                if (['BLE', 'SPP', 'HID'].includes(type)) {
+                    this.connectionType = type;
+                    this._log(`Connection type set to: ${type}`);
+                    return true;
+                }
+                this._handleError(`Invalid connection type: ${type}`);
+                return false;
+            }
+
+            /**
+             * Set callback functions for various scanner events
+             * @param {Object} callbacks - Object containing callback functions
+             */
+            setCallbacks(callbacks) {
+                if (callbacks.data) this.dataCallback = callbacks.data;
+                if (callbacks.connection) this.connectionCallback = callbacks.connection;
+                if (callbacks.disconnection) this.disconnectionCallback = callbacks.disconnection;
+                if (callbacks.error) this.errorCallback = callbacks.error;
+                if (callbacks.log) this.logCallback = callbacks.log;
+            }
+
+            /**
+             * Connect to any Bluetooth device (not just scanners)
+             * Useful for debugging and finding unknown devices
+             */
+            async connectToAnyDevice() {
+                if (!navigator.bluetooth) {
+                    this._handleError("Bluetooth not supported by this browser. Please use Chrome, Edge, or another browser that supports Web Bluetooth. Note that this page must be served from a secure origin (https:// or localhost).");
+                    return false;
+                }
+                
+                this._log("Requesting any Bluetooth device...");
+                
+                try {
+                    // Request any device with no filters
+                    this.device = await navigator.bluetooth.requestDevice({
+                        acceptAllDevices: true,
+                        optionalServices: this.potentialServiceUUIDs
+                    });
+                    
+                    if (!this.device) {
+                        throw new Error("No device selected");
+                    }
+                    
+                    this._log(`Found device: ${this.device.name || "Unknown Device"}`);
+                    
+                    // Setup disconnect listener
+                    this.device.addEventListener('gattserverdisconnected', this._handleDisconnect.bind(this));
+                    
+                    // Connect to GATT server
+                    this._log("Connecting to GATT server...");
+                    this.server = await this.device.gatt.connect();
+                    this._log("Connected to GATT server.");
+                    
+                    // Discover services
+                    this._log("Discovering services...");
+                    const services = await this.server.getPrimaryServices();
+                    this._log(`Found ${services.length} services.`);
+                    
+                    // List all services
+                    for (const service of services) {
+                        this._log(`Service UUID: ${service.uuid}`);
+                        this.service = service;
+                        
+                        try {
+                            const characteristics = await service.getCharacteristics();
+                            this._log(`Service ${service.uuid} has ${characteristics.length} characteristics`);
+                            
+                            for (const characteristic of characteristics) {
+                                this._log(`  Characteristic UUID: ${characteristic.uuid}`);
+                                this._log(`  Properties: ${JSON.stringify(this._getPropNames(characteristic.properties))}`);
+                                
+                                // If this characteristic supports notifications, use it
+                                if (characteristic.properties.notify || characteristic.properties.indicate) {
+                                    this._log("Found characteristic with notify/indicate support. Using it for data.");
+                                    this.characteristic = characteristic;
+                                }
+                            }
+                        } catch (error) {
+                            this._log(`Error discovering characteristics: ${error.message}`);
+                        }
+                    }
+                    
+                    if (this.characteristic) {
+                        // Start listening for data
+                        this._log("Starting notifications on characteristic...");
+                        await this.characteristic.startNotifications();
+                        this.characteristic.addEventListener('characteristicvaluechanged', this._handleData.bind(this));
+                        this._log("Notifications started successfully.");
+                        
+                        this.isConnected = true;
+                        if (this.connectionCallback) this.connectionCallback({
+                            device: this.device.name || "Unknown Device",
+                            status: "connected",
+                            connectionType: "Unknown"
+                        });
+                        return true;
+                    } else {
+                        this._log("No suitable characteristic found for receiving data.");
+                        throw new Error("No suitable characteristic found for receiving data");
+                    }
+                } catch (error) {
+                    this._handleError(error.message);
+                    return false;
+                }
+            }
+
+            /**
+             * Helper function to convert properties bitfield to names
+             */
+            _getPropNames(properties) {
+                const names = [];
+                if (properties.broadcast) names.push("broadcast");
+                if (properties.read) names.push("read");
+                if (properties.writeWithoutResponse) names.push("writeWithoutResponse");
+                if (properties.write) names.push("write");
+                if (properties.notify) names.push("notify");
+                if (properties.indicate) names.push("indicate");
+                if (properties.authenticatedSignedWrites) names.push("authenticatedSignedWrites");
+                if (properties.reliableWrite) names.push("reliableWrite");
+                if (properties.writableAuxiliaries) names.push("writableAuxiliaries");
+                return names;
+            }
+
+            /**
+             * Connect specifically with BLE mode
+             * @param {Object} options - Options for BLE connection
+             */
+            async connectBLE(options = {}) {
+                this.setConnectionType('BLE');
+                
+                // Use the primary BLE service UUIDs
+                const targetServices = [...this.serviceUUIDs.BLE];
+                
+                // Add custom service UUID if provided
+                if (options.customServiceUUID) {
+                    this._log(`Adding custom service UUID: ${options.customServiceUUID}`);
+                    targetServices.unshift(options.customServiceUUID);
+                }
+                
+                options.preferredServices = targetServices;
+                return this.connect(options);
+            }
+
+            /**
+             * Connect to the Bluetooth scanner
+             * @param {Object} options - Connection options
+             * @returns {Promise} - Resolution or rejection of the connection attempt
+             */
+            async connect(options = {}) {
+                if (!navigator.bluetooth) {
+                    this._handleError("Bluetooth not supported by this browser. Please use Chrome, Edge, or another browser that supports Web Bluetooth. Note that this page must be served from a secure origin (https:// or localhost).");
+                    return false;
+                }
+                
+                const defaultOptions = {
+                    filterType: 'name-prefix',
+                    namePrefixes: ['R8', 'Scanner', 'Barcode', 'BLE', 'BT'],
+                    acceptAny: false,
+                    preferredServices: this.serviceUUIDs[this.connectionType] || this.potentialServiceUUIDs
+                };
+                
+                const connectOptions = { ...defaultOptions, ...options };
+                
+                this._log(`Starting ${this.connectionType} connection with options: ${JSON.stringify(connectOptions)}`);
+                
+                try {
+                    let requestOptions = {};
+                    
+                    if (connectOptions.acceptAny) {
+                        this._log("Accepting any Bluetooth device");
+                        requestOptions = {
+                            acceptAllDevices: true,
+                            optionalServices: this.potentialServiceUUIDs
+                        };
+                    } else if (connectOptions.filterType === 'name-prefix') {
+                        this._log(`Using name prefixes: ${connectOptions.namePrefixes.join(', ')}`);
+                        const filters = connectOptions.namePrefixes.map(prefix => ({ namePrefix: prefix }));
+                        requestOptions = {
+                            filters: filters,
+                            optionalServices: this.potentialServiceUUIDs
+                        };
+                    } else if (connectOptions.filterType === 'service') {
+                        this._log(`Using service UUID filter for ${this.connectionType} mode`);
+                        requestOptions = {
+                            filters: [{ services: connectOptions.preferredServices.slice(0, 4) }],
+                            optionalServices: this.potentialServiceUUIDs
+                        };
+                    }
+                    
+                    this._log("Requesting Bluetooth device...");
+                    this.device = await navigator.bluetooth.requestDevice(requestOptions);
+
+                    if (!this.device) {
+                        throw new Error("No device selected");
+                    }
+                    
+                    this._log(`Selected device: ${this.device.name || "Unknown Device"}`);
+
+                    // Setup disconnect listener
+                    this.device.addEventListener('gattserverdisconnected', this._handleDisconnect.bind(this));
+                    
+                    // Connect to GATT server
+                    this._log("Connecting to GATT server...");
+                    this.server = await this.device.gatt.connect();
+                    this._log("Connected to GATT server successfully.");
+                    
+                    // Try to discover services
+                    let servicesFound = false;
+                    
+                    // First try preferred services based on connection type
+                    for (const uuid of connectOptions.preferredServices) {
+                        try {
+                            this._log(`Trying to get ${this.connectionType} service: ${uuid}`);
+                            this.service = await this.server.getPrimaryService(uuid);
+                            servicesFound = true;
+                            this._log(`Connected to ${this.connectionType} service: ${uuid}`);
+                            break;
+                        } catch (error) {
+                            this._log(`${this.connectionType} service ${uuid} not found`);
+                            // Continue to next service UUID
+                        }
+                    }
+                    
+                    // If no preferred services found, try to get all services
+                    if (!servicesFound) {
+                        try {
+                            this._log("Discovering all services...");
+                            const services = await this.server.getPrimaryServices();
+                            this._log(`Found ${services.length} services`);
+                            
+                            if (services.length > 0) {
+                                // Use the first service for now
+                                this.service = services[0];
+                                servicesFound = true;
+                                this._log(`Using service: ${this.service.uuid}`);
+                            }
+                        } catch (error) {
+                            this._log(`Error discovering all services: ${error.message}`);
+                            // Continue to try specific services
+                        }
+                    }
+                    
+                    // If still no services found, try all other potential services
+                    if (!servicesFound) {
+                        for (const uuid of this.potentialServiceUUIDs) {
+                            // Skip services we already tried
+                            if (connectOptions.preferredServices.includes(uuid)) continue;
+                            
+                            try {
+                                this._log(`Trying fallback service: ${uuid}`);
+                                this.service = await this.server.getPrimaryService(uuid);
+                                servicesFound = true;
+                                this._log(`Connected to service: ${uuid}`);
+                                break;
+                            } catch (error) {
+                                this._log(`Service ${uuid} not found`);
+                                // Continue to next service UUID
+                            }
+                        }
+                    }
+                    
+                    if (!servicesFound) {
+                        throw new Error(`No compatible services found in ${this.connectionType} mode`);
+                    }
+
+                    // Get characteristics for the service
+                    this._log("Getting characteristics...");
+                    const characteristics = await this.service.getCharacteristics();
+                    this._log(`Found ${characteristics.length} characteristics`);
+                    
+                    // First, try to find known characteristics for this connection type
+                    let foundReadableCharacteristic = false;
+                    
+                    if (this.knownCharacteristicUUIDs[this.connectionType]) {
+                        for (const uuid of this.knownCharacteristicUUIDs[this.connectionType]) {
+                            try {
+                                this._log(`Looking for known ${this.connectionType} characteristic: ${uuid}`);
+                                const characteristic = characteristics.find(c => c.uuid === uuid);
+                                
+                                if (characteristic) {
+                                    this._log(`Found known ${this.connectionType} characteristic: ${uuid}`);
+                                    this.characteristic = characteristic;
+                                    foundReadableCharacteristic = true;
+                                    break;
+                                }
+                            } catch (error) {
+                                this._log(`Error finding characteristic ${uuid}: ${error.message}`);
+                            }
+                        }
+                    }
+                    
+                    // If no known characteristic found, find a characteristic that supports notifications
+                    if (!foundReadableCharacteristic) {
+                        for (const characteristic of characteristics) {
+                            this._log(`Checking characteristic: ${characteristic.uuid}`);
+                            this._log(`Properties: ${JSON.stringify(this._getPropNames(characteristic.properties))}`);
+                            
+                            if (characteristic.properties.notify || characteristic.properties.indicate) {
+                                this._log("Found characteristic with notify/indicate support");
+                                this.characteristic = characteristic;
+                                foundReadableCharacteristic = true;
+                                break;
+                            }
+                        }
+                    }
+
+                    // If still no characteristic found, use the first one as a fallback
+                    if (!foundReadableCharacteristic && characteristics.length > 0) {
+                        this._log("No notify/indicate characteristic found, using first characteristic");
+                        this.characteristic = characteristics[0];
+                    }
+
+                    if (!this.characteristic) {
+                        throw new Error("No suitable characteristic found");
+                    }
+
+                    // Start listening for data if the characteristic supports notifications
+                    if (this.characteristic.properties.notify || this.characteristic.properties.indicate) {
+                        this._log("Starting notifications on characteristic...");
+                        await this.characteristic.startNotifications();
+                        this.characteristic.addEventListener('characteristicvaluechanged', this._handleData.bind(this));
+                        this._log("Notifications started successfully");
+                    } else {
+                        this._log("Warning: Characteristic doesn't support notifications. Scanner may not work properly.");
+                    }
+                    
+                    this.isConnected = true;
+                    if (this.connectionCallback) this.connectionCallback({
+                        device: this.device.name || "Unknown Scanner",
+                        status: "connected",
+                        connectionType: this.connectionType
+                    });
+                    
+                    return true;
+                } catch (error) {
+                    this._handleError(error.message);
+                    return false;
+                }
+            }
+
+            /**
+             * Disconnect from the scanner
+             */
+            async disconnect() {
+                if (!this.device || !this.isConnected) return;
+                
+                try {
+                    this._log("Disconnecting from device...");
+                    if (this.characteristic && (this.characteristic.properties.notify || this.characteristic.properties.indicate)) {
+                        try {
+                            await this.characteristic.stopNotifications();
+                            this._log("Stopped notifications");
+                        } catch (error) {
+                            this._log(`Error stopping notifications: ${error.message}`);
+                        }
+                    }
+                    
+                    if (this.device.gatt.connected) {
+                        await this.device.gatt.disconnect();
+                        this._log("GATT disconnected");
+                    }
+                } catch (error) {
+                    this._handleError(`Error during disconnect: ${error.message}`);
+                } finally {
+                    this.isConnected = false;
+                    this._handleDisconnect();
+                    this._log("Disconnection complete");
+                }
+            }
+
+            /**
+             * Set the scan mode of the scanner
+             * @param {string} mode - The scan mode to set
+             * @returns {Promise<boolean>} - Whether setting the mode was successful
+             */
+            async setScanMode(mode) {
+                if (!this.isConnected || !this.characteristic) {
+                    this._handleError("Scanner not connected");
+                    return false;
+                }
+                
+                if (!Object.values(this.scanModes).includes(mode)) {
+                    this._handleError("Invalid scan mode");
+                    return false;
+                }
+                
+                try {
+                    this._log(`Setting scan mode to: ${mode}`);
+                    
+                    // Check if characteristic supports write operations
+                    if (!this.characteristic.properties.write && !this.characteristic.properties.writeWithoutResponse) {
+                        this._log("Warning: Current characteristic doesn't support write operations");
+                        
+                        // Try to find a writable characteristic in the same service
+                        let writeCharacteristic = null;
+                        
+                        try {
+                            this._log("Looking for a writable characteristic in the current service...");
+                            const characteristics = await this.service.getCharacteristics();
+                            
+                            for (const c of characteristics) {
+                                if (c.properties.write || c.properties.writeWithoutResponse) {
+                                    this._log(`Found writable characteristic: ${c.uuid}`);
+                                    writeCharacteristic = c;
+                                    break;
+                                }
+                            }
+                        } catch (error) {
+                            this._log(`Error finding writable characteristic: ${error.message}`);
+                        }
+                        
+                        if (!writeCharacteristic) {
+                            // For some scanners, we can't set the mode programmatically
+                            this._log("No writable characteristic found. The scanner may need to be configured manually.");
+                            this._log(`Assuming scanner is in ${mode} mode`);
+                            
+                            // Update the current mode even though we couldn't actually set it
+                            this.currentScanMode = mode;
+                            return true;
+                        } else {
+                            // Use the writable characteristic instead
+                            this._log("Using alternate writable characteristic for commands");
+                            this.commandCharacteristic = writeCharacteristic;
+                        }
+                    } else {
+                        // Use the same characteristic for commands
+                        this.commandCharacteristic = this.characteristic;
+                    }
+                    
+                    // Command format may vary by scanner model and connection type
+                    // These commands are common for many scanners, but may need to be adjusted
+                    
+                    let commands;
+                    
+                    // Different command formats based on connection type
+                    if (this.connectionType === 'BLE') {
+                        // BLE commands (examples, may need to be adjusted)
+                        commands = {
+                            [this.scanModes.TRIGGER]: new Uint8Array([0x1B, 0x31]), // ESC + 1
+                            [this.scanModes.DETECTION]: new Uint8Array([0x1B, 0x32]), // ESC + 2
+                            [this.scanModes.CONTINUOUS]: new Uint8Array([0x1B, 0x33]) // ESC + 3
+                        };
+                    } else {
+                        // Generic commands for SPP/HID
+                        commands = {
+                            [this.scanModes.TRIGGER]: new Uint8Array([0x1B, 0x31]), // ESC + 1
+                            [this.scanModes.DETECTION]: new Uint8Array([0x1B, 0x32]), // ESC + 2
+                            [this.scanModes.CONTINUOUS]: new Uint8Array([0x1B, 0x33]) // ESC + 3
+                        };
+                    }
+                    
+                    if (!this.commandCharacteristic) {
+                        throw new Error("No writable characteristic available");
+                    }
+                    
+                    // Write the command to the scanner
+                    if (this.commandCharacteristic.properties.writeWithoutResponse) {
+                        this._log("Using writeValueWithoutResponse");
+                        await this.commandCharacteristic.writeValueWithoutResponse(commands[mode]);
+                    } else if (this.commandCharacteristic.properties.write) {
+                        this._log("Using writeValue");
+                        await this.commandCharacteristic.writeValue(commands[mode]);
+                    } else {
+                        throw new Error("Characteristic doesn't support write operations");
+                    }
+                    
+                    this.currentScanMode = mode;
+                    this._log(`Scan mode set to: ${mode}`);
+                    return true;
+                } catch (error) {
+                    // If we can't set the mode, we'll just assume it's in the requested mode
+                    this._log(`Failed to set scan mode: ${error.message}`);
+                    this._log("Assuming scanner is already configured for the selected mode");
+                    
+                    // Update the current mode anyway so the UI shows the selected mode
+                    this.currentScanMode = mode;
+                    
+                    this._handleError(`Failed to set scan mode: ${error.message}`);
+                    return false;
+                }
+            }
+
+            /**
+             * Get scanner information
+             * @returns {Object} Scanner information
+             */
+            getScannerInfo() {
+                return {
+                    ...this.scannerInfo,
+                    connectionStatus: this.isConnected ? "Connected" : "Disconnected",
+                    deviceName: this.device ? this.device.name : "Not connected",
+                    currentScanMode: this.currentScanMode,
+                    connectionType: this.connectionType
+                };
+            }
+
+            /**
+             * Handle data received from the scanner
+             * @param {Event} event - The notification event
+             * @private
+             */
+            _handleData(event) {
+                const value = event.target.value;
+                let data = '';
+                
+                // Convert received data to string
+                if (value) {
+                    this._log("Received data from scanner");
+                    
+                    // For TextDecoder approach (handles various encodings)
+                    try {
+                        // First log the raw data for debugging
+                        const bytes = new Uint8Array(value.buffer);
+                        let hexString = '';
+                        let asciiString = '';
+                        for (const byte of bytes) {
+                            hexString += byte.toString(16).padStart(2, '0') + ' ';
+                            asciiString += (byte >= 32 && byte <= 126) ? String.fromCharCode(byte) : '.';
+                        }
+                        this._log(`Raw data (hex): ${hexString}`);
+                        this._log(`Raw data (ASCII): ${asciiString}`);
+                        
+                        // Try UTF-8 decoder first
+                        const decoder = new TextDecoder('utf-8');
+                        data = decoder.decode(value).trim();
+                        
+                        // If no data or only control characters, try other encoding or parsing methods
+                        if (!data || data.length === 0 || /^\s*$/.test(data)) {
+                            this._log("No valid data found with UTF-8 decoder, trying alternative methods");
+                            
+                            // Try direct ASCII conversion
+                            data = '';
+                            for (const byte of bytes) {
+                                // Filter out common control characters (like CR, LF, etc)
+                                if (byte >= 32 && byte <= 126) {
+                                    data += String.fromCharCode(byte);
+                                }
+                            }
+                            
+                            // Still no data? Try to decode the entire buffer at once
+                            if (!data || data.length === 0) {
+                                data = String.fromCharCode.apply(null, bytes).trim();
+                            }
+                        }
+                        
+                        // Check if the data is empty or just whitespace
+                        if (!data || /^\s*$/.test(data)) {
+                            // Try one last method - some scanners send prefixes or use special formats
+                            // Extract any digit sequences as they might be the barcode
+                            const digitMatch = asciiString.match(/\d+/);
+                            if (digitMatch) {
+                                data = digitMatch[0];
+                                this._log(`Extracted numeric data: ${data}`);
+                            }
+                        }
+                        
+                    } catch (error) {
+                        this._log(`Error decoding data: ${error.message}`);
+                        // Fallback method
+                        const bytes = new Uint8Array(value.buffer);
+                        data = String.fromCharCode.apply(null, bytes).trim();
+                    }
+                    
+                    this._log(`Processed data: ${data}`);
+                    
+                    // Additional check to catch empty data after all processing
+                    if (!data || data.length === 0 || /^\s*$/.test(data)) {
+                        this._log("Warning: No valid data extracted from scanner input");
+                        
+                        // Special case: send raw hex data if nothing else worked
+                        const bytes = new Uint8Array(value.buffer);
+                        let hexData = '';
+                        for (const byte of bytes) {
+                            hexData += byte.toString(16).padStart(2, '0');
+                        }
+                        
+                        if (hexData.length > 0) {
+                            data = `Raw data (hex): ${hexData}`;
+                            this._log(`Using hex data as fallback: ${data}`);
+                        }
+                    }
+                    
+                    // Call the data callback with the processed data
+                    if (this.dataCallback && data && data.length > 0) {
+                        this.dataCallback({
+                            data: data,
+                            timestamp: new Date().toISOString(),
+                            rawBytes: Array.from(new Uint8Array(value.buffer)), // Include raw bytes for debugging
+                            source: this.device ? this.device.name : "Unknown Scanner",
+                            connectionType: this.connectionType
+                        });
+                    } else {
+                        this._log("No data callback or empty data - scan not processed");
+                    }
+                }
+            }
+
+            /**
+             * Handle disconnection events
+             * @private
+             */
+            _handleDisconnect() {
+                this._log("Device disconnected");
+                this.isConnected = false;
+                this.server = null;
+                this.service = null;
+                this.characteristic = null;
+                
+                if (this.disconnectionCallback) {
+                    this.disconnectionCallback({
+                        device: this.device ? this.device.name : "Unknown Scanner",
+                        status: "disconnected",
+                        connectionType: this.connectionType
+                    });
+                }
+            }
+
+            /**
+             * Handle and report errors
+             * @param {string} message - Error message
+             * @private
+             */
+            _handleError(message) {
+                this._log(`ERROR: ${message}`, 'error');
+                console.error(`Bluetooth Scanner Error: ${message}`);
+                if (this.errorCallback) {
+                    this.errorCallback({
+                        message: message,
+                        timestamp: new Date().toISOString(),
+                        connectionType: this.connectionType
+                    });
+                }
+            }
+            
+            /**
+             * Log debug information
+             * @param {string} message - Log message
+             * @param {string} level - Log level
+             * @private
+             */
+            _log(message, level = 'info') {
+                console.log(`Scanner [${this.connectionType}] [${level.toUpperCase()}]: ${message}`);
+                if (this.logCallback) {
+                    this.logCallback({
+                        message,
+                        level,
+                        timestamp: new Date().toISOString(),
+                        connectionType: this.connectionType
+                    });
+                }
+            }
+        }
+
+        // Initialize scanner
+        const scanner = new BluetoothScanner();
+        
+        // DOM elements
+        const connectBleButton = document.getElementById('connect-ble-button');
+        const connectAnyButton = document.getElementById('connect-any-button');
+        const disconnectButton = document.getElementById('disconnect-button');
+        const connectionStatus = document.getElementById('connection-status');
+        const deviceName = document.getElementById('device-name');
+        const scanResults = document.getElementById('scan-results');
+        const scanModeSelect = document.getElementById('scan-mode');
+        const applyModeButton = document.getElementById('apply-mode');
+        const currentMode = document.getElementById('current-mode');
+        const connectionType = document.getElementById('connection-type');
+        const debugEntries = document.getElementById('debug-entries');
+        const advancedToggle = document.getElementById('advanced-toggle');
+        const advancedControls = document.getElementById('advanced-controls');
+        const scanFilterType = document.getElementById('scan-filter-type');
+        const deviceNamePrefix = document.getElementById('device-name-prefix');
+        const customServiceUuid = document.getElementById('custom-service-uuid');
+        const applySettings = document.getElementById('apply-settings');
+        const bleModeButton = document.getElementById('ble-mode-button');
+        const sppModeButton = document.getElementById('spp-mode-button');
+        const hidModeButton = document.getElementById('hid-mode-button');
+        const modeDescription = document.getElementById('mode-description');
+        
+        // Connection options
+        let connectionOptions = {
+            filterType: 'any',
+            namePrefixes: ['R8', 'Scanner', 'Barcode', 'BLE', 'BT'],
+            acceptAny: true,
+            customServiceUUID: ''
+        };
+        
+        // Mode descriptions
+        const modeDescriptions = {
+            BLE: "BLE Mode: Low power consumption Bluetooth Low Energy mode.",
+            SPP: "SPP Mode: Serial Port Profile, commonly used for barcode scanners.",
+            HID: "HID Mode: Human Interface Device, acts like a keyboard."
+        };
+        
+        // Connection type buttons
+        bleModeButton.addEventListener('click', () => {
+            setActiveMode('BLE');
+        });
+        
+        sppModeButton.addEventListener('click', () => {
+            setActiveMode('SPP');
+        });
+        
+        hidModeButton.addEventListener('click', () => {
+            setActiveMode('HID');
+        });
+        
+        function setActiveMode(mode) {
+            // Update UI
+            bleModeButton.classList.remove('active');
+            sppModeButton.classList.remove('active');
+            hidModeButton.classList.remove('active');
+            
+            // Set active button
+            if (mode === 'BLE') bleModeButton.classList.add('active');
+            if (mode === 'SPP') sppModeButton.classList.add('active');
+            if (mode === 'HID') hidModeButton.classList.add('active');
+            
+            // Update description
+            modeDescription.textContent = modeDescriptions[mode];
+            
+            // Update connection type display
+            connectionType.textContent = mode;
+            
+            // Set scanner connection type
+            scanner.setConnectionType(mode);
+            
+            // Update button text
+            connectBleButton.textContent = `Connect Scanner (${mode})`;
+            
+            addDebugEntry(`Connection mode set to ${mode}`, 'info');
+        }
+        
+        // Default to BLE mode
+        setActiveMode('BLE');
+        
+        // Toggle advanced options
+        advancedToggle.addEventListener('click', () => {
+            if (advancedControls.style.display === 'none') {
+                advancedControls.style.display = 'block';
+                advancedToggle.textContent = '▼ Advanced Options';
+            } else {
+                advancedControls.style.display = 'none';
+                advancedToggle.textContent = '▶ Advanced Options';
+            }
+        });
+        
+        // Apply settings button event
+        applySettings.addEventListener('click', () => {
+            const filterType = scanFilterType.value;
+            const prefixes = deviceNamePrefix.value.split(',').map(p => p.trim());
+            const customUuid = customServiceUuid.value.trim();
+            
+            connectionOptions = {
+                filterType: filterType,
+                namePrefixes: prefixes,
+                acceptAny: filterType === 'any',
+                customServiceUUID: customUuid || ''
+            };
+            
+            addDebugEntry(`Applied new connection settings: ${JSON.stringify(connectionOptions)}`, 'info');
+        });
+        
+        // Set up callbacks
+        scanner.setCallbacks({
+            data: handleScanData,
+            connection: handleConnection,
+            disconnection: handleDisconnection,
+            error: handleError,
+            log: handleLog
+        });
+        
+        // Connect button event for BLE
+        connectBleButton.addEventListener('click', async () => {
+            addDebugEntry(`Starting scanner connection in ${scanner.connectionType} mode...`, 'info');
+            
+            let success = false;
+            if (scanner.connectionType === 'BLE') {
+                success = await scanner.connectBLE(connectionOptions);
+            } else {
+                success = await scanner.connect(connectionOptions);
+            }
+            
+            if (success) {
+                updateUIForConnected();
+            }
+        });
+        
+        // Connect to any device button event
+        connectAnyButton.addEventListener('click', async () => {
+            addDebugEntry("Looking for any Bluetooth device...", 'info');
+            const success = await scanner.connectToAnyDevice();
+            if (success) {
+                updateUIForConnected();
+            }
+        });
+        
+        // Disconnect button event
+        disconnectButton.addEventListener('click', async () => {
+            await scanner.disconnect();
+            updateUIForDisconnected();
+        });
+        
+        // Apply mode button event
+        applyModeButton.addEventListener('click', async () => {
+            const mode = scanModeSelect.value;
+            const success = await scanner.setScanMode(mode);
+            if (success) {
+                currentMode.textContent = mode;
+            }
+        });
+        
+        // Handle scan data
+        function handleScanData(data) {
+            const result = document.createElement('div');
+            const timestamp = new Date().toLocaleTimeString();
+            
+            result.innerHTML = `
+                <p><strong>${timestamp}</strong> - ${data.data} <span style="color: #777;">(${data.connectionType})</span></p>
+            `;
+            
+            scanResults.prepend(result);
+        }
+        
+        // Handle scanner connection
+        function handleConnection(event) {
+            updateUIForConnected();
+            deviceName.textContent = event.device;
+            connectionType.textContent = event.connectionType;
+            
+            const scannerInfo = scanner.getScannerInfo();
+            currentMode.textContent = scannerInfo.currentScanMode;
+            
+            addDebugEntry(`Connected to device: ${event.device} using ${event.connectionType} mode`, 'success');
+        }
+        
+        // Handle scanner disconnection
+        function handleDisconnection() {
+            updateUIForDisconnected();
+            addDebugEntry("Device disconnected", 'warning');
+        }
+        
+        // Handle errors
+        function handleError(error) {
+            console.error('Scanner error:', error.message);
+            alert(`Scanner error: ${error.message}`);
+            addDebugEntry(`Error: ${error.message}`, 'error');
+        }
+        
+        // Handle debug logs
+        function handleLog(log) {
+            addDebugEntry(`${log.connectionType ? `[${log.connectionType}] ` : ''}${log.message}`, log.level);
+        }
+        
+        // Add entry to debug log
+        function addDebugEntry(message, level = 'info') {
+            const entry = document.createElement('div');
+            entry.className = `debug-entry ${level}`;
+            const timestamp = new Date().toLocaleTimeString();
+            entry.innerHTML = `<strong>${timestamp}</strong> [${level.toUpperCase()}]: ${message}`;
+            debugEntries.prepend(entry);
+            
+            // Limit number of entries
+            if (debugEntries.children.length > 50) {
+                debugEntries.removeChild(debugEntries.lastChild);
+            }
+        }
+        
+        // Update UI for connected state
+        function updateUIForConnected() {
+            connectBleButton.disabled = true;
+            connectAnyButton.disabled = true;
+            disconnectButton.disabled = false;
+            scanModeSelect.disabled = false;
+            applyModeButton.disabled = false;
+            
+            connectionStatus.textContent = 'Connected';
+            connectionStatus.className = 'status-connected';
+        }
+        
+        // Update UI for disconnected state
+        function updateUIForDisconnected() {
+            connectBleButton.disabled = false;
+            connectAnyButton.disabled = false;
+            disconnectButton.disabled = true;
+            scanModeSelect.disabled = true;
+            applyModeButton.disabled = true;
+            
+            connectionStatus.textContent = 'Disconnected';
+            connectionStatus.className = 'status-disconnected';
+            deviceName.textContent = 'Not connected';
+        }
+        
+        // Add initial debug entry
+        addDebugEntry("Scanner pairing page loaded in BLE mode.", 'info');
+        addDebugEntry("Click 'Connect Scanner (BLE)' to connect using Bluetooth Low Energy mode.", 'info');
+        addDebugEntry("If your scanner is not found, try 'Find Any Bluetooth Device' to detect all available devices.", 'info');
+        
+        // Check if Web Bluetooth is supported
+        if (!navigator.bluetooth) {
+            addDebugEntry("Web Bluetooth API is not supported in this browser. Please use Chrome or Edge.", 'error');
+            connectBleButton.disabled = true;
+            connectAnyButton.disabled = true;
+            alert("Web Bluetooth API is not supported in this browser. Please use Chrome or Edge, and make sure you're running from a secure origin (https:// or localhost).");
+        }
+    </script>
+</body>
+</html>

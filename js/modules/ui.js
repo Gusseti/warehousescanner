@@ -17,17 +17,23 @@ let scannerStatusEl;
 // DOM-elementer - Modul containere
 let moduleContainersEl;
 
+// Sikre at elementer blir forsøkt hentet selv om DOM endres
+let scannerElementsInitialized = false;
+
 /**
  * Initialiserer UI-håndtering
  */
 export function initUi() {
+    console.log('Initialiserer UI...');
+    
     // Hent DOM-elementer
     mainMenuEl = document.getElementById('mainMenu');
     backButtonEl = document.getElementById('backButton');
     menuItemsEl = document.querySelectorAll('.menu-item');
-    scannerIndicatorEl = document.getElementById('scannerIndicator');
-    scannerStatusEl = document.getElementById('scannerStatus');
     moduleContainersEl = document.querySelectorAll('.module-container');
+    
+    // Initialiser scanner-elementer
+    initScannerElements();
     
     // Legg til event listeners på hovedmeny-elementer
     menuItemsEl.forEach(item => {
@@ -38,30 +44,50 @@ export function initUi() {
     });
     
     // Legg til event listener på tilbakeknapp
-    backButtonEl.addEventListener('click', function() {
-        showMainMenu();
-    });
+    if (backButtonEl) {
+        backButtonEl.addEventListener('click', function() {
+            showMainMenu();
+        });
+    } else {
+        console.warn('Tilbakeknapp ikke funnet ved initialisering');
+    }
     
     // Sikre at scanner-indikator-elementene alltid oppdateres når DOM er lastet fullstendig
     window.addEventListener('DOMContentLoaded', function() {
-        scannerIndicatorEl = document.getElementById('scannerIndicator');
-        scannerStatusEl = document.getElementById('scannerStatus');
-        if (!scannerIndicatorEl || !scannerStatusEl) {
-            console.warn('Scanner-indikator-elementer ikke funnet etter DOMContentLoaded');
-        }
+        console.log('DOMContentLoaded: Oppdaterer scanner-elementer');
+        initScannerElements();
     });
     
     // Observer for å håndtere dynamisk DOM-endringer
     const observer = new MutationObserver(function(mutations) {
-        if (!scannerIndicatorEl || !scannerStatusEl) {
-            scannerIndicatorEl = document.getElementById('scannerIndicator');
-            scannerStatusEl = document.getElementById('scannerStatus');
+        // Sjekk om vi trenger å oppdatere scanner-elementer
+        if (!scannerElementsInitialized) {
+            initScannerElements();
         }
     });
     
     // Start observing
     if (document.body) {
         observer.observe(document.body, { childList: true, subtree: true });
+    }
+}
+
+/**
+ * Initialiserer scanner-elementer
+ * @returns {boolean} Om initialiseringen var vellykket
+ */
+function initScannerElements() {
+    scannerIndicatorEl = document.getElementById('scannerIndicator');
+    scannerStatusEl = document.getElementById('scannerStatus');
+    
+    if (scannerIndicatorEl && scannerStatusEl) {
+        console.log('Scanner-elementer funnet og initialisert');
+        scannerElementsInitialized = true;
+        return true;
+    } else {
+        console.log('Scanner-elementer ikke funnet, vil forsøke igjen senere');
+        scannerElementsInitialized = false;
+        return false;
     }
 }
 
@@ -145,39 +171,52 @@ export function showModule(module) {
  * @param {Object} details - Ytterligere detaljer om skanneren
  */
 export function updateScannerStatus(connected, details = {}) {
+    console.log(`updateScannerStatus kalt: connected=${connected}, type=${details.type || 'ukjent'}`);
+    
     // Kontroller at DOM-elementene eksisterer før vi forsøker å manipulere dem
     if (!scannerIndicatorEl || !scannerStatusEl) {
         console.warn('SCANNER-STATUS-WARNING: Forsøker å oppdatere scanner-status, men DOM-elementer er ikke initialisert');
-        // Forsøk å hente elementene på nytt, i tilfelle de ikke var tilgjengelige under init
-        scannerIndicatorEl = document.getElementById('scannerIndicator');
-        scannerStatusEl = document.getElementById('scannerStatus');
         
-        // Hvis de fortsatt ikke finnes, avbryt funksjonen
-        if (!scannerIndicatorEl || !scannerStatusEl) {
-            console.error('SCANNER-STATUS-ERROR: Kan ikke oppdatere scanner-status, DOM-elementer mangler');
+        // Forsøk å initialisere elementene
+        const initialized = initScannerElements();
+        
+        // Hvis de fortsatt ikke finnes, planlegg en ny oppdatering om 500ms
+        if (!initialized) {
+            console.log('SCANNER-STATUS-INFO: Planlegger ny oppdatering om 500ms');
+            setTimeout(() => {
+                updateScannerStatus(connected, details);
+            }, 500);
             return;
         }
     }
     
-    if (connected) {
-        scannerIndicatorEl.classList.add('connected');
-        
-        // Vis informasjon om skanneren
-        if (details.type === 'bluetooth') {
-            scannerStatusEl.textContent = `Skanner: Tilkoblet (${details.deviceName || 'Bluetooth'})`;
-        } else if (details.type === 'camera') {
-            scannerStatusEl.textContent = 'Skanner: Kamera aktivt';
+    try {
+        if (connected) {
+            scannerIndicatorEl.classList.add('connected');
+            
+            // Vis informasjon om skanneren
+            if (details.type === 'bluetooth') {
+                scannerStatusEl.textContent = `Skanner: Tilkoblet (${details.deviceName || 'Bluetooth'})`;
+                console.log(`Scanner-status oppdatert til: Bluetooth (${details.deviceName || 'Ukjent enhet'})`);
+            } else if (details.type === 'camera') {
+                scannerStatusEl.textContent = 'Skanner: Kamera aktivt';
+                console.log('Scanner-status oppdatert til: Kamera aktivt');
+            } else {
+                scannerStatusEl.textContent = 'Skanner: Tilkoblet';
+                console.log('Scanner-status oppdatert til: Tilkoblet');
+            }
         } else {
-            scannerStatusEl.textContent = 'Skanner: Tilkoblet';
+            // Legg til sikkerhet i tilfelle classList ikke er tilgjengelig
+            if (scannerIndicatorEl.classList) {
+                scannerIndicatorEl.classList.remove('connected');
+            } else {
+                // Fallback for eldre nettlesere eller uventede situasjoner
+                scannerIndicatorEl.className = scannerIndicatorEl.className.replace(/\bconnected\b/, '');
+            }
+            scannerStatusEl.textContent = 'Skanner: Ikke tilkoblet';
+            console.log('Scanner-status oppdatert til: Ikke tilkoblet');
         }
-    } else {
-        // Legg til sikkerhet i tilfelle classList ikke er tilgjengelig
-        if (scannerIndicatorEl.classList) {
-            scannerIndicatorEl.classList.remove('connected');
-        } else {
-            // Fallback for eldre nettlesere eller uventede situasjoner
-            scannerIndicatorEl.className = scannerIndicatorEl.className.replace(/\bconnected\b/, '');
-        }
-        scannerStatusEl.textContent = 'Skanner: Ikke tilkoblet';
+    } catch (error) {
+        console.error('SCANNER-STATUS-ERROR: Feil ved oppdatering av scanner-status:', error);
     }
 }

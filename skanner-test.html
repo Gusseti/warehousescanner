@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Skanner Enkel Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .card {
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        button {
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-right: 10px;
+        }
+
+        button:hover {
+            background-color: #45a049;
+        }
+
+        button:disabled {
+            background-color: #cccccc;
+            cursor: not-allowed;
+        }
+
+        .log {
+            background-color: #f8f8f8;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            padding: 10px;
+            height: 300px;
+            overflow-y: auto;
+            font-family: monospace;
+            margin-top: 20px;
+        }
+
+        .error {
+            color: red;
+        }
+
+        .success {
+            color: green;
+        }
+
+        .info {
+            color: blue;
+        }
+
+        .scan-result {
+            background-color: #e9f7ef;
+            border-left: 5px solid #2ecc71;
+            padding: 10px;
+            margin: 10px 0;
+        }
+
+        .scan-result h3 {
+            margin-top: 0;
+        }
+
+        .raw-data {
+            font-family: monospace;
+            word-break: break-all;
+        }
+    </style>
+</head>
+<body>
+    <h1>Skanner Enkel Test</h1>
+
+    <div class="card">
+        <h2>Bluetooth Skanner</h2>
+        <div>
+            <button id="connectBtn">Koble til skanner</button>
+            <button id="disconnectBtn" disabled>Koble fra</button>
+        </div>
+        <div id="status">Status: Ikke tilkoblet</div>
+    </div>
+
+    <div class="card">
+        <h2>Skanner Modus</h2>
+        <div>
+            <button id="triggerBtn" disabled>Trigger Modus</button>
+            <button id="detectionBtn" disabled>Deteksjons Modus</button>
+            <button id="continuousBtn" disabled>Kontinuerlig Modus</button>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>Skann Resultater</h2>
+        <div id="results">Ingen skann ennå</div>
+    </div>
+
+    <div class="card">
+        <h2>Logg</h2>
+        <button id="clearLogBtn">Tøm logg</button>
+        <div id="log" class="log"></div>
+    </div>
+
+    <script type="module">
+        import * as bluetoothScanner from './js/modules/bluetooth-scanner.js';
+
+        // DOM elements
+        const connectBtn = document.getElementById('connectBtn');
+        const disconnectBtn = document.getElementById('disconnectBtn');
+        const triggerBtn = document.getElementById('triggerBtn');
+        const detectionBtn = document.getElementById('detectionBtn');
+        const continuousBtn = document.getElementById('continuousBtn');
+        const statusElement = document.getElementById('status');
+        const resultsElement = document.getElementById('results');
+        const logElement = document.getElementById('log');
+        const clearLogBtn = document.getElementById('clearLogBtn');
+
+        // Connect button
+        connectBtn.addEventListener('click', async () => {
+            log('Connecting to scanner...', 'info');
+            try {
+                // Set up callbacks
+                bluetoothScanner.setCallbacks(
+                    handleScanData,
+                    handleConnect,
+                    handleDisconnect,
+                    handleError
+                );
+
+                // Set log callback
+                bluetoothScanner.setLogCallback(handleLog);
+
+                // Connect
+                const connected = await bluetoothScanner.connectBLE();
+                if (connected) {
+                    log('Successfully connected to scanner!', 'success');
+                    updateUIForConnection(true);
+                } else {
+                    log('Failed to connect to scanner', 'error');
+                }
+            } catch (error) {
+                log(`Error connecting: ${error.message}`, 'error');
+            }
+        });
+
+        // Disconnect button
+        disconnectBtn.addEventListener('click', async () => {
+            log('Disconnecting from scanner...', 'info');
+            try {
+                await bluetoothScanner.disconnect();
+                log('Disconnected from scanner', 'info');
+                updateUIForConnection(false);
+            } catch (error) {
+                log(`Error disconnecting: ${error.message}`, 'error');
+            }
+        });
+
+        // Scanner mode buttons
+        triggerBtn.addEventListener('click', async () => {
+            log('Setting scanner to Trigger mode...', 'info');
+            try {
+                const success = await bluetoothScanner.setScanMode('trigger');
+                if (success) {
+                    log('Scanner set to Trigger mode', 'success');
+                } else {
+                    log('Failed to set scanner mode', 'error');
+                }
+            } catch (error) {
+                log(`Error setting mode: ${error.message}`, 'error');
+            }
+        });
+
+        detectionBtn.addEventListener('click', async () => {
+            log('Setting scanner to Detection mode...', 'info');
+            try {
+                const success = await bluetoothScanner.setScanMode('detection');
+                if (success) {
+                    log('Scanner set to Detection mode', 'success');
+                } else {
+                    log('Failed to set scanner mode', 'error');
+                }
+            } catch (error) {
+                log(`Error setting mode: ${error.message}`, 'error');
+            }
+        });
+
+        continuousBtn.addEventListener('click', async () => {
+            log('Setting scanner to Continuous mode...', 'info');
+            try {
+                const success = await bluetoothScanner.setScanMode('continuous');
+                if (success) {
+                    log('Scanner set to Continuous mode', 'success');
+                } else {
+                    log('Failed to set scanner mode', 'error');
+                }
+            } catch (error) {
+                log(`Error setting mode: ${error.message}`, 'error');
+            }
+        });
+
+        // Clear log button
+        clearLogBtn.addEventListener('click', () => {
+            logElement.innerHTML = '';
+        });
+
+        // Handle scan data
+        function handleScanData(data) {
+            log(`Received barcode: ${data.data}`, 'success');
+
+            // Create a new scan result element
+            const resultElement = document.createElement('div');
+            resultElement.className = 'scan-result';
+
+            // Format the timestamp
+            const timestamp = new Date(data.timestamp).toLocaleTimeString();
+
+            // Create HTML for the scan result
+            resultElement.innerHTML = `
+                <h3>Barcode: ${data.data}</h3>
+                <p>Time: ${timestamp}</p>
+                <p>Source: ${data.source}</p>
+                <details>
+                    <summary>Raw Data</summary>
+                    <div class="raw-data">
+                        <p>Bytes: ${data.rawBytes ? JSON.stringify(data.rawBytes) : 'Not available'}</p>
+                    </div>
+                </details>
+            `;
+
+            // Add the result to the top of the results container
+            if (resultsElement.innerHTML === 'Ingen skann ennå') {
+                resultsElement.innerHTML = '';
+            }
+            resultsElement.insertBefore(resultElement, resultsElement.firstChild);
+
+            // Play a sound to indicate successful scan
+            playSuccessSound();
+        }
+
+        // Handle connect event
+        function handleConnect(data) {
+            log(`Connected to scanner: ${data.device}`, 'success');
+            statusElement.textContent = `Status: Tilkoblet ${data.device}`;
+            updateUIForConnection(true);
+        }
+
+        // Handle disconnect event
+        function handleDisconnect(data) {
+            log(`Disconnected from scanner: ${data.device}`, 'info');
+            statusElement.textContent = 'Status: Ikke tilkoblet';
+            updateUIForConnection(false);
+        }
+
+        // Handle error event
+        function handleError(data) {
+            log(`Scanner error: ${data.message}`, 'error');
+        }
+
+        // Handle log messages from the scanner module
+        function handleLog(data) {
+            const level = data.level || 'info';
+            log(`Scanner [${level.toUpperCase()}]: ${data.message}`, level);
+        }
+
+        // Update UI based on connection state
+        function updateUIForConnection(connected) {
+            connectBtn.disabled = connected;
+            disconnectBtn.disabled = !connected;
+            triggerBtn.disabled = !connected;
+            detectionBtn.disabled = !connected;
+            continuousBtn.disabled = !connected;
+        }
+
+        // Play a success sound
+        function playSuccessSound() {
+            try {
+                const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                const oscillator = audioContext.createOscillator();
+                const gainNode = audioContext.createGain();
+                
+                oscillator.type = 'sine';
+                oscillator.frequency.value = 1800;
+                gainNode.gain.value = 0.1;
+                
+                oscillator.connect(gainNode);
+                gainNode.connect(audioContext.destination);
+                
+                oscillator.start();
+                setTimeout(() => {
+                    oscillator.stop();
+                }, 150);
+            } catch (error) {
+                // Ignore audio errors
+            }
+        }
+
+        // Add a log entry
+        function log(message, level = 'info') {
+            const entry = document.createElement('div');
+            entry.className = level;
+            
+            const timestamp = new Date().toLocaleTimeString();
+            entry.textContent = `[${timestamp}] ${message}`;
+            
+            logElement.appendChild(entry);
+            logElement.scrollTop = logElement.scrollHeight;
+            
+            console.log(`[${level.toUpperCase()}] ${message}`);
+        }
+
+        // Initial log
+        log('Scanner test page loaded. Click "Connect to scanner" to begin.', 'info');
+    </script>
+</body>
+</html>

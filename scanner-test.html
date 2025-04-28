@@ -1,0 +1,218 @@
+// En enkel HTML-side for å teste om skanneren fungerer som en tastaturenhet
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Skanner Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        
+        .test-area {
+            margin-top: 20px;
+            padding: 20px;
+            border: 2px solid #ccc;
+            border-radius: 5px;
+            background-color: #f9f9f9;
+        }
+        
+        #output {
+            margin-top: 20px;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            background-color: #fff;
+            min-height: 150px;
+            max-height: 300px;
+            overflow-y: auto;
+            font-family: monospace;
+        }
+        
+        .key-event {
+            margin: 5px 0;
+            padding: 5px;
+            border-bottom: 1px solid #eee;
+        }
+        
+        .barcode {
+            margin: 10px 0;
+            padding: 10px;
+            background-color: #4CAF50;
+            color: white;
+            border-radius: 5px;
+            font-weight: bold;
+        }
+        
+        button {
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin-right: 10px;
+        }
+        
+        input[type="text"] {
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            width: 100%;
+            margin: 10px 0;
+        }
+        
+        .normal {
+            background-color: #f0f0f0;
+            color: #333;
+        }
+        
+        .success {
+            background-color: #4CAF50;
+            color: white;
+        }
+        
+        .warning {
+            background-color: #ff9800;
+            color: white;
+        }
+    </style>
+</head>
+<body>
+    <h1>Bluetooth Skanner Test</h1>
+    <p>Denne siden lar deg teste om Bluetooth-skanneren din fungerer som en tastaturenhet (keyboard emulation).</p>
+    
+    <div class="test-area">
+        <h2>Test 1: Skann inn i tekstfeltet</h2>
+        <p>Plasser markøren i tekstfeltet nedenfor og skann en strekkode:</p>
+        <input type="text" id="scanInput" placeholder="Skann en strekkode her...">
+        <p><button id="clearInput">Tøm felt</button></p>
+    </div>
+    
+    <div class="test-area">
+        <h2>Test 2: Skann hvor som helst på siden</h2>
+        <p>Klikk utenfor tekstfeltet og skann en strekkode:</p>
+        <p><button id="clearGlobal">Tøm globalt register</button></p>
+    </div>
+    
+    <div class="test-area">
+        <h2>Tastatur events</h2>
+        <p>Alle tastatur events vil vises her:</p>
+        <div id="output"></div>
+    </div>
+    
+    <script>
+        // Buffers
+        let keypressBuffer = '';
+        let keypressTimer = null;
+        const keysPressed = [];
+        
+        // DOM Elements
+        const output = document.getElementById('output');
+        const scanInput = document.getElementById('scanInput');
+        const clearInputBtn = document.getElementById('clearInput');
+        const clearGlobalBtn = document.getElementById('clearGlobal');
+        
+        // Clear buttons
+        clearInputBtn.addEventListener('click', () => {
+            scanInput.value = '';
+            scanInput.focus();
+        });
+        
+        clearGlobalBtn.addEventListener('click', () => {
+            keysPressed.length = 0;
+            keypressBuffer = '';
+            if (keypressTimer) {
+                clearTimeout(keypressTimer);
+                keypressTimer = null;
+            }
+            logEvent('Globalt register tømt', 'normal');
+        });
+        
+        // Log function
+        function logEvent(message, type = 'normal') {
+            const el = document.createElement('div');
+            el.className = `key-event ${type}`;
+            el.textContent = `${new Date().toLocaleTimeString()}: ${message}`;
+            output.appendChild(el);
+            output.scrollTop = output.scrollHeight;
+        }
+        
+        // For direct input into the text field
+        scanInput.addEventListener('input', (e) => {
+            logEvent(`Input event i tekstfelt: "${e.target.value}"`, 'normal');
+        });
+        
+        // Capture key events (for test 2)
+        document.addEventListener('keydown', (e) => {
+            // Skip if typing in an input field
+            if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+            
+            logEvent(`Keydown: ${e.key} (code: ${e.code}, keyCode: ${e.keyCode})`, 'normal');
+            keysPressed.push(e.key);
+        });
+        
+        document.addEventListener('keypress', (e) => {
+            // Skip if typing in an input field
+            if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+            
+            // Add to buffer
+            keypressBuffer += e.key;
+            
+            // Log key press
+            logEvent(`Keypress: ${e.key} (keyCode: ${e.keyCode}) - Buffer: ${keypressBuffer}`, 'normal');
+            
+            // Reset timer if it's already running
+            if (keypressTimer) {
+                clearTimeout(keypressTimer);
+            }
+            
+            // If the key is Enter, process immediately
+            if (e.key === 'Enter' || e.keyCode === 13) {
+                processBuffer();
+            } else {
+                // Set a timer to process the buffer if it's been a certain time without new characters
+                keypressTimer = setTimeout(processBuffer, 300);
+            }
+        });
+        
+        // Process the keypress buffer as a potential barcode
+        function processBuffer() {
+            if (!keypressBuffer || keypressBuffer.length === 0) return;
+            
+            // Log that we're processing the buffer
+            logEvent(`Behandler buffer: "${keypressBuffer}"`, 'normal');
+            
+            // If the Enter key is at the end, remove it
+            let barcode = keypressBuffer;
+            if (barcode.endsWith('\n') || barcode.endsWith('\r')) {
+                barcode = barcode.slice(0, -1);
+            }
+            
+            // Reset buffer
+            keypressBuffer = '';
+            
+            // Process the barcode if it's long enough
+            if (barcode.length > 3) {
+                logEvent(`Fant strekkode: "${barcode}"`, 'success');
+                
+                // Create a barcode element
+                const barcodeEl = document.createElement('div');
+                barcodeEl.className = 'barcode';
+                barcodeEl.textContent = `Strekkode: ${barcode}`;
+                output.appendChild(barcodeEl);
+                output.scrollTop = output.scrollHeight;
+            } else {
+                logEvent(`For kort til å være en strekkode: "${barcode}"`, 'warning');
+            }
+        }
+        
+        // Initial log
+        logEvent('Skanner test side lastet. Skann en strekkode hvor som helst på siden.', 'normal');
+    </script>
+</body>
+</html>

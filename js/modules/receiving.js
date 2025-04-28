@@ -724,8 +724,16 @@ function validateAndCleanReceivedItems() {
  */
 async function connectToBluetoothReceiveScanner() {
     try {
-        showToast('Kobler til Bluetooth-skanner...', 'info');
-        await bluetoothScanner.connect();
+        showToast('HID-skannerstøtte er aktivert. Koble til skanneren via Windows Bluetooth-innstillinger. Du kan nå begynne å skanne.', 'info');
+        
+        // Sjekk om skanneren allerede er koblet til via Windows Bluetooth
+        const deviceInfo = bluetoothScanner.getDeviceInfo();
+        if (deviceInfo) {
+            showToast(`Allerede koblet til: ${deviceInfo.name}`, 'success');
+        } else {
+            // Prøv Web Bluetooth-tilkobling som backup hvis brukeren foretrekker det
+            await bluetoothScanner.connect();
+        }
     } catch (error) {
         showToast(error.message, 'error');
     }

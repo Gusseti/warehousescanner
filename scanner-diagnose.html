@@ -1,0 +1,828 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Skanner Diagnose Verktøy</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            max-width: 900px;
+            margin: 0 auto;
+        }
+        
+        h1, h2, h3 {
+            color: #2c3e50;
+        }
+        
+        .card {
+            background-color: #f9f9f9;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        button {
+            background-color: #3498db;
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-right: 10px;
+            margin-bottom: 10px;
+        }
+        
+        button:hover {
+            background-color: #2980b9;
+        }
+        
+        button:disabled {
+            background-color: #bdc3c7;
+            cursor: not-allowed;
+        }
+        
+        .log-area {
+            background-color: #2c3e50;
+            color: #ecf0f1;
+            border-radius: 4px;
+            padding: 10px;
+            font-family: monospace;
+            height: 300px;
+            overflow-y: auto;
+            margin-top: 20px;
+        }
+        
+        .log-entry {
+            margin-bottom: 5px;
+            border-bottom: 1px solid #34495e;
+            padding-bottom: 5px;
+        }
+        
+        .success { color: #2ecc71; }
+        .error { color: #e74c3c; }
+        .info { color: #3498db; }
+        .warning { color: #f1c40f; }
+        
+        #device-info {
+            background-color: #e8f6fd;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+        
+        .data-display {
+            border: 1px solid #ddd;
+            padding: 15px;
+            margin-top: 15px;
+            border-radius: 8px;
+            min-height: 100px;
+        }
+        
+        #characteristic-list {
+            list-style-type: none;
+            padding: 0;
+        }
+        
+        #characteristic-list li {
+            padding: 8px;
+            border: 1px solid #ddd;
+            margin-bottom: 5px;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        
+        #characteristic-list li:hover {
+            background-color: #f5f5f5;
+        }
+        
+        #characteristic-list li.selected {
+            background-color: #e1f5fe;
+            border-color: #4fc3f7;
+        }
+        
+        .hex-data {
+            font-family: monospace;
+            word-break: break-all;
+        }
+        
+        .raw-data {
+            padding: 10px;
+            background-color: #f9f9f9;
+            border-radius: 4px;
+            overflow-x: auto;
+        }
+        
+        .data-view-tabs {
+            display: flex;
+            margin-bottom: 10px;
+        }
+        
+        .tab-button {
+            padding: 8px 15px;
+            background-color: #f9f9f9;
+            border: 1px solid #ddd;
+            border-bottom: none;
+            border-radius: 4px 4px 0 0;
+            cursor: pointer;
+        }
+        
+        .tab-button.active {
+            background-color: #fff;
+            font-weight: bold;
+        }
+        
+        .data-container {
+            border: 1px solid #ddd;
+            padding: 15px;
+            border-radius: 0 4px 4px 4px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Skanner Diagnose Verktøy</h1>
+    
+    <div class="card">
+        <h2>Bluetooth Tilkobling</h2>
+        
+        <div>
+            <label for="service-filter">Service Filter:</label>
+            <select id="service-filter">
+                <option value="all">Alle tilgjengelige tjenester</option>
+                <option value="scanner" selected>Standard skanner tjenester</option>
+                <option value="custom">Egendefinert tjeneste UUID</option>
+            </select>
+            
+            <div id="custom-uuid-container" style="display: none;">
+                <input type="text" id="custom-uuid" placeholder="Skriv inn custom service UUID" style="width: 300px; margin: 10px 0;">
+            </div>
+        </div>
+        
+        <div id="connection-buttons">
+            <button id="connect-button">Koble til Skanner</button>
+            <button id="disconnect-button" disabled>Koble fra</button>
+        </div>
+        
+        <div id="device-info" style="display: none;">
+            <h3>Enhets informasjon</h3>
+            <p><strong>Navn:</strong> <span id="device-name">-</span></p>
+            <p><strong>ID:</strong> <span id="device-id">-</span></p>
+            <p><strong>Status:</strong> <span id="connection-status">Frakoblet</span></p>
+            <p><strong>GATT Server:</strong> <span id="gatt-status">-</span></p>
+        </div>
+    </div>
+    
+    <div class="card" id="service-card" style="display: none;">
+        <h2>Bluetooth Tjenester</h2>
+        <div id="services-container">
+            <p>Laster tjenester...</p>
+        </div>
+    </div>
+    
+    <div class="card" id="characteristic-card" style="display: none;">
+        <h2>Egenskaper for valgt tjeneste</h2>
+        <p>Valgt tjeneste: <strong id="selected-service-id">-</strong></p>
+        <ul id="characteristic-list"></ul>
+    </div>
+    
+    <div class="card" id="data-card" style="display: none;">
+        <h2>Data fra Skanner</h2>
+        
+        <div class="data-view-tabs">
+            <div class="tab-button active" data-tab="text">Tekst</div>
+            <div class="tab-button" data-tab="hex">Hex</div>
+            <div class="tab-button" data-tab="ascii">ASCII</div>
+            <div class="tab-button" data-tab="raw">Rå data</div>
+        </div>
+        
+        <div class="data-container">
+            <div id="text-data" class="data-view">
+                <h3>Skannet Data (Tekst)</h3>
+                <div class="data-display" id="scan-data"></div>
+            </div>
+            
+            <div id="hex-data" class="data-view" style="display: none;">
+                <h3>Skannet Data (Hex)</h3>
+                <div class="data-display hex-data" id="hex-display"></div>
+            </div>
+            
+            <div id="ascii-data" class="data-view" style="display: none;">
+                <h3>Skannet Data (ASCII)</h3>
+                <div class="data-display" id="ascii-display"></div>
+            </div>
+            
+            <div id="raw-data" class="data-view" style="display: none;">
+                <h3>Rå Data Objekter</h3>
+                <div class="data-display raw-data" id="raw-display"></div>
+            </div>
+        </div>
+        
+        <div id="data-tools">
+            <h3>Verktøy</h3>
+            <button id="clear-data">Tøm data</button>
+            <button id="test-notify">Test notifikasjon</button>
+            <button id="send-command">Send kommando</button>
+            <input type="text" id="command-input" placeholder="Kommando (hex: 1B,31)" style="width: 200px;">
+        </div>
+    </div>
+    
+    <div class="card">
+        <h2>Debug Logg</h2>
+        <div class="log-area" id="log-area"></div>
+        <button id="clear-log" style="margin-top: 10px;">Tøm logg</button>
+    </div>
+
+    <script>
+        // DOM Elements
+        const connectButton = document.getElementById('connect-button');
+        const disconnectButton = document.getElementById('disconnect-button');
+        const serviceFilter = document.getElementById('service-filter');
+        const customUuidContainer = document.getElementById('custom-uuid-container');
+        const customUuid = document.getElementById('custom-uuid');
+        const deviceName = document.getElementById('device-name');
+        const deviceId = document.getElementById('device-id');
+        const connectionStatus = document.getElementById('connection-status');
+        const gattStatus = document.getElementById('gatt-status');
+        const deviceInfo = document.getElementById('device-info');
+        const serviceCard = document.getElementById('service-card');
+        const servicesContainer = document.getElementById('services-container');
+        const characteristicCard = document.getElementById('characteristic-card');
+        const selectedServiceId = document.getElementById('selected-service-id');
+        const characteristicList = document.getElementById('characteristic-list');
+        const dataCard = document.getElementById('data-card');
+        const scanData = document.getElementById('scan-data');
+        const hexDisplay = document.getElementById('hex-display');
+        const asciiDisplay = document.getElementById('ascii-display');
+        const rawDisplay = document.getElementById('raw-display');
+        const clearDataButton = document.getElementById('clear-data');
+        const testNotifyButton = document.getElementById('test-notify');
+        const sendCommandButton = document.getElementById('send-command');
+        const commandInput = document.getElementById('command-input');
+        const logArea = document.getElementById('log-area');
+        const clearLogButton = document.getElementById('clear-log');
+        const tabButtons = document.querySelectorAll('.tab-button');
+        const dataViews = document.querySelectorAll('.data-view');
+
+        // Bluetooth variables
+        let device = null;
+        let server = null;
+        let selectedService = null;
+        let selectedCharacteristic = null;
+        let dataBuffer = [];
+
+        // Standard scanner services
+        const scannerServices = [
+            "49535343-fe7d-4ae5-8fa9-9fafd205e455", // R8 Primary Service
+            "49535343-8841-43f4-a8d4-ecbe34729bb3",
+            "0000ffe0-0000-1000-8000-00805f9b34fb", // Common BLE service
+            "6e400001-b5a3-f393-e0a9-e50e24dcca9e", // Nordic UART
+            "0000fff0-0000-1000-8000-00805f9b34fb", // Another common service
+            "00001101-0000-1000-8000-00805f9b34fb", // SPP
+            "00001812-0000-1000-8000-00805f9b34fb", // HID
+            "00001124-0000-1000-8000-00805f9b34fb", // HID alt
+            "0000180a-0000-1000-8000-00805f9b34fb", // Device Information
+            "0000180f-0000-1000-8000-00805f9b34fb", // Battery Service
+            "00001800-0000-1000-8000-00805f9b34fb", // Generic Access
+            "00001801-0000-1000-8000-00805f9b34fb", // Generic Attribute
+            "03b80e5a-ede8-4b33-a751-6ce34ec4c700", // Alternative scanner service
+            "7377772e-8a04-0000-0000-000034383734", // Another scanner service
+            "0000fef5-0000-1000-8000-00805f9b34fb"  // OTA service
+        ];
+
+        // Event listeners
+        connectButton.addEventListener('click', connectToDevice);
+        disconnectButton.addEventListener('click', disconnectDevice);
+        serviceFilter.addEventListener('change', toggleCustomUuid);
+        clearDataButton.addEventListener('click', clearData);
+        testNotifyButton.addEventListener('click', testNotification);
+        sendCommandButton.addEventListener('click', sendCommand);
+        clearLogButton.addEventListener('click', () => logArea.innerHTML = '');
+
+        // Tab switching
+        tabButtons.forEach(button => {
+            button.addEventListener('click', () => {
+                // Update active tab button
+                tabButtons.forEach(btn => btn.classList.remove('active'));
+                button.classList.add('active');
+                
+                // Show selected data view, hide others
+                const tabName = button.getAttribute('data-tab');
+                dataViews.forEach(view => {
+                    view.style.display = 'none';
+                    if (view.id === tabName + '-data') {
+                        view.style.display = 'block';
+                    }
+                });
+            });
+        });
+
+        function toggleCustomUuid() {
+            customUuidContainer.style.display = 
+                serviceFilter.value === 'custom' ? 'block' : 'none';
+        }
+
+        function log(message, level = 'info') {
+            const entry = document.createElement('div');
+            entry.className = `log-entry ${level}`;
+            
+            const timestamp = new Date().toLocaleTimeString();
+            entry.textContent = `[${timestamp}] [${level.toUpperCase()}] ${message}`;
+            
+            logArea.appendChild(entry);
+            logArea.scrollTop = logArea.scrollHeight;
+            
+            console.log(`[${level.toUpperCase()}] ${message}`);
+        }
+
+        async function connectToDevice() {
+            if (!navigator.bluetooth) {
+                log('Web Bluetooth API støttes ikke i denne nettleseren. Bruk Chrome eller Edge.', 'error');
+                return;
+            }
+
+            log('Starter skanner-tilkobling...');
+            
+            try {
+                let options = {
+                    filters: [
+                        { namePrefix: 'R8' },
+                        { namePrefix: 'Scanner' },
+                        { namePrefix: 'Barcode' },
+                        { namePrefix: 'BLE' },
+                        { namePrefix: 'BT' }
+                    ],
+                    optionalServices: []
+                };
+                
+                // Set up services based on filter selection
+                if (serviceFilter.value === 'all') {
+                    options.acceptAllDevices = true;
+                    options.optionalServices = scannerServices;
+                } else if (serviceFilter.value === 'scanner') {
+                    options.optionalServices = scannerServices;
+                } else if (serviceFilter.value === 'custom') {
+                    const uuid = customUuid.value.trim();
+                    if (!uuid) {
+                        log('Vennligst oppgi et gyldig Service UUID', 'error');
+                        return;
+                    }
+                    options.optionalServices = [uuid, ...scannerServices];
+                }
+                
+                log(`Søker etter Bluetooth-enheter med følgende valg: ${JSON.stringify(options, null, 2)}`);
+                device = await navigator.bluetooth.requestDevice(options);
+                
+                if (!device) {
+                    throw new Error('Ingen enhet valgt');
+                }
+                
+                // Update device info
+                deviceName.textContent = device.name || 'Ukjent enhet';
+                deviceId.textContent = device.id;
+                connectionStatus.textContent = 'Kobler til...';
+                deviceInfo.style.display = 'block';
+                
+                log(`Valgt enhet: ${device.name || 'Ukjent enhet'} (${device.id})`);
+                
+                // Add disconnect listener
+                device.addEventListener('gattserverdisconnected', handleDisconnect);
+                
+                // Connect to GATT server
+                log('Kobler til GATT-server...');
+                server = await device.gatt.connect();
+                gattStatus.textContent = 'Tilkoblet';
+                log('Tilkoblet GATT-server');
+                
+                // Get services
+                log('Henter tjenester...');
+                const services = await server.getPrimaryServices();
+                log(`Fant ${services.length} tjenester`);
+                
+                // Display services
+                displayServices(services);
+                
+                // Update UI
+                connectionStatus.textContent = 'Tilkoblet';
+                connectButton.disabled = true;
+                disconnectButton.disabled = false;
+                serviceCard.style.display = 'block';
+                
+            } catch (error) {
+                log(`Feil ved tilkobling: ${error.message}`, 'error');
+                resetUI();
+            }
+        }
+
+        function displayServices(services) {
+            servicesContainer.innerHTML = '';
+            
+            if (services.length === 0) {
+                servicesContainer.innerHTML = '<p>Ingen tjenester funnet</p>';
+                return;
+            }
+            
+            const list = document.createElement('ul');
+            list.style.listStyleType = 'none';
+            list.style.padding = '0';
+            
+            services.forEach(service => {
+                const item = document.createElement('li');
+                item.style.padding = '10px';
+                item.style.margin = '5px 0';
+                item.style.border = '1px solid #ddd';
+                item.style.borderRadius = '4px';
+                item.style.cursor = 'pointer';
+                
+                const isStandardService = isStandardServiceUUID(service.uuid);
+                
+                item.innerHTML = `
+                    <strong>Service UUID:</strong> ${service.uuid}
+                    ${isStandardService ? `<br><em>(${getServiceName(service.uuid)})</em>` : ''}
+                `;
+                
+                item.addEventListener('click', () => {
+                    selectService(service);
+                });
+                
+                list.appendChild(item);
+            });
+            
+            servicesContainer.appendChild(list);
+        }
+
+        function isStandardServiceUUID(uuid) {
+            // Check if the UUID is in the known standard Bluetooth services
+            const standardServices = {
+                '00001800-0000-1000-8000-00805f9b34fb': 'Generic Access',
+                '00001801-0000-1000-8000-00805f9b34fb': 'Generic Attribute',
+                '00001812-0000-1000-8000-00805f9b34fb': 'Human Interface Device',
+                '0000180a-0000-1000-8000-00805f9b34fb': 'Device Information',
+                '0000180f-0000-1000-8000-00805f9b34fb': 'Battery Service',
+                '00001101-0000-1000-8000-00805f9b34fb': 'Serial Port Profile',
+                // Add scanner specific services
+                '49535343-fe7d-4ae5-8fa9-9fafd205e455': 'R8 Scanner Service',
+                '0000ffe0-0000-1000-8000-00805f9b34fb': 'Common Scanner Service',
+                '6e400001-b5a3-f393-e0a9-e50e24dcca9e': 'Nordic UART Service'
+            };
+            
+            return !!standardServices[uuid.toLowerCase()];
+        }
+
+        function getServiceName(uuid) {
+            const standardServices = {
+                '00001800-0000-1000-8000-00805f9b34fb': 'Generic Access',
+                '00001801-0000-1000-8000-00805f9b34fb': 'Generic Attribute',
+                '00001812-0000-1000-8000-00805f9b34fb': 'Human Interface Device',
+                '0000180a-0000-1000-8000-00805f9b34fb': 'Device Information',
+                '0000180f-0000-1000-8000-00805f9b34fb': 'Battery Service',
+                '00001101-0000-1000-8000-00805f9b34fb': 'Serial Port Profile',
+                // Add scanner specific services
+                '49535343-fe7d-4ae5-8fa9-9fafd205e455': 'R8 Scanner Service',
+                '0000ffe0-0000-1000-8000-00805f9b34fb': 'Common Scanner Service',
+                '6e400001-b5a3-f393-e0a9-e50e24dcca9e': 'Nordic UART Service'
+            };
+            
+            return standardServices[uuid.toLowerCase()] || 'Ukjent tjeneste';
+        }
+
+        async function selectService(service) {
+            selectedService = service;
+            selectedServiceId.textContent = service.uuid;
+            characteristicList.innerHTML = '';
+            log(`Valgt tjeneste: ${service.uuid}`);
+            
+            try {
+                log('Henter egenskaper...');
+                const characteristics = await service.getCharacteristics();
+                log(`Fant ${characteristics.length} egenskaper`);
+                
+                characteristics.forEach(characteristic => {
+                    const li = document.createElement('li');
+                    
+                    // Get property names
+                    const properties = [];
+                    if (characteristic.properties.broadcast) properties.push('broadcast');
+                    if (characteristic.properties.read) properties.push('read');
+                    if (characteristic.properties.writeWithoutResponse) properties.push('writeWithoutResponse');
+                    if (characteristic.properties.write) properties.push('write');
+                    if (characteristic.properties.notify) properties.push('notify');
+                    if (characteristic.properties.indicate) properties.push('indicate');
+                    
+                    li.innerHTML = `
+                        <strong>UUID:</strong> ${characteristic.uuid}<br>
+                        <strong>Egenskaper:</strong> ${properties.join(', ')}
+                    `;
+                    
+                    // Add special styling for characteristics that support notify or indicate
+                    if (characteristic.properties.notify || characteristic.properties.indicate) {
+                        li.style.backgroundColor = '#e1f5fe';
+                        li.style.borderLeft = '3px solid #4fc3f7';
+                    }
+                    
+                    // Add click event to select this characteristic
+                    li.addEventListener('click', () => {
+                        selectCharacteristic(characteristic);
+                        
+                        // Update selected state in UI
+                        document.querySelectorAll('#characteristic-list li').forEach(item => {
+                            item.classList.remove('selected');
+                        });
+                        li.classList.add('selected');
+                    });
+                    
+                    characteristicList.appendChild(li);
+                });
+                
+                characteristicCard.style.display = 'block';
+                
+            } catch (error) {
+                log(`Feil ved henting av egenskaper: ${error.message}`, 'error');
+            }
+        }
+
+        async function selectCharacteristic(characteristic) {
+            // If we had a previously selected characteristic with notifications, stop them
+            if (selectedCharacteristic && 
+                (selectedCharacteristic.properties.notify || selectedCharacteristic.properties.indicate)) {
+                try {
+                    await selectedCharacteristic.stopNotifications();
+                    log(`Stoppet notifikasjoner for ${selectedCharacteristic.uuid}`);
+                } catch (error) {
+                    log(`Feil ved stopping av notifikasjoner: ${error.message}`, 'warning');
+                }
+            }
+            
+            selectedCharacteristic = characteristic;
+            log(`Valgt egenskap: ${characteristic.uuid}`);
+            
+            // Start notifications if supported
+            if (characteristic.properties.notify || characteristic.properties.indicate) {
+                try {
+                    log(`Starter notifikasjoner for ${characteristic.uuid}...`);
+                    await characteristic.startNotifications();
+                    characteristic.addEventListener('characteristicvaluechanged', handleCharacteristicValueChanged);
+                    log('Notifikasjoner startet');
+                    
+                    // Enable data display
+                    dataCard.style.display = 'block';
+                    
+                } catch (error) {
+                    log(`Feil ved starting av notifikasjoner: ${error.message}`, 'error');
+                }
+            } else {
+                log('Denne egenskapen støtter ikke notifikasjoner eller indikasjoner', 'warning');
+            }
+            
+            // Enable command sending if the characteristic supports write
+            if (characteristic.properties.write || characteristic.properties.writeWithoutResponse) {
+                sendCommandButton.disabled = false;
+                commandInput.disabled = false;
+            } else {
+                sendCommandButton.disabled = true;
+                commandInput.disabled = true;
+            }
+            
+            // Enable data display regardless, as we might want to read values
+            dataCard.style.display = 'block';
+        }
+
+        function handleCharacteristicValueChanged(event) {
+            const value = event.target.value;
+            
+            if (value) {
+                log('Mottok data fra skanner');
+                
+                // Create a data object for this event
+                const bytes = new Uint8Array(value.buffer);
+                let hexString = '';
+                let asciiString = '';
+                
+                for (const byte of bytes) {
+                    hexString += byte.toString(16).padStart(2, '0') + ' ';
+                    asciiString += (byte >= 32 && byte <= 126) ? String.fromCharCode(byte) : '.';
+                }
+                
+                // Text decoding
+                let textData = '';
+                try {
+                    const decoder = new TextDecoder('utf-8');
+                    textData = decoder.decode(value);
+                } catch (error) {
+                    textData = String.fromCharCode.apply(null, bytes);
+                }
+                
+                // Create a data object for storage and display
+                const dataObject = {
+                    timestamp: new Date(),
+                    text: textData.trim(),
+                    hex: hexString.trim(),
+                    ascii: asciiString,
+                    rawBytes: Array.from(bytes)
+                };
+                
+                // Store the data
+                dataBuffer.push(dataObject);
+                
+                // Update displays
+                updateDataDisplays();
+            }
+        }
+
+        function updateDataDisplays() {
+            // Only process if we have data
+            if (dataBuffer.length === 0) return;
+            
+            // Text display - show the most recent data with timestamp
+            const latestData = dataBuffer[dataBuffer.length - 1];
+            const timestamp = latestData.timestamp.toLocaleTimeString();
+            
+            // Update text view
+            scanData.innerHTML += `
+                <div class="data-entry">
+                    <span class="timestamp">[${timestamp}]</span> 
+                    <span class="value">${latestData.text}</span>
+                </div>
+            `;
+            
+            // Update hex view
+            hexDisplay.innerHTML += `
+                <div class="data-entry">
+                    <span class="timestamp">[${timestamp}]</span> 
+                    <span class="value">${latestData.hex}</span>
+                </div>
+            `;
+            
+            // Update ASCII view
+            asciiDisplay.innerHTML += `
+                <div class="data-entry">
+                    <span class="timestamp">[${timestamp}]</span> 
+                    <span class="value">${latestData.ascii}</span>
+                </div>
+            `;
+            
+            // Update raw view (JSON representation)
+            rawDisplay.innerHTML = '';
+            dataBuffer.forEach((data, index) => {
+                const entry = document.createElement('div');
+                entry.className = 'raw-entry';
+                entry.innerHTML = `
+                    <strong>Data ${index + 1} - ${data.timestamp.toLocaleTimeString()}</strong>
+                    <pre>${JSON.stringify(data, null, 2)}</pre>
+                `;
+                rawDisplay.appendChild(entry);
+            });
+            
+            // Scroll displays to bottom
+            scanData.scrollTop = scanData.scrollHeight;
+            hexDisplay.scrollTop = hexDisplay.scrollHeight;
+            asciiDisplay.scrollTop = asciiDisplay.scrollHeight;
+            rawDisplay.scrollTop = rawDisplay.scrollHeight;
+        }
+
+        function clearData() {
+            dataBuffer = [];
+            scanData.innerHTML = '';
+            hexDisplay.innerHTML = '';
+            asciiDisplay.innerHTML = '';
+            rawDisplay.innerHTML = '';
+            log('Data tømt');
+        }
+
+        async function testNotification() {
+            if (!selectedCharacteristic) {
+                log('Ingen egenskap valgt', 'error');
+                return;
+            }
+            
+            log('Tester notifikasjon...');
+            
+            // Create a test data object
+            const testData = {
+                timestamp: new Date(),
+                text: 'TEST NOTIFIKASJON',
+                hex: '54 45 53 54 20 4E 4F 54 49 46 49 43 41 54 49 4F 4E',
+                ascii: 'TEST NOTIFICATION',
+                rawBytes: [84, 69, 83, 84, 32, 78, 79, 84, 73, 70, 73, 67, 65, 84, 73, 79, 78]
+            };
+            
+            // Add to buffer and update displays
+            dataBuffer.push(testData);
+            updateDataDisplays();
+            
+            log('Test notifikasjon lagt til');
+        }
+
+        async function sendCommand() {
+            if (!selectedCharacteristic) {
+                log('Ingen egenskap valgt', 'error');
+                return;
+            }
+            
+            if (!selectedCharacteristic.properties.write && !selectedCharacteristic.properties.writeWithoutResponse) {
+                log('Valgt egenskap støtter ikke skriveoperasjoner', 'error');
+                return;
+            }
+            
+            const command = commandInput.value.trim();
+            if (!command) {
+                log('Vennligst angi en kommando', 'error');
+                return;
+            }
+            
+            try {
+                // Parse command - supports hex format like "1B,31" or text
+                let bytes;
+                
+                if (command.includes(',')) {
+                    // Parse as hex bytes
+                    bytes = new Uint8Array(
+                        command.split(',')
+                              .map(b => parseInt(b.trim(), 16))
+                    );
+                    log(`Sender kommando (hex): ${Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join(' ')}`);
+                } else {
+                    // Parse as text
+                    bytes = new TextEncoder().encode(command);
+                    log(`Sender kommando (tekst): ${command}`);
+                }
+                
+                // Send command to device
+                if (selectedCharacteristic.properties.writeWithoutResponse) {
+                    await selectedCharacteristic.writeValueWithoutResponse(bytes);
+                } else {
+                    await selectedCharacteristic.writeValue(bytes);
+                }
+                
+                log('Kommando sendt');
+                
+            } catch (error) {
+                log(`Feil ved sending av kommando: ${error.message}`, 'error');
+            }
+        }
+
+        function handleDisconnect() {
+            log('Enhet frakoblet', 'warning');
+            resetUI();
+        }
+
+        async function disconnectDevice() {
+            if (!device || !device.gatt.connected) {
+                log('Ingen tilkoblet enhet', 'warning');
+                return;
+            }
+            
+            try {
+                // Stop notifications if active
+                if (selectedCharacteristic && 
+                    (selectedCharacteristic.properties.notify || selectedCharacteristic.properties.indicate)) {
+                    try {
+                        await selectedCharacteristic.stopNotifications();
+                        log('Stoppet notifikasjoner');
+                    } catch (error) {
+                        log(`Feil ved stopping av notifikasjoner: ${error.message}`, 'warning');
+                    }
+                }
+                
+                // Disconnect
+                await device.gatt.disconnect();
+                log('Frakoblet fra enheten');
+                
+            } catch (error) {
+                log(`Feil ved frakobling: ${error.message}`, 'error');
+            } finally {
+                resetUI();
+            }
+        }
+
+        function resetUI() {
+            // Reset connection state
+            device = null;
+            server = null;
+            selectedService = null;
+            selectedCharacteristic = null;
+            
+            // Reset UI
+            connectionStatus.textContent = 'Frakoblet';
+            gattStatus.textContent = '-';
+            connectButton.disabled = false;
+            disconnectButton.disabled = true;
+            serviceCard.style.display = 'none';
+            characteristicCard.style.display = 'none';
+            dataCard.style.display = 'none';
+        }
+
+        // Check Web Bluetooth Support
+        if (!navigator.bluetooth) {
+            log('Web Bluetooth API støttes ikke i denne nettleseren. Bruk Chrome eller Edge.', 'error');
+            connectButton.disabled = true;
+        } else {
+            log('Web Bluetooth API støttet. Klar til å koble til skanner.', 'info');
+        }
+
+        log('Skanner diagnose verktøy lastet. Klikk "Koble til Skanner" for å starte.', 'info');
+    </script>
+</body>
+</html>
