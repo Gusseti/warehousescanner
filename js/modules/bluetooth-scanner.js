@@ -17,6 +17,10 @@ let disconnectionCallback = null;
 let errorCallback = null;
 let logCallback = null;
 let statusCallback = null;
+let reconnectAttempts = 0;
+let maxReconnectAttempts = 5;
+let reconnectTimer = null;
+let systemPairedDevice = false; // Ny flag for å indikere om enheten er paret via systeminnstillinger
 
 // Standard tjeneste UUIDs organisert etter tilkoblingstype
 const serviceUUIDs = {
@@ -146,11 +150,35 @@ function reportError(message) {
 }
 
 /**
+ * Sjekker om Bluetooth er støttet og aktivert på enheten
+ * @returns {Promise<boolean>} Om Bluetooth er tilgjengelig
+ */
+export async function checkBluetoothAvailability() {
+    if (!navigator.bluetooth) {
+        log("Web Bluetooth API er ikke tilgjengelig i denne nettleseren", 'warning');
+        return false;
+    }
+    
+    try {
+        // På noen enheter kan dette kaste en feil hvis Bluetooth er deaktivert
+        await navigator.bluetooth.getAvailability();
+        return true;
+    } catch (error) {
+        log(`Bluetooth tilgjengelighetssjekk feilet: ${error.message}`, 'warning');
+        return false;
+    }
+}
+
+/**
  * Kobler til Bluetooth-skanner via Web Bluetooth API
+ * @param {Object} options - Tilkoblingsalternativer
+ * @param {boolean} options.attemptSystemPaired - Prøv å finne systemparede enheter
  * @returns {Promise<boolean>} Om tilkoblingen var vellykket
  */
-export async function connectBLE() {
+export async function connectBLE(options = {}) {
     connectionType = 'BLE';
+    const { attemptSystemPaired = true } = options;
+    systemPairedDevice = false; // Reset flag
     
     // Hvis Web Bluetooth ikke støttes
     if (!navigator.bluetooth) {
@@ -160,7 +188,6 @@ export async function connectBLE() {
     
     try {
         log("Starter Bluetooth-skannertilkobling...");
-        log("Søker etter tilgjengelige skannere...");
         
         // Hvis vi allerede er tilkoblet, koble fra først
         if (isConnectedState) {  // Endret fra isConnected til isConnectedState
@@ -175,6 +202,81 @@ export async function connectBLE() {
             ...serviceUUIDs.HID
         ];
         
+        // Prøv først å finne enheter som allerede er paret med systemet hvis ønsket
+        let devices = [];
+        if (attemptSystemPaired && navigator.bluetooth.getDevices) {
+            try {
+                log("Søker etter enheter som allerede er paret via systemets Bluetooth-innstillinger...");
+                devices = await navigator.bluetooth.getDevices();
+                log(`Fant ${devices.length} enheter som allerede er paret`);
+                
+                // Filter devices to only include those that might be scanners
+                const potentialScanners = devices.filter(d => {
+                    // Check if device name contains keywords often found in scanner names
+                    const name = (d.name || "").toLowerCase();
+                    return name.includes("scan") || 
+                           name.includes("barcode") || 
+                           name.includes("reader") ||
+                           name.includes("zebra") ||
+                           name.includes("socket") ||
+                           name.includes("handheld") ||
+                           name.includes("honeywell") ||
+                           name.includes("datalogic") ||
+                           name.includes("motorola") ||
+                           name.includes("symbol") ||
+                           name.includes("newland");
+                });
+                
+                log(`Fant ${potentialScanners.length} potensielle skannere blant parede enheter`);
+                
+                // Prøv å koble til hver potensiell skanner
+                for (const scanner of potentialScanners) {
+                    log(`Prøver å koble til systemparede enhet: ${scanner.name || "Ukjent enhet"}`);
+                    try {
+                        device = scanner;
+                        systemPairedDevice = true;
+                        
+                        // Legg til hendelseshåndterer for frakobling
+                        device.addEventListener('gattserverdisconnected', handleDisconnect);
+                        
+                        // Koble til GATT-server
+                        log("Kobler til GATT-server for systemparede enhet...");
+                        server = await device.gatt.connect();
+                        log("Tilkoblet GATT-server for systemparede enhet");
+                        
+                        // Prøv å utforske tjenester for denne enheten
+                        const connected = await exploreServicesAndConnect();
+                        
+                        if (connected) {
+                            log(`Vellykket tilkobling til systemparede enhet: ${device.name || "Ukjent enhet"}`);
+                            return true;
+                        } else {
+                            log(`Kunne ikke finne kompatible tjenester på systemparede enhet: ${device.name || "Ukjent enhet"}`);
+                            // Koble fra og prøv neste
+                            if (device && device.gatt.connected) {
+                                try {
+                                    device.gatt.disconnect();
+                                } catch (e) {
+                                    // Ignorer feil ved frakobling
+                                }
+                            }
+                        }
+                    } catch (error) {
+                        log(`Feil ved tilkobling til systemparede enhet ${scanner.name || "Ukjent enhet"}: ${error.message}`, 'warning');
+                        // Prøv neste enhet
+                    }
+                }
+                
+                log("Ingen systemparede enheter kunne kobles til med passende tjenester, prøver manuell enhetsvelger...");
+            } catch (error) {
+                log(`Feil ved henting av systemparede enheter: ${error.message}`, 'warning');
+                log("Fortsetter med manuell enhetsvelger...");
+            }
+        }
+        
+        // Hvis ingen systemparede enheter kunne kobles til, fortsett med vanlig requestDevice
+        log("Søker etter tilgjengelige skannere via manuell velger...");
+        
         // Bruk Web Bluetooth API for å finne enheter
         device = await navigator.bluetooth.requestDevice({
             // Tillat alle enheter uten filter for å la brukeren velge fra alle tilgjengelige bluetooth-enheter
@@ -188,6 +290,7 @@ export async function connectBLE() {
         }
         
         log(`Valgt enhet: ${device.name || "Ukjent enhet"}`);
+        systemPairedDevice = false;
         
         // Legg til hendelseshåndterer for frakobling
         device.addEventListener('gattserverdisconnected', handleDisconnect);
@@ -197,6 +300,41 @@ export async function connectBLE() {
         server = await device.gatt.connect();
         log("Tilkoblet GATT-server");
         
+        // Utforsk tjenester og koble til
+        return await exploreServicesAndConnect();
+    } catch (error) {
+        reportError(`Bluetooth-tilkobling feilet: ${error.message}`);
+        
+        // Koble fra hvis vi feiler etter tilkobling
+        if (device && device.gatt.connected) {
+            device.gatt.disconnect();
+        }
+        
+        // Nullstill tilstand
+        device = null;
+        server = null;
+        currentService = null;
+        currentCharacteristic = null;
+        isConnectedState = false;  // Endret fra isConnected til isConnectedState
+        systemPairedDevice = false;
+        
+        // Oppdater status
+        if (statusCallback) {
+            statusCallback(false);
+        }
+        
+        return false;
+    }
+}
+
+/**
+ * Utforsker tjenester på en tilkoblet enhet og prøver å etablere kommunikasjon
+ * @returns {Promise<boolean>} Om tilkoblingen var vellykket
+ */
+async function exploreServicesAndConnect() {
+    if (!server) return false;
+    
+    try {
         // Forsøk å oppdage tjenester
         log("Oppdager tjenester...");
         
@@ -248,14 +386,21 @@ export async function connectBLE() {
                                 if (connectionCallback) {
                                     connectionCallback({
                                         device: device.name || "Ukjent skanner",
-                                        status: "connected"
+                                        status: "connected",
+                                        systemPaired: systemPairedDevice
                                     });
                                 }
                                 
                                 // Oppdater status
                                 if (statusCallback) {
-                                    statusCallback(true, { type: 'bluetooth' });
+                                    statusCallback(true, { 
+                                        type: 'bluetooth', 
+                                        systemPaired: systemPairedDevice 
+                                    });
                                 }
+                                
+                                // Nullstill reconnect-tellere ved vellykket tilkobling
+                                reconnectAttempts = 0;
                                 
                                 return true;
                             } catch (notifyError) {
@@ -308,14 +453,21 @@ export async function connectBLE() {
                                 if (connectionCallback) {
                                     connectionCallback({
                                         device: device.name || "Ukjent skanner",
-                                        status: "connected"
+                                        status: "connected",
+                                        systemPaired: systemPairedDevice
                                     });
                                 }
                                 
                                 // Oppdater status
                                 if (statusCallback) {
-                                    statusCallback(true, { type: 'bluetooth' });
+                                    statusCallback(true, { 
+                                        type: 'bluetooth',
+                                        systemPaired: systemPairedDevice
+                                    });
                                 }
+                                
+                                // Nullstill reconnect-tellere ved vellykket tilkobling
+                                reconnectAttempts = 0;
                                 
                                 return true;
                             } else {
@@ -348,13 +500,17 @@ export async function connectBLE() {
                                     if (connectionCallback) {
                                         connectionCallback({
                                             device: device.name || "Ukjent skanner",
-                                            status: "connected"
+                                            status: "connected",
+                                            systemPaired: systemPairedDevice
                                         });
                                     }
                                     
                                     // Oppdater status
                                     if (statusCallback) {
-                                        statusCallback(true, { type: 'bluetooth' });
+                                        statusCallback(true, { 
+                                            type: 'bluetooth',
+                                            systemPaired: systemPairedDevice
+                                        });
                                     }
                                     
                                     return true;
@@ -374,7 +530,7 @@ export async function connectBLE() {
             // Hvis vi når hit, fant vi ingen kompatibel tjeneste eller karakteristikk
             throw new Error("Ingen kompatible Bluetooth-tjenester funnet i BLE-modus");
         } catch (error) {
-            reportError(`Feil ved service discovery: ${error.message}`);
+            log(`Feil ved oppdagelse av tjenester: ${error.message}`, 'warning');
             
             // For enheter som ikke støtter getPrimaryServices, prøv å få tjenester individuelt
             log("Forsøker direkte tilkobling til kjente tjenester...", 'info');
@@ -409,13 +565,17 @@ export async function connectBLE() {
                                     if (connectionCallback) {
                                         connectionCallback({
                                             device: device.name || "Ukjent skanner",
-                                            status: "connected"
+                                            status: "connected",
+                                            systemPaired: systemPairedDevice
                                         });
                                     }
                                     
                                     // Oppdater status
                                     if (statusCallback) {
-                                        statusCallback(true, { type: 'bluetooth' });
+                                        statusCallback(true, { 
+                                            type: 'bluetooth',
+                                            systemPaired: systemPairedDevice
+                                        });
                                     }
                                     
                                     return true;
@@ -446,28 +606,10 @@ export async function connectBLE() {
             }
             
             // Hvis vi kommer hit, har alle forsøk på å finne en passende tjeneste og karakteristikk feilet
-            throw new Error("Ingen kompatible Bluetooth-tjenester funnet for denne skanneren");
+            return false;
         }
     } catch (error) {
-        reportError(`Bluetooth-tilkobling feilet: ${error.message}`);
-        
-        // Koble fra hvis vi feiler etter tilkobling
-        if (device && device.gatt.connected) {
-            device.gatt.disconnect();
-        }
-        
-        // Nullstill tilstand
-        device = null;
-        server = null;
-        currentService = null;
-        currentCharacteristic = null;
-        isConnectedState = false;  // Endret fra isConnected til isConnectedState
-        
-        // Oppdater status
-        if (statusCallback) {
-            statusCallback(false);
-        }
-        
+        log(`Utforsking av tjenester feilet: ${error.message}`, 'error');
         return false;
     }
 }
@@ -643,6 +785,49 @@ function handleDisconnect() {
     // Oppdater status
     if (statusCallback) {
         statusCallback(false);
+    }
+    
+    // Hvis dette er en systemparede enhet, forsøk automatisk gjenoppkobling
+    if (systemPairedDevice && device && reconnectAttempts < maxReconnectAttempts) {
+        log(`Forsøker automatisk gjenoppkobling til systemparede enhet (forsøk ${reconnectAttempts + 1}/${maxReconnectAttempts})...`);
+        reconnectAttempts++;
+        
+        // Forsink gjenoppkobling litt for å la enheten få tid til å stabilisere seg
+        if (reconnectTimer) {
+            clearTimeout(reconnectTimer);
+        }
+        
+        reconnectTimer = setTimeout(async () => {
+            try {
+                log("Starter gjenoppkobling...");
+                
+                if (device) {
+                    // Koble til GATT-server igjen
+                    server = await device.gatt.connect();
+                    log("Tilkoblet GATT-server på nytt");
+                    
+                    // Utforsk tjenester og koble til på nytt
+                    const reconnected = await exploreServicesAndConnect();
+                    
+                    if (reconnected) {
+                        log("Vellykket gjenoppkobling til systemparede enhet");
+                        reconnectAttempts = 0; // Nullstill telleren ved vellykket tilkobling
+                    } else {
+                        log("Kunne ikke gjenopprette tilkobling til systemparede enhet", 'warning');
+                    }
+                }
+            } catch (error) {
+                log(`Gjenoppkobling feilet: ${error.message}`, 'warning');
+                
+                // Hvis vi fortsatt har gjenværende forsøk, prøv igjen
+                if (reconnectAttempts < maxReconnectAttempts) {
+                    handleDisconnect(); // Dette vil utløse et nytt forsøk
+                } else {
+                    log("Maks antall gjenoppkoblingsforsøk nådd, gir opp", 'warning');
+                    reconnectAttempts = 0; // Nullstill telleren for fremtidige forsøk
+                }
+            }
+        }, 1500); // Vent 1.5 sekunder før gjenoppkobling
     }
 }
 
@@ -855,7 +1040,8 @@ export function getDeviceInfo() {
         name: device.name || "Ukjent enhet",
         id: device.id || "Ukjent ID",
         connected: isConnectedState,  // Endret fra isConnected til isConnectedState
-        connectionType
+        connectionType,
+        systemPaired: systemPairedDevice
     };
 }
 
@@ -871,15 +1057,17 @@ export function getStatus() {
     return {
         connected: isConnectedState,  // Endret fra isConnected til isConnectedState
         device: device ? device.name : null,
-        connectionType
+        connectionType,
+        systemPaired: systemPairedDevice
     };
 }
 
 // Legg til en eksportert connect-funksjon som kaller connectBLE
 /**
  * Kobler til Bluetooth-skanner
+ * @param {Object} options - Tilkoblingsalternativer
  * @returns {Promise<boolean>} Om tilkoblingen var vellykket
  */
-export async function connect() {
-    return await connectBLE();
+export async function connect(options = {}) {
+    return await connectBLE(options);
 }

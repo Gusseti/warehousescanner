@@ -16487,10 +16487,6 @@
         "id": "ID13145-120",
         "description": "Skuffematte med utsparing SPLIT 120 x 45cm Antrasitt"
     },
-    "5707438742858": {
-        "id": "ID15457",
-        "description": "Ladematte 30 x 45 cm"
-    },
     "5707439018686": {
         "id": "ID17458",
         "description": "Filtmatte 40 x 50cm EIKETRE"
@@ -18015,12 +18011,100 @@
         "id": "VERK12",
         "description": "Benkeplate sup. 01 916x920x660mm Sort"
     },
-    "5707439043602": {
-        "id": "ARBEID 13",
-        "description": "Benkeplate sup. 01 1156x920x1260mm Sort"
+    "5707438742834": {
+        "id": "ID13460",
+        "description": ""
     },
-    "5707439043619": {
-        "id": "ARBEID 14",
-        "description": "Benkeplate sup. 01 1156x920x660mm Sort"
+    "5707438742827": {
+        "id": "ID13459",
+        "description": ""
+    },
+    "5707438742810": {
+        "id": "ID13458",
+        "description": ""
+    },
+    "5707438742803": {
+        "id": "ID13457",
+        "description": ""
+    },
+    "5707438742858": {
+        "id": "ID15457",
+        "description": ""
+    },
+    "5707438742865": {
+        "id": "ID15458",
+        "description": ""
+    },
+    "5707438868008": {
+        "id": "ID15459",
+        "description": ""
+    },
+    "5707438742872": {
+        "id": "ID15460",
+        "description": ""
+    },
+    "5707438742889": {
+        "id": "ID15461",
+        "description": ""
+    },
+    "5707438742896": {
+        "id": "ID15462",
+        "description": ""
+    },
+    "5707438742902": {
+        "id": "ID15463",
+        "description": ""
+    },
+    "5707438109941": {
+        "id": "ID16458",
+        "description": ""
+    },
+    "5707438109965": {
+        "id": "ID16460",
+        "description": ""
+    },
+    "5707438109972": {
+        "id": "ID16461",
+        "description": ""
+    },
+    "5707438559753": {
+        "id": "ID16463",
+        "description": ""
+    },
+    "5707438109989": {
+        "id": "ID16462",
+        "description": ""
+    },
+    "5707438099181": {
+        "id": "ID14462",
+        "description": ""
+    },
+    "5707438559746": {
+        "id": "ID14463",
+        "description": ""
+    },
+    "5707438099174": {
+        "id": "ID14461",
+        "description": ""
+    },
+    "5707438099167": {
+        "id": "ID14460",
+        "description": ""
+    },
+    "5707438099150": {
+        "id": "ID14459",
+        "description": ""
+    },
+    "5707438099143": {
+        "id": "ID14458",
+        "description": ""
+    },
+    "5707438603739": {
+        "id": "ID14457",
+        "description": ""
+    },
+    "5707438562784": {
+        "id": "ID14456",
+        "description": ""
     }
 }
