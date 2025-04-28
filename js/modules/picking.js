@@ -1,6 +1,6 @@
 // picking.js - Funksjonalitet for plukk-modulen
 import { appState } from '../app.js';
-import { showToast, formatDate } from './utils.js';
+import { showToast, formatDate, showStatusMessage, scrollToTableRow, playSuccessSound } from './utils.js';
 import { saveListsToStorage } from './storage.js';
 import { updateScannerStatus } from './ui.js';
 import { initCameraScanner, startCameraScanning, stopCameraScanning, bluetoothScanner, blinkBackground, playErrorSound } from './scanner.js';

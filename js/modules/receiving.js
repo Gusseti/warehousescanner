@@ -1,6 +1,6 @@
 // receiving.js - Funksjonalitet for mottak-modulen
 import { appState } from '../app.js';
-import { showToast, blinkBackground, playErrorSound } from './utils.js';
+import { showToast, blinkBackground, playErrorSound, scrollToTableRow, showStatusMessage, playSuccessSound } from './utils.js';
 import { saveListsToStorage } from './storage.js';
 import { updateScannerStatus } from './ui.js';
 import { initCameraScanner, startCameraScanning, stopCameraScanning, bluetoothScanner } from './scanner.js';
